@@ -1,0 +1,321 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { CartItem, Order } from "@/types/pos";
+import { chargeCashlogy, chargeIngenico, printTicket } from "@/lib/bridge";
+import { broadcastNewOrder } from "@/lib/demo-channel";
+
+// Demo order counter (persisted in sessionStorage)
+function getNextDemoOrderNumber(): string {
+  const key = "pos_demo_order_count";
+  const current = parseInt(sessionStorage.getItem(key) || "0");
+  const next = current + 1;
+  sessionStorage.setItem(key, String(next));
+  return `#${String(next).padStart(3, "0")}`;
+}
+
+interface CheckoutModalProps {
+  items: CartItem[];
+  total: number;
+  employeeId?: number;
+  onClose: () => void;
+  onComplete: () => void;
+}
+
+type Step = "select" | "processing" | "success" | "error";
+
+export default function CheckoutModal({
+  items,
+  total,
+  employeeId,
+  onClose,
+  onComplete,
+}: CheckoutModalProps) {
+  const [step, setStep] = useState<Step>("select");
+  const [method, setMethod] = useState<"cash" | "card" | null>(null);
+  const [orderNumber, setOrderNumber] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [change, setChange] = useState<number | null>(null);
+  const [tableNumber, setTableNumber] = useState("");
+  const [showTableInput, setShowTableInput] = useState(false);
+  const demoIdRef = useRef(Date.now());
+
+  const createDemoOrder = (paymentMethod: "cash" | "card"): Order => {
+    const num = getNextDemoOrderNumber();
+    const id = demoIdRef.current++;
+    return {
+      id,
+      order_number: num,
+      status: "pending",
+      total,
+      payment_method: paymentMethod,
+      employee_id: employeeId || null,
+      table_number: tableNumber || undefined,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      items: items.map((item, i) => ({
+        id: id * 100 + i,
+        order_id: id,
+        product_id: item.product_id,
+        qty: item.qty,
+        unit_price: item.price,
+        vat_rate: 10,
+        notes: item.notes,
+        product_name: item.name,
+      })),
+    };
+  };
+
+  const processPayment = async (paymentMethod: "cash" | "card") => {
+    setMethod(paymentMethod);
+    setStep("processing");
+
+    try {
+      // 1. Try payment via bridge (will fail in demo — that's OK)
+      let paymentOk = false;
+      try {
+        let paymentResult;
+        if (paymentMethod === "cash") {
+          paymentResult = await chargeCashlogy(total);
+        } else {
+          paymentResult = await chargeIngenico(total);
+        }
+        if (paymentResult.success) {
+          paymentOk = true;
+          if (paymentMethod === "cash" && "change" in paymentResult) {
+            setChange(paymentResult.change ?? null);
+          }
+        }
+      } catch {
+        // Bridge not available — skip in demo mode
+      }
+
+      // 2. Try creating order via API
+      let order: Order | null = null;
+      try {
+        const orderRes = await fetch("/api/pos/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items,
+            payment_method: paymentMethod,
+            employee_id: employeeId,
+            table_number: tableNumber || null,
+          }),
+        });
+        if (orderRes.ok) {
+          order = await orderRes.json();
+        }
+      } catch {
+        // API not available
+      }
+
+      // 3. Fallback: create demo order locally
+      if (!order) {
+        order = createDemoOrder(paymentMethod);
+        // Broadcast to KDS via BroadcastChannel
+        broadcastNewOrder(order);
+      }
+
+      setOrderNumber(order.order_number);
+
+      // 4. Print ticket (best effort)
+      printTicket({
+        orderNumber: order.order_number,
+        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+        total,
+        paymentMethod: paymentMethod === "cash" ? "Efectivo" : "Tarjeta",
+        date: new Date().toLocaleString("es-ES"),
+      }).catch(() => {});
+
+      setStep("success");
+    } catch {
+      setErrorMsg("Error inesperado durante el cobro");
+      setStep("error");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-3xl p-8 w-full max-w-lg mx-4 shadow-2xl">
+        {/* SELECT PAYMENT METHOD */}
+        {step === "select" && (
+          <>
+            <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+              Cobrar
+            </h2>
+            <p className="text-center text-3xl font-bold text-green-600 mb-6">
+              {total.toFixed(2)} &euro;
+            </p>
+
+            {/* Table number */}
+            <div className="mb-6">
+              {!showTableInput ? (
+                <button
+                  onClick={() => setShowTableInput(true)}
+                  className="w-full py-3 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors text-sm font-medium"
+                >
+                  + Afegir numero de taula
+                </button>
+              ) : (
+                <div>
+                  <div className="flex gap-2 items-center mb-2">
+                    <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Taula:</span>
+                    <div className="flex-1 border-2 border-pink-300 rounded-xl px-4 py-2.5 text-center text-xl font-bold text-gray-800 min-h-[44px]">
+                      {tableNumber || <span className="text-gray-300">-</span>}
+                    </div>
+                    <button
+                      onClick={() => { setShowTableInput(false); setTableNumber(""); }}
+                      className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 text-lg flex items-center justify-center"
+                    >
+                      &#10005;
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[1,2,3,4,5,6,7,8,9].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setTableNumber(tableNumber + n)}
+                        className="h-12 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-lg font-bold text-gray-800 transition-colors"
+                      >
+                        {n}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setTableNumber("")}
+                      className="h-12 rounded-lg bg-red-50 hover:bg-red-100 text-sm font-semibold text-red-500 transition-colors"
+                    >
+                      Esborrar
+                    </button>
+                    <button
+                      onClick={() => setTableNumber(tableNumber + "0")}
+                      className="h-12 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-lg font-bold text-gray-800 transition-colors"
+                    >
+                      0
+                    </button>
+                    <button
+                      onClick={() => setTableNumber(tableNumber.slice(0, -1))}
+                      className="h-12 rounded-lg bg-gray-100 hover:bg-gray-200 text-lg text-gray-600 transition-colors"
+                    >
+                      &#9003;
+                    </button>
+                  </div>
+                </div>
+              )}
+              {tableNumber && (
+                <p className="text-center text-sm text-pink-600 font-semibold mt-2">
+                  Taula {tableNumber}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <button
+                onClick={() => processPayment("cash")}
+                className="flex flex-col items-center justify-center p-8 rounded-2xl bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100 active:bg-emerald-200 transition-all"
+              >
+                <span className="text-4xl mb-2">&#128176;</span>
+                <span className="text-xl font-bold text-emerald-700">
+                  EFECTIU
+                </span>
+              </button>
+
+              <button
+                onClick={() => processPayment("card")}
+                className="flex flex-col items-center justify-center p-8 rounded-2xl bg-blue-50 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 active:bg-blue-200 transition-all"
+              >
+                <span className="text-4xl mb-2">&#128179;</span>
+                <span className="text-xl font-bold text-blue-700">
+                  TARGETA
+                </span>
+              </button>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="w-full py-3 rounded-xl text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              Cancel·lar
+            </button>
+          </>
+        )}
+
+        {/* PROCESSING */}
+        {step === "processing" && (
+          <div className="text-center py-8">
+            <div className="animate-spin w-16 h-16 border-4 border-gray-200 border-t-blue-500 rounded-full mx-auto mb-6" />
+            <p className="text-xl font-semibold text-gray-700">
+              {method === "cash"
+                ? "Processant pagament en Cashlogy..."
+                : "Passi la targeta al datàfon..."}
+            </p>
+            <p className="text-gray-500 mt-2">
+              {total.toFixed(2)} &euro;
+            </p>
+            {tableNumber && (
+              <p className="text-pink-500 mt-1 font-medium">Taula {tableNumber}</p>
+            )}
+          </div>
+        )}
+
+        {/* SUCCESS */}
+        {step === "success" && (
+          <div className="text-center py-8">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-4xl text-green-600">&#10004;</span>
+            </div>
+            <h2 className="text-2xl font-bold text-green-700 mb-2">
+              Pagament completat
+            </h2>
+            <p className="text-4xl font-bold text-gray-800 mb-2">
+              {orderNumber}
+            </p>
+            {tableNumber && (
+              <p className="text-lg text-pink-600 font-semibold">
+                Taula {tableNumber}
+              </p>
+            )}
+            {change !== null && change > 0 && (
+              <p className="text-lg text-orange-600 font-semibold">
+                Canvi: {change.toFixed(2)} &euro;
+              </p>
+            )}
+            <button
+              onClick={onComplete}
+              className="mt-6 px-8 py-4 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-lg font-bold transition-colors"
+            >
+              Nova comanda
+            </button>
+          </div>
+        )}
+
+        {/* ERROR */}
+        {step === "error" && (
+          <div className="text-center py-8">
+            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-4xl">&#10060;</span>
+            </div>
+            <h2 className="text-2xl font-bold text-red-700 mb-2">
+              Error en el cobrament
+            </h2>
+            <p className="text-gray-600 mb-6">{errorMsg}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep("select")}
+                className="flex-1 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors"
+              >
+                Reintentar
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 py-3 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-semibold transition-colors"
+              >
+                Cancel·lar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
