@@ -1,5 +1,5 @@
 const BRIDGE_URL =
-  process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3001";
+  process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3006";
 
 export async function chargeCashlogy(amount: number) {
   const controller = new AbortController();
@@ -50,6 +50,36 @@ export async function chargeIngenico(amount: number) {
     return { success: false, error: "Error de conexión con el datáfono" };
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export interface CashlogyChargeStatus {
+  active: boolean;
+  amountCents?: number;
+  depositedCents?: number;
+  status?: string;
+  change?: number | null;
+  error?: string | null;
+}
+
+export async function getCashlogyChargeStatus(): Promise<CashlogyChargeStatus> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/cashlogy/charge/status`);
+    return await res.json();
+  } catch {
+    return { active: false };
+  }
+}
+
+export async function cancelCashlogy() {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/cashlogy/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    return (await res.json()) as { success: boolean; error?: string };
+  } catch {
+    return { success: false, error: "Error de connexió amb la Cashlogy" };
   }
 }
 

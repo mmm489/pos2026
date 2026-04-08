@@ -1,15 +1,15 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { handleCashlogyCharge } = require("./routes/cashlogy");
+const { handleCashlogyCharge, handleCashlogyChargeStatus, handleCashlogyCancel, handleCashlogyState } = require("./routes/cashlogy");
 const { handleIngenicoCharge } = require("./routes/ingenico");
 const { handlePrintTicket } = require("./routes/printer");
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3006;
 
 // CORS
-const origins = (process.env.CORS_ORIGINS || "http://localhost:3000")
+const origins = (process.env.CORS_ORIGINS || "http://localhost:3005")
   .split(",")
   .map((s) => s.trim());
 app.use(cors({ origin: origins }));
@@ -29,6 +29,9 @@ app.get("/health", (_req, res) => {
 
 // Routes
 app.post("/cashlogy/charge", handleCashlogyCharge);
+app.get("/cashlogy/charge/status", handleCashlogyChargeStatus);
+app.post("/cashlogy/cancel", handleCashlogyCancel);
+app.get("/cashlogy/state", handleCashlogyState);
 app.post("/ingenico/charge", handleIngenicoCharge);
 app.post("/printer/ticket", handlePrintTicket);
 

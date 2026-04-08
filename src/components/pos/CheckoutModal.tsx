@@ -1,11 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CartItem, Order } from "@/types/pos";
-import { chargeCashlogy, chargeIngenico, printTicket } from "@/lib/bridge";
+import {
+  chargeCashlogy,
+  chargeIngenico,
+  cancelCashlogy,
+  getCashlogyChargeStatus,
+  printTicket,
+} from "@/lib/bridge";
 import { broadcastNewOrder } from "@/lib/demo-channel";
 
-// Demo order counter (persisted in sessionStorage)
 function getNextDemoOrderNumber(): string {
   const key = "pos_demo_order_count";
   const current = parseInt(sessionStorage.getItem(key) || "0");
@@ -38,7 +43,32 @@ export default function CheckoutModal({
   const [change, setChange] = useState<number | null>(null);
   const [tableNumber, setTableNumber] = useState("");
   const [showTableInput, setShowTableInput] = useState(false);
+  const [depositedEur, setDepositedEur] = useState(0);
+  const [cashStatus, setCashStatus] = useState<string>("");
   const demoIdRef = useRef(Date.now());
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Poll cashlogy charge status while processing cash
+  useEffect(() => {
+    if (step === "processing" && method === "cash") {
+      pollRef.current = setInterval(async () => {
+        const st = await getCashlogyChargeStatus();
+        if (st.active) {
+          setDepositedEur((st.depositedCents || 0) / 100);
+          setCashStatus(st.status || "");
+          if (st.status === "done" || st.status === "error" || st.status === "cancelled") {
+            if (pollRef.current) clearInterval(pollRef.current);
+          }
+        }
+      }, 800);
+    }
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [step, method]);
 
   const createDemoOrder = (paymentMethod: "cash" | "card"): Order => {
     const num = getNextDemoOrderNumber();
@@ -66,31 +96,40 @@ export default function CheckoutModal({
     };
   };
 
+  const handleCancel = async () => {
+    if (method === "cash" && step === "processing") {
+      await cancelCashlogy();
+    }
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    onClose();
+  };
+
   const processPayment = async (paymentMethod: "cash" | "card") => {
     setMethod(paymentMethod);
     setStep("processing");
+    setDepositedEur(0);
+    setCashStatus("depositing");
 
     try {
-      // 1. Try payment via bridge (will fail in demo — that's OK)
-      let paymentOk = false;
-      try {
-        let paymentResult;
-        if (paymentMethod === "cash") {
-          paymentResult = await chargeCashlogy(total);
-        } else {
-          paymentResult = await chargeIngenico(total);
-        }
-        if (paymentResult.success) {
-          paymentOk = true;
-          if (paymentMethod === "cash" && "change" in paymentResult) {
-            setChange(paymentResult.change ?? null);
-          }
-        }
-      } catch {
-        // Bridge not available — skip in demo mode
+      let paymentResult;
+      if (paymentMethod === "cash") {
+        paymentResult = await chargeCashlogy(total);
+      } else {
+        paymentResult = await chargeIngenico(total);
+      }
+      if (!paymentResult.success) {
+        setErrorMsg(paymentResult.error || "Error en el pagament");
+        setStep("error");
+        return;
+      }
+      if (paymentMethod === "cash" && "change" in paymentResult) {
+        setChange(paymentResult.change ?? null);
       }
 
-      // 2. Try creating order via API
+      // Create order via API
       let order: Order | null = null;
       try {
         const orderRes = await fetch("/api/pos/orders", {
@@ -110,30 +149,29 @@ export default function CheckoutModal({
         // API not available
       }
 
-      // 3. Fallback: create demo order locally
       if (!order) {
         order = createDemoOrder(paymentMethod);
-        // Broadcast to KDS via BroadcastChannel
         broadcastNewOrder(order);
       }
 
       setOrderNumber(order.order_number);
 
-      // 4. Print ticket (best effort)
       printTicket({
         orderNumber: order.order_number,
         items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
         total,
-        paymentMethod: paymentMethod === "cash" ? "Efectivo" : "Tarjeta",
+        paymentMethod: paymentMethod === "cash" ? "Efectiu" : "Targeta",
         date: new Date().toLocaleString("es-ES"),
       }).catch(() => {});
 
       setStep("success");
     } catch {
-      setErrorMsg("Error inesperado durante el cobro");
+      setErrorMsg("Error inesperat durant el cobrament");
       setStep("error");
     }
   };
+
+  const remaining = Math.max(0, total - depositedEur);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -240,18 +278,77 @@ export default function CheckoutModal({
           </>
         )}
 
-        {/* PROCESSING */}
-        {step === "processing" && (
+        {/* PROCESSING — CASH (real-time Cashlogy display) */}
+        {step === "processing" && method === "cash" && (
+          <div className="py-4">
+            <h2 className="text-xl font-bold text-center text-gray-700 mb-6">
+              Processant pagament en efectiu
+            </h2>
+
+            {/* Spinner while depositing */}
+            {cashStatus === "depositing" && (
+              <div className="flex justify-center mb-4">
+                <div className="animate-spin w-10 h-10 border-4 border-gray-200 border-t-emerald-500 rounded-full" />
+              </div>
+            )}
+
+            <div className="space-y-4 mb-6">
+              {/* A COBRAR */}
+              <div className="flex justify-between items-center bg-gray-50 rounded-2xl px-6 py-4">
+                <span className="text-lg font-semibold text-gray-600">A COBRAR</span>
+                <span className="text-3xl font-bold text-gray-800">{total.toFixed(2)} &euro;</span>
+              </div>
+
+              {/* COBRAT */}
+              <div className="flex justify-between items-center bg-emerald-50 rounded-2xl px-6 py-4">
+                <span className="text-lg font-semibold text-emerald-700">COBRAT</span>
+                <span className="text-3xl font-bold text-emerald-600">{depositedEur.toFixed(2)} &euro;</span>
+              </div>
+
+              {/* MANCA (only show if still pending) */}
+              {remaining > 0 && cashStatus === "depositing" && (
+                <div className="flex justify-between items-center bg-pink-50 rounded-2xl px-6 py-4">
+                  <span className="text-lg font-semibold text-pink-700">MANCA</span>
+                  <span className="text-3xl font-bold text-pink-600">{remaining.toFixed(2)} &euro;</span>
+                </div>
+              )}
+
+              {/* CANVI (when dispensing or done) */}
+              {(cashStatus === "dispensing" || cashStatus === "closing") && depositedEur > total && (
+                <div className="flex justify-between items-center bg-orange-50 rounded-2xl px-6 py-4">
+                  <span className="text-lg font-semibold text-orange-700">CANVI</span>
+                  <span className="text-3xl font-bold text-orange-600">{(depositedEur - total).toFixed(2)} &euro;</span>
+                </div>
+              )}
+            </div>
+
+            {tableNumber && (
+              <p className="text-center text-pink-500 font-medium mb-4">Taula {tableNumber}</p>
+            )}
+
+            <p className="text-center text-sm text-gray-400 mb-4">
+              {cashStatus === "depositing" && "Introdueixi els diners a la Cashlogy..."}
+              {cashStatus === "closing" && "Tancant dipòsit..."}
+              {cashStatus === "dispensing" && "Dispensant canvi..."}
+            </p>
+
+            <button
+              onClick={handleCancel}
+              className="w-full py-3 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-semibold transition-colors"
+            >
+              Cancel·lar
+            </button>
+          </div>
+        )}
+
+        {/* PROCESSING — CARD */}
+        {step === "processing" && method === "card" && (
           <div className="text-center py-8">
             <div className="animate-spin w-16 h-16 border-4 border-gray-200 border-t-blue-500 rounded-full mx-auto mb-6" />
             <p className="text-xl font-semibold text-gray-700">
-              {method === "cash"
-                ? "Processant pagament en Cashlogy..."
-                : "Passi la targeta al datàfon..."}
+              Passi la targeta al datàfon...
             </p>
-            <p className="text-gray-500 mt-2">
-              {total.toFixed(2)} &euro;
-            </p>
+            <p className="text-gray-500 mt-2">{total.toFixed(2)} &euro;</p>
             {tableNumber && (
               <p className="text-pink-500 mt-1 font-medium">Taula {tableNumber}</p>
             )}

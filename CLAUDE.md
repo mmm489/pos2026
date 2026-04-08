@@ -19,7 +19,7 @@ Empresa: APOLO HOLDINGS 2020, S.L.U.
 - Backend: Next.js API Routes
 - Base de datos: PostgreSQL 9.6 local (puerto 5432, database "hicream", schema "pos")
 - DB driver: pg (NO @neondatabase/serverless — ese necesita HTTPS)
-- Bridge local: Node.js standalone en Windows (localhost:3001)
+- Bridge local: Node.js standalone en Windows (localhost:3006)
 - Sync: local PostgreSQL → Neon cada 5 min (para dashboard remoto)
 
 ## Hardware en el mostrador
@@ -31,11 +31,11 @@ Empresa: APOLO HOLDINGS 2020, S.L.U.
 ## Arquitectura
 ```
 PC Mostrador (C:\HiCream\)
-├── app\          → Next.js (POS + KDS + API) puerto 3000
-├── bridge\       → Express (hardware) puerto 3001
+├── app\          → Next.js (POS + KDS + API) puerto 3005
+├── bridge\       → Express (hardware) puerto 3006
 └── PostgreSQL    → puerto 5432
 
-PCs Cocina → Chrome → http://IP_MOSTRADOR:3000/kds
+PCs Cocina → Chrome → http://IP_MOSTRADOR:3005/kds
 ```
 
 ## Base de datos — schema: pos
@@ -71,9 +71,9 @@ PCs Cocina → Chrome → http://IP_MOSTRADOR:3000/kds
 - Variables de entorno en .env.local: NEON_DATABASE_URL, NEXT_PUBLIC_BRIDGE_URL
 
 ## URLs
-- POS: http://localhost:3000/pos
-- KDS: http://localhost:3000/kds (o http://IP:3000/kds desde cocina)
-- Admin comandes: http://localhost:3000/admin/orders
-- Admin productes: http://localhost:3000/admin/products
-- Ticket preview: http://localhost:3000/ticket-preview
-- Bridge health: http://localhost:3001/health
+- POS: http://localhost:3005/pos
+- KDS: http://localhost:3005/kds (o http://IP:3005/kds desde cocina)
+- Admin comandes: http://localhost:3005/admin/orders
+- Admin productes: http://localhost:3005/admin/products
+- Ticket preview: http://localhost:3005/ticket-preview
+- Bridge health: http://localhost:3006/health
