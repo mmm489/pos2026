@@ -60,7 +60,7 @@ export default function KdsPage() {
         setOrders((prev) =>
           prev
             .map((o) => (o.id === id ? { ...o, status: status as Order["status"] } : o))
-            .filter((o) => o.status !== "completed" && o.status !== "ready")
+            .filter((o) => o.status !== "completed" && o.status !== "ready" && o.status !== "cancelled")
         );
       }
     });
@@ -78,7 +78,6 @@ export default function KdsPage() {
         .then((data: Order[]) => {
           setOrders((prev) => {
             // Merge: keep new orders, update existing, remove completed
-            const map = new Map(data.map((o) => [o.id, o]));
             const merged = data.map((o) => {
               const existing = prev.find((p) => p.id === o.id);
               return existing ? { ...existing, ...o } : o;
@@ -110,7 +109,7 @@ export default function KdsPage() {
     setOrders((prev) =>
       prev
         .map((o) => (o.id === orderId ? { ...o, status: status as Order["status"] } : o))
-        .filter((o) => o.status !== "completed" && o.status !== "ready")
+        .filter((o) => o.status !== "completed" && o.status !== "ready" && o.status !== "cancelled")
     );
 
     // Try API

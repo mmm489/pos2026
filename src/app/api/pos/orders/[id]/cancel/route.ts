@@ -2,69 +2,66 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_ORDER_UPDATED } from "@/lib/pusher";
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  pending: ["preparing", "cancelled"],
-  preparing: ["ready", "cancelled"],
-  ready: ["completed", "cancelled"],
-  completed: ["cancelled"],
-};
-
-export async function PATCH(
+export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const id = parseInt(params.id);
     if (isNaN(id)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+      return NextResponse.json({ error: "ID invàlid" }, { status: 400 });
     }
 
     const body = await request.json();
-    const { status } = body;
+    const { reason, employee_id } = body;
 
-    if (!status) {
+    if (!reason) {
       return NextResponse.json(
-        { error: "Falta el campo status" },
+        { error: "Cal indicar un motiu d'anul·lació" },
         { status: 400 }
       );
     }
 
     const sql = getDb();
 
-    // Get current status
+    // Check current order
     const [current] = await sql`
       SELECT id, status FROM pos.orders WHERE id = ${id}
     `;
 
     if (!current) {
       return NextResponse.json(
-        { error: "Pedido no encontrado" },
+        { error: "Comanda no trobada" },
         { status: 404 }
       );
     }
 
-    // Validate transition
-    const allowed = VALID_TRANSITIONS[current.status as string];
-    if (!allowed || !allowed.includes(status)) {
+    if (current.status === "cancelled") {
       return NextResponse.json(
-        { error: `Transición no válida: ${current.status} → ${status}` },
+        { error: "Aquesta comanda ja està anul·lada" },
         { status: 400 }
       );
     }
 
-    const completedAt = status === "completed" ? new Date().toISOString() : null;
+    const cancelledBy = employee_id || null;
 
+    // Cancel the order
     const [updated] = await sql`
       UPDATE pos.orders
-      SET status = ${status}, completed_at = ${completedAt}
+      SET status = 'cancelled',
+          cancelled_at = NOW(),
+          cancellation_reason = ${reason},
+          cancelled_by = ${cancelledBy}
       WHERE id = ${id}
-      RETURNING id, order_number, status, total, payment_method, employee_id, created_at, completed_at
+      RETURNING id, order_number, invoice_number, status, total, payment_method,
+                employee_id, table_number, created_at, completed_at,
+                cancelled_at, cancellation_reason, cancelled_by
     `;
 
     // Log KDS event
     await sql`
       INSERT INTO pos.kds_events (order_id, event_type)
-      VALUES (${id}, ${`status_${status}`})
+      VALUES (${id}, 'cancelled')
     `;
 
     // Emit real-time event
@@ -72,7 +69,7 @@ export async function PATCH(
       const pusher = getPusherServer();
       await pusher.trigger(CHANNEL_ORDERS, EVENT_ORDER_UPDATED, {
         id: updated.id,
-        status: updated.status,
+        status: "cancelled",
         updated_at: new Date().toISOString(),
       });
     } catch (e) {
@@ -81,9 +78,9 @@ export async function PATCH(
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("Error updating order status:", error);
+    console.error("Error cancelling order:", error);
     return NextResponse.json(
-      { error: "Error al actualizar estado" },
+      { error: "Error al anul·lar la comanda" },
       { status: 500 }
     );
   }

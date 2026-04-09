@@ -47,7 +47,7 @@ export function useOrders() {
                 ? { ...o, status: data.status as Order["status"] }
                 : o
             )
-            .filter((o) => o.status !== "completed" && o.status !== "ready")
+            .filter((o) => o.status !== "completed" && o.status !== "ready" && o.status !== "cancelled")
         );
       }
     );

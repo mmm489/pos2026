@@ -16,7 +16,7 @@ export async function GET() {
       sql`
         SELECT COALESCE(SUM(total), 0)::float AS total, COUNT(*)::int AS count
         FROM pos.orders
-        WHERE created_at::date = CURRENT_DATE AND status != 'pending'
+        WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled')
       `,
       // Sales by hour
       sql`
@@ -24,7 +24,7 @@ export async function GET() {
                COALESCE(SUM(total), 0)::float AS total,
                COUNT(*)::int AS count
         FROM pos.orders
-        WHERE created_at::date = CURRENT_DATE AND status != 'pending'
+        WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled')
         GROUP BY hour
         ORDER BY hour
       `,
@@ -35,7 +35,7 @@ export async function GET() {
         FROM pos.order_items oi
         JOIN pos.products p ON p.id = oi.product_id
         JOIN pos.orders o ON o.id = oi.order_id
-        WHERE o.created_at::date = CURRENT_DATE AND o.status != 'pending'
+        WHERE o.created_at::date = CURRENT_DATE AND o.status NOT IN ('pending', 'cancelled')
         GROUP BY p.name
         ORDER BY qty DESC
         LIMIT 10
@@ -46,7 +46,7 @@ export async function GET() {
           COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN total END), 0)::float AS efectivo,
           COALESCE(SUM(CASE WHEN payment_method = 'card' THEN total END), 0)::float AS tarjeta
         FROM pos.orders
-        WHERE created_at::date = CURRENT_DATE AND status != 'pending'
+        WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled')
       `,
       // Active orders count
       sql`

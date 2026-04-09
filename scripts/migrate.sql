@@ -52,14 +52,17 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   id SERIAL PRIMARY KEY,
   order_number VARCHAR(10) NOT NULL,
   invoice_number VARCHAR(20),
-  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'ready', 'completed')),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'preparing', 'ready', 'completed', 'cancelled')),
   total NUMERIC(10,2) NOT NULL,
   total_base NUMERIC(10,2),
   total_vat NUMERIC(10,2),
-  payment_method VARCHAR(10) NOT NULL CHECK (payment_method IN ('cash', 'card')),
+  payment_method VARCHAR(10) NOT NULL CHECK (payment_method IN ('cash', 'card', 'manual')),
   employee_id INTEGER REFERENCES pos.employees(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  cancellation_reason TEXT,
+  cancelled_by INTEGER REFERENCES pos.employees(id),
   synced BOOLEAN NOT NULL DEFAULT false
 );
 
@@ -159,3 +162,31 @@ VALUES (
   'S'
 )
 ON CONFLICT DO NOTHING;
+
+-- =====================
+-- MIGRATIONS (safe to re-run)
+-- =====================
+
+-- v2: Add cancellation fields + fix constraints for existing DBs
+DO $$
+BEGIN
+  -- Add table_number if missing (older DBs)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='pos' AND table_name='orders' AND column_name='table_number') THEN
+    ALTER TABLE pos.orders ADD COLUMN table_number VARCHAR(10);
+  END IF;
+
+  -- Add cancellation columns if missing
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='pos' AND table_name='orders' AND column_name='cancelled_at') THEN
+    ALTER TABLE pos.orders ADD COLUMN cancelled_at TIMESTAMPTZ;
+    ALTER TABLE pos.orders ADD COLUMN cancellation_reason TEXT;
+    ALTER TABLE pos.orders ADD COLUMN cancelled_by INTEGER REFERENCES pos.employees(id);
+  END IF;
+
+  -- Update status CHECK constraint to include 'cancelled'
+  ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_status_check;
+  ALTER TABLE pos.orders ADD CONSTRAINT orders_status_check CHECK (status IN ('pending', 'preparing', 'ready', 'completed', 'cancelled'));
+
+  -- Update payment_method CHECK constraint to include 'manual'
+  ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
+  ALTER TABLE pos.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('cash', 'card', 'manual'));
+END $$;

@@ -12,14 +12,14 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       const statuses = statusFilter.split(",");
       orders = await sql`
-        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at
+        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by
         FROM pos.orders
         WHERE status = ANY(${statuses})
         ORDER BY created_at DESC
       `;
     } else {
       orders = await sql`
-        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at
+        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by
         FROM pos.orders
         ORDER BY created_at DESC
         LIMIT 100

@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { Order } from "@/types/pos";
 
+const CANCEL_REASONS = [
+  { value: "client", label: "Petició del client" },
+  { value: "error", label: "Error en la comanda" },
+  { value: "duplicate", label: "Comanda duplicada" },
+  { value: "payment", label: "Problema amb el pagament" },
+  { value: "other", label: "Altre motiu" },
+];
+
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -11,6 +19,10 @@ export default function AdminOrdersPage() {
   const [dateFilter, setDateFilter] = useState(
     new Date().toISOString().split("T")[0]
   );
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("client");
+  const [cancelNotes, setCancelNotes] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   useEffect(() => {
     loadOrders();
@@ -29,6 +41,32 @@ export default function AdminOrdersPage() {
     setLoading(false);
   };
 
+  const handleCancel = async () => {
+    if (!cancellingId) return;
+    setCancelLoading(true);
+    const reason = CANCEL_REASONS.find((r) => r.value === cancelReason)?.label || cancelReason;
+    const fullReason = cancelNotes ? `${reason}: ${cancelNotes}` : reason;
+    try {
+      const res = await fetch(`/api/pos/orders/${cancellingId}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: fullReason }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setOrders((prev) =>
+          prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+        );
+      }
+    } catch {
+      // Error cancelling
+    }
+    setCancelLoading(false);
+    setCancellingId(null);
+    setCancelReason("client");
+    setCancelNotes("");
+  };
+
   const filtered = orders.filter((o) => {
     if (filter !== "all" && o.payment_method !== filter) return false;
     if (dateFilter) {
@@ -38,13 +76,15 @@ export default function AdminOrdersPage() {
     return true;
   });
 
-  const totalCash = filtered
+  const activeOrders = filtered.filter((o) => o.status !== "cancelled");
+  const totalCash = activeOrders
     .filter((o) => o.payment_method === "cash")
     .reduce((s, o) => s + Number(o.total), 0);
-  const totalCard = filtered
+  const totalCard = activeOrders
     .filter((o) => o.payment_method === "card")
     .reduce((s, o) => s + Number(o.total), 0);
   const totalAll = totalCash + totalCard;
+  const cancelledCount = filtered.filter((o) => o.status === "cancelled").length;
 
   // Group by hour
   const byHour = new Map<number, { count: number; total: number }>();
@@ -69,7 +109,10 @@ export default function AdminOrdersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Comandes</h1>
           <p className="text-sm text-gray-500">
-            {filtered.length} comandes &middot; {totalAll.toFixed(2)}€ total
+            {activeOrders.length} comandes &middot; {totalAll.toFixed(2)}€ total
+            {cancelledCount > 0 && (
+              <span className="text-red-500 ml-2">({cancelledCount} anul·lades)</span>
+            )}
           </p>
         </div>
         <div className="flex gap-3">
@@ -139,7 +182,7 @@ export default function AdminOrdersPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <p className="text-sm text-gray-500">Ticket mig</p>
             <p className="text-2xl font-bold text-gray-800">
-              {filtered.length > 0 ? (totalAll / filtered.length).toFixed(2) : "0.00"}€
+              {activeOrders.length > 0 ? (totalAll / activeOrders.length).toFixed(2) : "0.00"}€
             </p>
           </div>
         </div>
@@ -209,7 +252,9 @@ export default function AdminOrdersPage() {
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        order.status === "completed"
+                        order.status === "cancelled"
+                          ? "bg-red-100 text-red-700"
+                          : order.status === "completed"
                           ? "bg-green-100 text-green-700"
                           : order.status === "ready"
                           ? "bg-blue-100 text-blue-700"
@@ -218,7 +263,9 @@ export default function AdminOrdersPage() {
                           : "bg-gray-100 text-gray-600"
                       }`}
                     >
-                      {order.status === "completed"
+                      {order.status === "cancelled"
+                        ? "Anul·lat"
+                        : order.status === "completed"
                         ? "Completat"
                         : order.status === "ready"
                         ? "Llest"
@@ -233,14 +280,27 @@ export default function AdminOrdersPage() {
                       className={`text-sm font-medium ${
                         order.payment_method === "cash"
                           ? "text-green-600"
-                          : "text-blue-600"
+                          : order.payment_method === "card"
+                          ? "text-blue-600"
+                          : "text-amber-600"
                       }`}
                     >
-                      {order.payment_method === "cash" ? "Efectiu" : "Targeta"}
+                      {order.payment_method === "cash" ? "Efectiu" : order.payment_method === "card" ? "Targeta" : "Manual"}
                     </span>
-                    <span className="text-lg font-bold text-gray-800">
+                    <span className={`text-lg font-bold ${order.status === "cancelled" ? "text-gray-400 line-through" : "text-gray-800"}`}>
                       {Number(order.total).toFixed(2)}€
                     </span>
+                    {order.status !== "cancelled" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCancellingId(order.id);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition-colors"
+                      >
+                        Anul·lar
+                      </button>
+                    )}
                     <span className="text-gray-300">
                       {expandedId === order.id ? "▲" : "▼"}
                     </span>
@@ -248,41 +308,58 @@ export default function AdminOrdersPage() {
                 </button>
 
                 {/* Expanded detail */}
-                {expandedId === order.id && order.items && (
+                {expandedId === order.id && (
                   <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-500">
-                          <th className="text-left font-medium py-1">Producte</th>
-                          <th className="text-center font-medium py-1 w-16">Qty</th>
-                          <th className="text-right font-medium py-1 w-20">Preu</th>
-                          <th className="text-right font-medium py-1 w-24">Subtotal</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {order.items.map((item) => (
-                          <tr key={item.id} className="border-t border-gray-100">
-                            <td className="py-1.5 text-gray-800">
-                              {item.product_name}
-                              {item.notes && (
-                                <span className="ml-2 text-xs text-orange-500">
-                                  {item.notes}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-1.5 text-center text-gray-600">
-                              {item.qty}
-                            </td>
-                            <td className="py-1.5 text-right text-gray-600">
-                              {Number(item.unit_price).toFixed(2)}€
-                            </td>
-                            <td className="py-1.5 text-right font-medium text-gray-800">
-                              {(Number(item.unit_price) * item.qty).toFixed(2)}€
-                            </td>
+                    {order.status === "cancelled" && order.cancellation_reason && (
+                      <div className="mb-3 px-3 py-2 bg-red-50 rounded-lg border border-red-100">
+                        <p className="text-sm text-red-700">
+                          <span className="font-semibold">Motiu:</span> {order.cancellation_reason}
+                        </p>
+                        {order.cancelled_at && (
+                          <p className="text-xs text-red-500 mt-0.5">
+                            Anul·lat el {new Date(order.cancelled_at).toLocaleString("ca-ES")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {order.invoice_number && (
+                      <p className="text-xs text-gray-500 mb-2">Factura: {order.invoice_number}</p>
+                    )}
+                    {order.items && (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-gray-500">
+                            <th className="text-left font-medium py-1">Producte</th>
+                            <th className="text-center font-medium py-1 w-16">Qty</th>
+                            <th className="text-right font-medium py-1 w-20">Preu</th>
+                            <th className="text-right font-medium py-1 w-24">Subtotal</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {order.items.map((item) => (
+                            <tr key={item.id} className="border-t border-gray-100">
+                              <td className="py-1.5 text-gray-800">
+                                {item.product_name}
+                                {item.notes && (
+                                  <span className="ml-2 text-xs text-orange-500">
+                                    {item.notes}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-1.5 text-center text-gray-600">
+                                {item.qty}
+                              </td>
+                              <td className="py-1.5 text-right text-gray-600">
+                                {Number(item.unit_price).toFixed(2)}€
+                              </td>
+                              <td className="py-1.5 text-right font-medium text-gray-800">
+                                {(Number(item.unit_price) * item.qty).toFixed(2)}€
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
               </div>
@@ -290,6 +367,57 @@ export default function AdminOrdersPage() {
           </div>
         )}
       </div>
+
+      {/* Cancel confirmation modal */}
+      {cancellingId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-800 mb-1">Anul·lar comanda</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Comanda {orders.find((o) => o.id === cancellingId)?.order_number}
+            </p>
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">Motiu</label>
+            <select
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm"
+            >
+              {CANCEL_REASONS.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
+            </select>
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (opcional)</label>
+            <textarea
+              value={cancelNotes}
+              onChange={(e) => setCancelNotes(e.target.value)}
+              placeholder="Detalls addicionals..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm h-20 resize-none"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setCancellingId(null);
+                  setCancelReason("client");
+                  setCancelNotes("");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors text-sm"
+              >
+                Tornar
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={cancelLoading}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors text-sm disabled:opacity-50"
+              >
+                {cancelLoading ? "Anul·lant..." : "Confirmar anul·lació"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

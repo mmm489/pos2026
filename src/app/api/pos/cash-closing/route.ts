@@ -20,7 +20,7 @@ export async function GET() {
         COALESCE(SUM(total), 0)::float AS total_sales,
         COUNT(*)::int AS ticket_count
       FROM pos.orders
-      WHERE created_at >= ${since}::timestamptz AND status != 'pending'
+      WHERE created_at >= ${since}::timestamptz AND status NOT IN ('pending', 'cancelled')
     `;
 
     // By employee
@@ -28,7 +28,7 @@ export async function GET() {
       SELECT e.name, COUNT(o.id)::int AS tickets, COALESCE(SUM(o.total), 0)::float AS total
       FROM pos.orders o
       JOIN pos.employees e ON e.id = o.employee_id
-      WHERE o.created_at >= ${since}::timestamptz AND o.status != 'pending'
+      WHERE o.created_at >= ${since}::timestamptz AND o.status NOT IN ('pending', 'cancelled')
       GROUP BY e.name
       ORDER BY total DESC
     `;
@@ -39,7 +39,7 @@ export async function GET() {
       FROM pos.order_items oi
       JOIN pos.products p ON p.id = oi.product_id
       JOIN pos.orders o ON o.id = oi.order_id
-      WHERE o.created_at >= ${since}::timestamptz AND o.status != 'pending'
+      WHERE o.created_at >= ${since}::timestamptz AND o.status NOT IN ('pending', 'cancelled')
       GROUP BY p.name
       ORDER BY qty DESC
       LIMIT 20
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
         COALESCE(SUM(total), 0)::float AS total_sales,
         COUNT(*)::int AS ticket_count
       FROM pos.orders
-      WHERE created_at >= ${since}::timestamptz AND status != 'pending'
+      WHERE created_at >= ${since}::timestamptz AND status NOT IN ('pending', 'cancelled')
     `;
 
     // Create closing record

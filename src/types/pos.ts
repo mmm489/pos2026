@@ -22,7 +22,7 @@ export interface Order {
   id: number;
   order_number: string;
   invoice_number?: string;
-  status: "pending" | "preparing" | "ready" | "completed";
+  status: "pending" | "preparing" | "ready" | "completed" | "cancelled";
   total: number;
   total_base?: number;
   total_vat?: number;
@@ -31,6 +31,9 @@ export interface Order {
   table_number?: string;
   created_at: string;
   completed_at: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_by?: number | null;
   items?: OrderItem[];
 }
 
