@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nextjs-pos",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "3005"],
+      "port": 3005
+    },
+    {
+      "name": "bridge",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["bridge/index.js"],
+      "port": 3006
+    }
+  ]
+}

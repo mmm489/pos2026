@@ -95,11 +95,25 @@ export async function getCashlogyState() {
 
 export async function printTicket(data: {
   orderNumber: string;
+  invoiceNumber?: string;
   items: { name: string; qty: number; price: number }[];
   total: number;
+  totalBase?: number;
+  totalVat?: number;
+  vatRate?: number;
   paymentMethod: string;
   date: string;
   qrData?: string;
+  business?: {
+    name: string;
+    trade_name: string;
+    nif: string;
+    address: string;
+    city: string;
+    postal_code: string;
+    province: string;
+    phone?: string;
+  };
 }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);

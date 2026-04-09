@@ -10,6 +10,7 @@ import {
   printTicket,
 } from "@/lib/bridge";
 import { broadcastNewOrder } from "@/lib/demo-channel";
+import { Business } from "@/types/pos";
 
 function getNextDemoOrderNumber(): string {
   const key = "pos_demo_order_count";
@@ -45,8 +46,17 @@ export default function CheckoutModal({
   const [showTableInput, setShowTableInput] = useState(false);
   const [depositedEur, setDepositedEur] = useState(0);
   const [cashStatus, setCashStatus] = useState<string>("");
+  const [business, setBusiness] = useState<Business | null>(null);
   const demoIdRef = useRef(Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch business data on mount for ticket printing
+  useEffect(() => {
+    fetch("/api/pos/business")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setBusiness(data); })
+      .catch(() => {});
+  }, []);
 
   // Poll cashlogy charge status while processing cash
   useEffect(() => {
@@ -140,10 +150,15 @@ export default function CheckoutModal({
 
       printTicket({
         orderNumber: order.order_number,
+        invoiceNumber: order.invoice_number,
         items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
         total,
+        totalBase: order.total_base ?? Math.round((total / 1.10) * 100) / 100,
+        totalVat: order.total_vat ?? Math.round((total - total / 1.10) * 100) / 100,
+        vatRate: 10,
         paymentMethod: "Manual",
         date: new Date().toLocaleString("es-ES"),
+        business: business || undefined,
       }).catch(() => {});
 
       setStep("success");
@@ -204,10 +219,15 @@ export default function CheckoutModal({
 
       printTicket({
         orderNumber: order.order_number,
+        invoiceNumber: order.invoice_number,
         items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
         total,
+        totalBase: order.total_base ?? Math.round((total / 1.10) * 100) / 100,
+        totalVat: order.total_vat ?? Math.round((total - total / 1.10) * 100) / 100,
+        vatRate: 10,
         paymentMethod: paymentMethod === "cash" ? "Efectiu" : "Targeta",
         date: new Date().toLocaleString("es-ES"),
+        business: business || undefined,
       }).catch(() => {});
 
       setStep("success");
