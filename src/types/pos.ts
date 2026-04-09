@@ -26,7 +26,7 @@ export interface Order {
   total: number;
   total_base?: number;
   total_vat?: number;
-  payment_method: "cash" | "card";
+  payment_method: "cash" | "card" | "manual";
   employee_id: number | null;
   table_number?: string;
   created_at: string;

@@ -83,6 +83,16 @@ export async function cancelCashlogy() {
   }
 }
 
+export async function getCashlogyState() {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/cashlogy/state`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (error) {
+    return { error: (error as Error).message };
+  }
+}
+
 export async function printTicket(data: {
   orderNumber: string;
   items: { name: string; qty: number; price: number }[];

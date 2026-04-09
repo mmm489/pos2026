@@ -7,6 +7,7 @@ import Cart from "@/components/pos/Cart";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import PinLogin from "@/components/pos/PinLogin";
 import CashClosingModal from "@/components/pos/CashClosingModal";
+import CashlogyModal from "@/components/pos/CashlogyModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 
 type CartAction =
@@ -68,6 +69,7 @@ export default function PosPage() {
   const [cart, dispatch] = useReducer(cartReducer, []);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCashClosing, setShowCashClosing] = useState(false);
+  const [showCashlogy, setShowCashlogy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Restore session
@@ -151,6 +153,12 @@ export default function PosPage() {
               ({employee.role === "admin" ? "Admin" : "Empleado"})
             </span>
           </span>
+          <button
+            onClick={() => setShowCashlogy(true)}
+            className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-sm font-semibold hover:bg-emerald-100 transition-colors"
+          >
+            Cashlogy
+          </button>
           <a
             href="/admin/orders"
             className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-sm font-semibold hover:bg-blue-100 transition-colors"
@@ -226,6 +234,11 @@ export default function PosPage() {
           onClose={() => setShowCashClosing(false)}
           onComplete={handleCashClosingComplete}
         />
+      )}
+
+      {/* Cashlogy inventory modal */}
+      {showCashlogy && (
+        <CashlogyModal onClose={() => setShowCashlogy(false)} />
       )}
     </div>
   );

@@ -12,14 +12,14 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       const statuses = statusFilter.split(",");
       orders = await sql`
-        SELECT id, order_number, status, total, payment_method, employee_id, created_at, completed_at
+        SELECT id, order_number, status, total, payment_method, employee_id, table_number, created_at, completed_at
         FROM pos.orders
         WHERE status = ANY(${statuses})
         ORDER BY created_at DESC
       `;
     } else {
       orders = await sql`
-        SELECT id, order_number, status, total, payment_method, employee_id, created_at, completed_at
+        SELECT id, order_number, status, total, payment_method, employee_id, table_number, created_at, completed_at
         FROM pos.orders
         ORDER BY created_at DESC
         LIMIT 100
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   try {
     const sql = getDb();
     const body = await request.json();
-    const { items, payment_method, employee_id } = body;
+    const { items, payment_method, employee_id, table_number } = body;
 
     if (!items || items.length === 0 || !payment_method) {
       return NextResponse.json(
@@ -88,10 +88,11 @@ export async function POST(request: NextRequest) {
 
     // Create order
     const empId = employee_id || null;
+    const tblNum = table_number || null;
     const [order] = await sql`
-      INSERT INTO pos.orders (order_number, status, total, payment_method, employee_id)
-      VALUES (${orderNumber}, 'pending', ${total}, ${payment_method}, ${empId})
-      RETURNING id, order_number, status, total, payment_method, employee_id, created_at
+      INSERT INTO pos.orders (order_number, status, total, payment_method, employee_id, table_number)
+      VALUES (${orderNumber}, 'pending', ${total}, ${payment_method}, ${empId}, ${tblNum})
+      RETURNING id, order_number, status, total, payment_method, employee_id, table_number, created_at
     `;
 
     // Insert order items

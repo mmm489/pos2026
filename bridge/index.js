@@ -2,7 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { handleCashlogyCharge, handleCashlogyChargeStatus, handleCashlogyCancel, handleCashlogyState } = require("./routes/cashlogy");
-const { handleIngenicoCharge } = require("./routes/ingenico");
+const { handleIngenicoCharge, handleVerifoneStatus, handleVerifoneHealth } = require("./routes/ingenico");
 const { handlePrintTicket } = require("./routes/printer");
 
 const app = express();
@@ -33,6 +33,8 @@ app.get("/cashlogy/charge/status", handleCashlogyChargeStatus);
 app.post("/cashlogy/cancel", handleCashlogyCancel);
 app.get("/cashlogy/state", handleCashlogyState);
 app.post("/ingenico/charge", handleIngenicoCharge);
+app.get("/ingenico/status", handleVerifoneStatus);
+app.get("/ingenico/health", handleVerifoneHealth);
 app.post("/printer/ticket", handlePrintTicket);
 
 app.listen(PORT, () => {

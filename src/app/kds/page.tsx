@@ -67,12 +67,28 @@ export default function KdsPage() {
     return unsub;
   }, []);
 
-  // Also try Pusher (if configured)
+  // Poll API for new/updated orders every 3s (works across machines)
   useEffect(() => {
-    let cleanup: (() => void) | undefined;
-    import("@/hooks/useOrders").catch(() => {});
-    // Pusher will work when env vars are set — the BroadcastChannel covers demo mode
-    return () => cleanup?.();
+    const interval = setInterval(() => {
+      fetch("/api/pos/orders?status=pending,preparing")
+        .then((r) => {
+          if (!r.ok) throw new Error();
+          return r.json();
+        })
+        .then((data: Order[]) => {
+          setOrders((prev) => {
+            // Merge: keep new orders, update existing, remove completed
+            const map = new Map(data.map((o) => [o.id, o]));
+            const merged = data.map((o) => {
+              const existing = prev.find((p) => p.id === o.id);
+              return existing ? { ...existing, ...o } : o;
+            });
+            return merged;
+          });
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   // Clock
@@ -90,25 +106,24 @@ export default function KdsPage() {
   }, [orders.length]);
 
   const handleStatusChange = useCallback(async (orderId: number, status: string) => {
-    // Try API first
-    try {
-      const res = await fetch(`/api/pos/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      if (res.ok) return;
-    } catch {
-      // API not available
-    }
-
-    // Demo fallback: update locally + broadcast
+    // Update locally immediately
     setOrders((prev) =>
       prev
         .map((o) => (o.id === orderId ? { ...o, status: status as Order["status"] } : o))
         .filter((o) => o.status !== "completed" && o.status !== "ready")
     );
-    broadcastOrderUpdated({ id: orderId, status });
+
+    // Try API
+    try {
+      await fetch(`/api/pos/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+    } catch {
+      // API not available — broadcast for demo mode
+      broadcastOrderUpdated({ id: orderId, status });
+    }
   }, []);
 
   return (

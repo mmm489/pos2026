@@ -37,7 +37,7 @@ export default function CheckoutModal({
   onComplete,
 }: CheckoutModalProps) {
   const [step, setStep] = useState<Step>("select");
-  const [method, setMethod] = useState<"cash" | "card" | null>(null);
+  const [method, setMethod] = useState<"cash" | "card" | "manual" | null>(null);
   const [orderNumber, setOrderNumber] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [change, setChange] = useState<number | null>(null);
@@ -70,7 +70,7 @@ export default function CheckoutModal({
     };
   }, [step, method]);
 
-  const createDemoOrder = (paymentMethod: "cash" | "card"): Order => {
+  const createDemoOrder = (paymentMethod: "cash" | "card" | "manual"): Order => {
     const num = getNextDemoOrderNumber();
     const id = demoIdRef.current++;
     return {
@@ -105,6 +105,52 @@ export default function CheckoutModal({
       pollRef.current = null;
     }
     onClose();
+  };
+
+  const processManualPayment = async () => {
+    setMethod("manual");
+    setStep("processing");
+
+    try {
+      let order: Order | null = null;
+      try {
+        const orderRes = await fetch("/api/pos/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items,
+            payment_method: "manual",
+            employee_id: employeeId,
+            table_number: tableNumber || null,
+          }),
+        });
+        if (orderRes.ok) {
+          order = await orderRes.json();
+        }
+      } catch {
+        // API not available
+      }
+
+      if (!order) {
+        order = createDemoOrder("manual");
+        broadcastNewOrder(order);
+      }
+
+      setOrderNumber(order.order_number);
+
+      printTicket({
+        orderNumber: order.order_number,
+        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+        total,
+        paymentMethod: "Manual",
+        date: new Date().toLocaleString("es-ES"),
+      }).catch(() => {});
+
+      setStep("success");
+    } catch {
+      setErrorMsg("Error inesperat durant el cobrament");
+      setStep("error");
+    }
   };
 
   const processPayment = async (paymentMethod: "cash" | "card") => {
@@ -247,24 +293,34 @@ export default function CheckoutModal({
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="grid grid-cols-3 gap-4 mb-6">
               <button
                 onClick={() => processPayment("cash")}
-                className="flex flex-col items-center justify-center p-8 rounded-2xl bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100 active:bg-emerald-200 transition-all"
+                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-emerald-50 border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100 active:bg-emerald-200 transition-all"
               >
                 <span className="text-4xl mb-2">&#128176;</span>
-                <span className="text-xl font-bold text-emerald-700">
+                <span className="text-lg font-bold text-emerald-700">
                   EFECTIU
                 </span>
               </button>
 
               <button
                 onClick={() => processPayment("card")}
-                className="flex flex-col items-center justify-center p-8 rounded-2xl bg-blue-50 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 active:bg-blue-200 transition-all"
+                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-blue-50 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 active:bg-blue-200 transition-all"
               >
                 <span className="text-4xl mb-2">&#128179;</span>
-                <span className="text-xl font-bold text-blue-700">
+                <span className="text-lg font-bold text-blue-700">
                   TARGETA
+                </span>
+              </button>
+
+              <button
+                onClick={() => processManualPayment()}
+                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-amber-50 border-2 border-amber-200 hover:border-amber-400 hover:bg-amber-100 active:bg-amber-200 transition-all"
+              >
+                <span className="text-4xl mb-2">&#9997;</span>
+                <span className="text-lg font-bold text-amber-700">
+                  MANUAL
                 </span>
               </button>
             </div>
@@ -338,6 +394,20 @@ export default function CheckoutModal({
             >
               Cancel·lar
             </button>
+          </div>
+        )}
+
+        {/* PROCESSING — MANUAL */}
+        {step === "processing" && method === "manual" && (
+          <div className="text-center py-8">
+            <div className="animate-spin w-16 h-16 border-4 border-gray-200 border-t-amber-500 rounded-full mx-auto mb-6" />
+            <p className="text-xl font-semibold text-gray-700">
+              Processant cobrament manual...
+            </p>
+            <p className="text-gray-500 mt-2">{total.toFixed(2)} &euro;</p>
+            {tableNumber && (
+              <p className="text-pink-500 mt-1 font-medium">Taula {tableNumber}</p>
+            )}
           </div>
         )}
 
