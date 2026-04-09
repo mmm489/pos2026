@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const { handleCashlogyCharge, handleCashlogyChargeStatus, handleCashlogyCancel, handleCashlogyState } = require("./routes/cashlogy");
 const { handleIngenicoCharge, handleVerifoneStatus, handleVerifoneHealth } = require("./routes/ingenico");
-const { handlePrintTicket } = require("./routes/printer");
+const { handlePrintTicket, handlePrintKitchenTicket } = require("./routes/printer");
 
 const app = express();
 const PORT = process.env.PORT || 3006;
@@ -36,6 +36,7 @@ app.post("/ingenico/charge", handleIngenicoCharge);
 app.get("/ingenico/status", handleVerifoneStatus);
 app.get("/ingenico/health", handleVerifoneHealth);
 app.post("/printer/ticket", handlePrintTicket);
+app.post("/printer/kitchen", handlePrintKitchenTicket);
 
 app.listen(PORT, () => {
   console.log(`[${new Date().toISOString()}] Hi Cream Bridge running on port ${PORT}`);

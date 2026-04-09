@@ -3,7 +3,8 @@ const {
   types: PrinterTypes,
 } = require("node-thermal-printer");
 
-function createPrinter() {
+// Receipt printer — Mostrador (EPSON TM-m30 via USB or TCP)
+function createReceiptPrinter() {
   const iface = process.env.PRINTER_INTERFACE || "tcp";
   let options = {
     type: PrinterTypes.EPSON,
@@ -20,6 +21,20 @@ function createPrinter() {
   }
 
   return new ThermalPrinter(options);
+}
+
+// Kitchen printer — Cocina (POS-80C via network)
+function createKitchenPrinter() {
+  const host = process.env.KITCHEN_PRINTER_HOST || "192.168.1.143";
+  const port = process.env.KITCHEN_PRINTER_PORT || "9100";
+  return new ThermalPrinter({
+    type: PrinterTypes.EPSON,
+    characterSet: "CHARCODE_PC858",
+    removeSpecialCharacters: false,
+    lineCharacter: "-",
+    width: 48,
+    interface: `tcp://${host}:${port}`,
+  });
 }
 
 function rightAlign(left, right, width = 48) {
@@ -57,7 +72,7 @@ async function handlePrintTicket(req, res) {
   const calcVat = totalVat || Math.round((calcTotal - calcBase) * 100) / 100;
 
   try {
-    const printer = createPrinter();
+    const printer = createReceiptPrinter();
     const isConnected = await printer.isPrinterConnected();
 
     // ========== HEADER ==========
@@ -154,4 +169,73 @@ async function handlePrintTicket(req, res) {
   }
 }
 
-module.exports = { handlePrintTicket };
+async function handlePrintKitchenTicket(req, res) {
+  const { orderNumber, tableNumber, items, date } = req.body;
+
+  if (!orderNumber || !items) {
+    return res
+      .status(400)
+      .json({ success: false, error: "Faltan datos del ticket de cocina" });
+  }
+
+  try {
+    const printer = createKitchenPrinter();
+    const isConnected = await printer.isPrinterConnected();
+
+    // ========== HEADER ==========
+    printer.alignCenter();
+    printer.setTextSize(2, 2);
+    printer.bold(true);
+    printer.println(`COMANDA ${orderNumber}`);
+    printer.bold(false);
+    printer.setTextNormal();
+
+    if (tableNumber) {
+      printer.newLine();
+      printer.setTextSize(1, 1);
+      printer.bold(true);
+      printer.println(`TAULA ${tableNumber}`);
+      printer.bold(false);
+      printer.setTextNormal();
+    }
+
+    printer.println(date || new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }));
+    printer.drawLine();
+
+    // ========== ITEMS ==========
+    printer.alignLeft();
+    printer.setTextSize(1, 1);
+    for (const item of items) {
+      if (item.qty === 1) {
+        printer.println(item.name);
+      } else {
+        printer.bold(true);
+        printer.print(`${item.qty}x `);
+        printer.bold(false);
+        printer.println(item.name);
+      }
+      if (item.notes) {
+        printer.println(`   ** ${item.notes}`);
+      }
+    }
+    printer.setTextNormal();
+
+    printer.drawLine();
+    printer.newLine();
+    printer.cut();
+
+    if (isConnected) {
+      await printer.execute();
+      console.log(`[Kitchen] Ticket impreso: ${orderNumber}`);
+    } else {
+      console.log(`[Kitchen] Ticket generado (sin impresora): ${orderNumber}`);
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[Kitchen] Error:", err.message);
+    return res.json({ success: false, error: err.message });
+  }
+}
+
+module.exports = { handlePrintTicket, handlePrintKitchenTicket };

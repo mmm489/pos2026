@@ -93,6 +93,30 @@ export async function getCashlogyState() {
   }
 }
 
+export async function printKitchenTicket(data: {
+  orderNumber: string;
+  tableNumber?: string;
+  items: { name: string; qty: number; notes?: string | null }[];
+  date?: string;
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/printer/kitchen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+    return (await res.json()) as { success: boolean; error?: string };
+  } catch {
+    return { success: false, error: "Error de conexión con la impresora de cocina" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function printTicket(data: {
   orderNumber: string;
   invoiceNumber?: string;

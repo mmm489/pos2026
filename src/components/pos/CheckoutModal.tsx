@@ -8,6 +8,7 @@ import {
   cancelCashlogy,
   getCashlogyChargeStatus,
   printTicket,
+  printKitchenTicket,
 } from "@/lib/bridge";
 import { broadcastNewOrder } from "@/lib/demo-channel";
 import { Business } from "@/types/pos";
@@ -161,6 +162,12 @@ export default function CheckoutModal({
         business: business || undefined,
       }).catch(() => {});
 
+      printKitchenTicket({
+        orderNumber: order.order_number,
+        tableNumber: tableNumber || undefined,
+        items: items.map((i) => ({ name: i.name, qty: i.qty, notes: i.notes })),
+      }).catch(() => {});
+
       setStep("success");
     } catch {
       setErrorMsg("Error inesperat durant el cobrament");
@@ -228,6 +235,12 @@ export default function CheckoutModal({
         paymentMethod: paymentMethod === "cash" ? "Efectiu" : "Targeta",
         date: new Date().toLocaleString("es-ES"),
         business: business || undefined,
+      }).catch(() => {});
+
+      printKitchenTicket({
+        orderNumber: order.order_number,
+        tableNumber: tableNumber || undefined,
+        items: items.map((i) => ({ name: i.name, qty: i.qty, notes: i.notes })),
       }).catch(() => {});
 
       setStep("success");
