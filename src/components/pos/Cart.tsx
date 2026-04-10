@@ -26,9 +26,9 @@ export default function Cart({
     <div className="flex flex-col h-full bg-white border-l border-gray-200">
       {/* Header */}
       <div className="p-4 border-b border-gray-100">
-        <h2 className="text-lg font-bold text-gray-800">Pedido actual</h2>
+        <h2 className="text-lg font-bold text-gray-800">Comanda actual</h2>
         <p className="text-sm text-gray-500">
-          {items.length} {items.length === 1 ? "producto" : "productos"}
+          {items.length} {items.length === 1 ? "producte" : "productes"}
         </p>
       </div>
 
@@ -37,9 +37,9 @@ export default function Cart({
         {items.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-400">
             <p className="text-center">
-              Toca un producto para
+              Toca un producte per
               <br />
-              añadirlo al pedido
+              afegir-lo a la comanda
             </p>
           </div>
         ) : (

@@ -275,8 +275,8 @@ export default function PosPage() {
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
-        {/* Product catalog — 70% */}
-        <div className="flex-[7] min-w-0">
+        {/* Product catalog — 75% */}
+        <div className="flex-1 min-w-0">
           <ProductGrid
             products={products}
             categories={categories}
@@ -284,8 +284,8 @@ export default function PosPage() {
           />
         </div>
 
-        {/* Cart — 30% */}
-        <div className="flex-[3] min-w-[320px] max-w-[420px]">
+        {/* Cart — fixed width */}
+        <div className="w-[340px] flex-shrink-0">
           <Cart
             items={cart}
             onUpdateQty={(productId, delta) =>
