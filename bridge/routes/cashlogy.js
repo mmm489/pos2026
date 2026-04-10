@@ -11,9 +11,13 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function cashlogyRequest(path, method = "GET", body = null) {
+async function cashlogyRequest(path, method = "GET", body = null, timeoutMs = 10_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
   const options = {
     method,
+    signal: controller.signal,
     headers: {
       "Content-Type": "application/json",
       ...(CASHLOGY_API_KEY && { X_API_KEY: CASHLOGY_API_KEY }),
@@ -21,12 +25,21 @@ async function cashlogyRequest(path, method = "GET", body = null) {
   };
   if (body !== null) options.body = JSON.stringify(body);
 
-  const res = await fetch(`${CASHLOGY_API}${path}`, options);
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`Cashlogy HTTP ${res.status}: ${text}`);
+  try {
+    const res = await fetch(`${CASHLOGY_API}${path}`, options);
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(`Cashlogy HTTP ${res.status}: ${text}`);
+    }
+    return text ? JSON.parse(text) : {};
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error(`Cashlogy timeout (${timeoutMs}ms) on ${path}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
-  return text ? JSON.parse(text) : {};
 }
 
 /**
@@ -36,7 +49,7 @@ function handleCashlogyChargeStatus(_req, res) {
   if (!currentCharge) {
     return res.json({ active: false });
   }
-  const { amountCents, depositedCents, status, change, error } = currentCharge;
+  const { amountCents, depositedCents, status, change, error, depositId } = currentCharge;
   return res.json({
     active: true,
     amountCents,
@@ -44,6 +57,7 @@ function handleCashlogyChargeStatus(_req, res) {
     status, // "depositing" | "closing" | "dispensing" | "done" | "error" | "cancelled"
     change: change ?? null,
     error: error ?? null,
+    depositId: depositId ?? null,
   });
 }
 
@@ -61,10 +75,19 @@ async function handleCashlogyCharge(req, res) {
     return res.status(400).json({ success: false, error: "Import invàlid" });
   }
 
+  // Idempotency guard: reject if there's an active charge in progress
+  if (currentCharge && ["depositing", "closing", "dispensing"].includes(currentCharge.status)) {
+    console.warn("[Cashlogy] Rebutjant nova càrrega — ja hi ha una operació activa:", currentCharge.status);
+    return res.status(409).json({
+      success: false,
+      error: "Ja hi ha un cobrament en curs. Espera que acabi o cancel·la'l.",
+    });
+  }
+
   const amountCents = Math.round(amount * 100);
 
   // Initialize shared state
-  currentCharge = { amountCents, depositedCents: 0, status: "depositing", change: null, error: null };
+  currentCharge = { amountCents, depositedCents: 0, status: "depositing", change: null, error: null, depositId: null };
 
   try {
     // 1. Start deposit
@@ -77,6 +100,8 @@ async function handleCashlogyCharge(req, res) {
       currentCharge.error = "No s'ha rebut ID de dipòsit";
       return res.json({ success: false, error: currentCharge.error });
     }
+
+    currentCharge.depositId = depositRes.id;
 
     // 2. Poll until enough money or timeout
     const deadline = Date.now() + TIMEOUT_MS;
@@ -152,15 +177,30 @@ async function handleCashlogyCharge(req, res) {
           if (dispStatus.status !== "busy") break;
         }
       } catch (dispErr) {
+        // IMPORTANT: do NOT treat dispense failure as success.
+        // If the machine cannot return change (no coins/bills, hardware error),
+        // the employee must know so they can give change manually.
         console.error("[Cashlogy] Error dispensant canvi:", dispErr.message);
-        currentCharge.status = "done";
-        return res.json({ success: true, change: changeEur, deposited: depositedCents / 100, warning: "Error dispensant canvi" });
+        currentCharge.status = "error";
+        currentCharge.error = `No s'ha pogut dispensar el canvi (${changeEur.toFixed(2)}€): ${dispErr.message}`;
+        return res.json({
+          success: false,
+          error: currentCharge.error,
+          deposited: depositedCents / 100,
+          changeOwed: changeEur,
+          depositId: currentCharge.depositId,
+        });
       }
     }
 
     currentCharge.status = "done";
     console.log(`[Cashlogy] Cobrament OK — rebut: ${depositedCents} cèntims, canvi: ${changeEur.toFixed(2)}€`);
-    return res.json({ success: true, change: changeEur, deposited: depositedCents / 100 });
+    return res.json({
+      success: true,
+      change: changeEur,
+      deposited: depositedCents / 100,
+      depositId: currentCharge.depositId,
+    });
   } catch (err) {
     console.error("[Cashlogy] Error:", err.message);
     currentCharge.status = "error";

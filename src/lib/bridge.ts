@@ -3,7 +3,7 @@ const BRIDGE_URL =
 
 export async function chargeCashlogy(amount: number) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(() => controller.abort(), 180_000);
 
   try {
     const res = await fetch(`${BRIDGE_URL}/cashlogy/charge`, {
@@ -12,11 +12,21 @@ export async function chargeCashlogy(amount: number) {
       body: JSON.stringify({ amount }),
       signal: controller.signal,
     });
-    return (await res.json()) as {
+    // Parse even on HTTP errors — bridge returns JSON with error details
+    let data: {
       success: boolean;
       change?: number;
+      deposited?: number;
+      changeOwed?: number;
+      depositId?: string;
       error?: string;
     };
+    try {
+      data = await res.json();
+    } catch {
+      return { success: false, error: `HTTP ${res.status}: respuesta inválida de la Cashlogy` };
+    }
+    return data;
   } catch (error) {
     if ((error as Error).name === "AbortError") {
       return { success: false, error: "Timeout: la Cashlogy no respondió" };
@@ -60,14 +70,20 @@ export interface CashlogyChargeStatus {
   status?: string;
   change?: number | null;
   error?: string | null;
+  depositId?: string | null;
 }
 
 export async function getCashlogyChargeStatus(): Promise<CashlogyChargeStatus> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
   try {
-    const res = await fetch(`${BRIDGE_URL}/cashlogy/charge/status`);
+    const res = await fetch(`${BRIDGE_URL}/cashlogy/charge/status`, { signal: controller.signal });
+    if (!res.ok) return { active: false };
     return await res.json();
   } catch {
     return { active: false };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
