@@ -235,11 +235,19 @@ export default function AdminOrdersPage() {
                 className="bg-white rounded-xl border border-gray-200 overflow-hidden"
               >
                 {/* Order header — tap to expand */}
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() =>
                     setExpandedId(expandedId === order.id ? null : order.id)
                   }
-                  className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpandedId(expandedId === order.id ? null : order.id);
+                    }
+                  }}
+                  className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-4">
                     <span className="text-lg font-bold text-gray-800">
@@ -311,7 +319,7 @@ export default function AdminOrdersPage() {
                       {expandedId === order.id ? "▲" : "▼"}
                     </span>
                   </div>
-                </button>
+                </div>
 
                 {/* Expanded detail */}
                 {expandedId === order.id && (
