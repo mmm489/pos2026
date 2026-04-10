@@ -164,7 +164,21 @@ export default function KdsPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-4 grid-rows-2 gap-2 h-full">
+          <div
+            className="grid gap-2 h-full"
+            style={{
+              gridTemplateColumns: `repeat(${
+                orders.length <= 2 ? orders.length
+                : orders.length <= 4 ? 2
+                : orders.length <= 6 ? 3
+                : 4
+              }, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${
+                orders.length <= 2 ? 1
+                : 2
+              }, minmax(0, 1fr))`,
+            }}
+          >
             {orders.slice(0, 8).map((order) => (
               <OrderCard
                 key={order.id}
