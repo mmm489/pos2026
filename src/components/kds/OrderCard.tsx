@@ -53,29 +53,29 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col">
+    <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col min-h-0">
       {/* Timer header */}
       <div
-        className={`${timerColor} px-4 py-3 flex items-center justify-between`}
+        className={`${timerColor} px-2.5 py-1.5 flex items-center justify-between flex-shrink-0`}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-4xl font-black text-white">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-2xl font-black text-white truncate">
             {order.order_number}
           </span>
           {order.table_number && (
-            <span className="px-2.5 py-0.5 bg-white/30 rounded-lg text-2xl font-black text-white">
+            <span className="px-1.5 py-0 bg-white/30 rounded text-lg font-black text-white flex-shrink-0">
               T{order.table_number}
             </span>
           )}
         </div>
-        <span className="text-3xl font-mono font-black text-white">
+        <span className="text-xl font-mono font-black text-white flex-shrink-0">
           {formatTimer(elapsed)}
         </span>
       </div>
 
       {/* Progress bar */}
       {totalItems > 0 && readyCount > 0 && (
-        <div className="h-2 bg-gray-100">
+        <div className="h-1 bg-gray-100 flex-shrink-0">
           <div
             className="h-full bg-green-400 transition-all duration-300"
             style={{ width: `${(readyCount / totalItems) * 100}%` }}
@@ -84,49 +84,46 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
       )}
 
       {/* Items — tap to mark ready */}
-      <div className="flex-1 p-2">
-        <ul className="space-y-1.5">
+      <div className="flex-1 p-1.5 overflow-y-auto min-h-0">
+        <ul className="space-y-1">
           {order.items?.map((item) => {
             const isReady = readyItems.has(item.id);
             return (
               <li
                 key={item.id}
                 onClick={() => toggleItem(item.id)}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all active:scale-[0.98] select-none ${
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all active:scale-[0.98] select-none ${
                   isReady
                     ? "bg-green-100 border border-green-300"
-                    : "bg-gray-50 border border-transparent hover:bg-gray-100"
+                    : "bg-gray-50 border border-transparent"
                 }`}
               >
-                {/* Check icon — big enough to tap with floured fingers */}
+                {/* Qty badge / check */}
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
                     isReady
                       ? "bg-green-500 text-white"
-                      : "bg-gray-200 text-gray-600"
+                      : "bg-gray-200 text-gray-700"
                   }`}
                 >
                   {isReady ? (
-                    <span className="text-xl font-black">&#10003;</span>
+                    <span className="text-base font-black">&#10003;</span>
                   ) : (
-                    <span className="text-lg font-black">{item.qty}</span>
+                    <span className="text-base font-black">{item.qty}</span>
                   )}
                 </div>
 
                 {/* Product name */}
                 <div className="flex-1 min-w-0">
                   <span
-                    className={`text-xl font-bold transition-colors leading-tight block ${
+                    className={`text-base font-bold transition-colors leading-tight block truncate ${
                       isReady ? "text-green-700 line-through" : "text-gray-900"
                     }`}
                   >
-                    {item.qty > 1 && !isReady && (
-                      <span className="text-gray-500">{item.qty}x </span>
-                    )}
                     {item.product_name}
                   </span>
                   {item.notes && (
-                    <p className="text-lg font-semibold text-orange-600 leading-tight mt-0.5">
+                    <p className="text-sm font-semibold text-orange-600 leading-tight truncate">
                       ⚠ {item.notes}
                     </p>
                   )}
@@ -138,10 +135,10 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
       </div>
 
       {/* Status + action */}
-      <div className="p-3 border-t border-gray-100">
-        <div className="flex items-center justify-between mb-2">
+      <div className="px-2 py-2 border-t border-gray-100 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1.5">
           <span
-            className={`px-3 py-1 rounded-full text-base font-bold ${
+            className={`px-2 py-0.5 rounded-full text-xs font-bold ${
               order.status === "pending"
                 ? "bg-yellow-100 text-yellow-700"
                 : "bg-blue-100 text-blue-700"
@@ -150,7 +147,7 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
             {order.status === "pending" ? "Pendent" : "Preparant"}
           </span>
           {totalItems > 0 && (
-            <span className="text-lg font-bold text-gray-500">
+            <span className="text-sm font-bold text-gray-500">
               {readyCount}/{totalItems}
             </span>
           )}
@@ -159,7 +156,7 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
         {order.status === "pending" && (
           <button
             onClick={() => onStatusChange(order.id, "preparing")}
-            className="w-full py-4 rounded-xl bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-2xl font-black transition-colors"
+            className="w-full py-2 rounded-lg bg-blue-500 hover:bg-blue-600 active:bg-blue-700 text-white text-lg font-black transition-colors"
           >
             PREPARANT
           </button>
@@ -167,7 +164,7 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
         {order.status === "preparing" && (
           <button
             onClick={() => onStatusChange(order.id, "ready")}
-            className={`w-full py-4 rounded-xl text-white text-2xl font-black transition-colors ${
+            className={`w-full py-2 rounded-lg text-white text-lg font-black transition-colors ${
               allReady
                 ? "bg-green-500 hover:bg-green-600 active:bg-green-700 animate-pulse"
                 : "bg-green-500 hover:bg-green-600 active:bg-green-700"

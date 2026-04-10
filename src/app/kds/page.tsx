@@ -128,27 +128,25 @@ export default function KdsPage() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 bg-gray-800 border-b border-gray-700">
-        <h1 className="text-2xl font-bold text-white">
+      <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
+        <h1 className="text-lg font-bold text-white">
           Hi Cream — Cocina
         </h1>
-        <div className="flex items-center gap-6">
-          <span className="text-lg font-semibold text-yellow-400">
-            {orders.length} pedido{orders.length !== 1 ? "s" : ""} activo
-            {orders.length !== 1 ? "s" : ""}
+        <div className="flex items-center gap-4">
+          <span className="text-base font-semibold text-yellow-400">
+            {orders.length} actiu{orders.length !== 1 ? "s" : ""}
           </span>
-          <span className="text-xl font-mono text-gray-300">
+          <span className="text-base font-mono text-gray-300">
             {clock.toLocaleTimeString("es-ES", {
               hour: "2-digit",
               minute: "2-digit",
-              second: "2-digit",
             })}
           </span>
         </div>
       </header>
 
       {/* Orders grid */}
-      <main className="flex-1 p-6">
+      <main className="flex-1 p-3 min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-xl text-gray-500">Cargando pedidos...</p>
@@ -166,11 +164,8 @@ export default function KdsPage() {
             </div>
           </div>
         ) : (
-          <div
-            className="grid gap-3"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))" }}
-          >
-            {orders.map((order) => (
+          <div className="grid grid-cols-4 grid-rows-2 gap-2 h-full">
+            {orders.slice(0, 8).map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
