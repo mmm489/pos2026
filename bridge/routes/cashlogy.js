@@ -2,7 +2,10 @@ const CASHLOGY_BASE = process.env.CASHLOGY_URL || "http://127.0.0.1:3000";
 const CASHLOGY_API = `${CASHLOGY_BASE}/connectorPlus`;
 const CASHLOGY_API_KEY = process.env.CASHLOGY_API_KEY || "";
 const POLL_INTERVAL = 500;
-const TIMEOUT_MS = 120_000;
+// Separate timeouts so that a slow deposit doesn't eat into dispense time
+const DEPOSIT_TIMEOUT_MS = Number(process.env.CASHLOGY_DEPOSIT_TIMEOUT_MS) || 180_000; // 3 min
+const DEPOSIT_END_TIMEOUT_MS = Number(process.env.CASHLOGY_DEPOSIT_END_TIMEOUT_MS) || 15_000;
+const DISPENSE_TIMEOUT_MS = Number(process.env.CASHLOGY_DISPENSE_TIMEOUT_MS) || 30_000;
 
 // Shared state so the frontend can poll progress
 let currentCharge = null; // { amountCents, depositedCents, status, change, error }
@@ -104,7 +107,7 @@ async function handleCashlogyCharge(req, res) {
     currentCharge.depositId = depositRes.id;
 
     // 2. Poll until enough money or timeout
-    const deadline = Date.now() + TIMEOUT_MS;
+    const deadline = Date.now() + DEPOSIT_TIMEOUT_MS;
     let depositedCents = 0;
 
     while (Date.now() < deadline) {
@@ -143,7 +146,7 @@ async function handleCashlogyCharge(req, res) {
           console.error("[Cashlogy] Error tancant dipòsit:", e.message);
         }
         // Wait for FINISHED
-        const endDeadline = Date.now() + 15_000;
+        const endDeadline = Date.now() + DEPOSIT_END_TIMEOUT_MS;
         while (Date.now() < endDeadline) {
           await sleep(POLL_INTERVAL);
           const endStatus = await cashlogyRequest("/deposit/status");
@@ -170,7 +173,7 @@ async function handleCashlogyCharge(req, res) {
       console.log(`[Cashlogy] Dispensant canvi: ${changeCents} cèntims (${changeEur.toFixed(2)}€)`);
       try {
         await cashlogyRequest("/dispense", "POST", { amount: changeCents });
-        const dispDeadline = Date.now() + 30_000;
+        const dispDeadline = Date.now() + DISPENSE_TIMEOUT_MS;
         while (Date.now() < dispDeadline) {
           await sleep(POLL_INTERVAL);
           const dispStatus = await cashlogyRequest("/status");

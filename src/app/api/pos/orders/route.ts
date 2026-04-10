@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by
         FROM pos.orders
         ORDER BY created_at DESC
-        LIMIT 100
+        LIMIT 500
       `;
     }
 
@@ -71,18 +71,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Calculate totals (prices are PVP with 10% VAT included)
-    const total = items.reduce(
-      (sum: number, i: { price: number; qty: number }) => sum + i.price * i.qty,
-      0
-    );
-    const totalBase = Math.round((total / 1.10) * 100) / 100;
-    const totalVat = Math.round((total - totalBase) * 100) / 100;
-
     const empId = employee_id || null;
     const tblNum = table_number || null;
 
     const completeOrder = await withTransaction(async (client) => {
+      // Fetch actual VAT rate per product from DB (don't trust client)
+      const productIds = Array.from(new Set((items as { product_id: number }[]).map((i) => i.product_id)));
+      const prodRes = await client.query(
+        `SELECT id, vat_rate FROM pos.products WHERE id = ANY($1::int[])`,
+        [productIds]
+      );
+      const vatByProduct = new Map<number, number>();
+      for (const row of prodRes.rows) {
+        vatByProduct.set(row.id as number, Number(row.vat_rate));
+      }
+
+      // Calculate totals per item using actual VAT rate
+      let total = 0;
+      let totalBase = 0;
+      let totalVat = 0;
+      const itemsWithVat: { product_id: number; qty: number; price: number; vat_rate: number; notes: string | null }[] = [];
+      for (const item of items as { product_id: number; qty: number; price: number; notes?: string | null }[]) {
+        const vatRate = vatByProduct.get(item.product_id) ?? 10;
+        const lineTotal = Math.round(item.price * item.qty * 100) / 100;
+        const lineBase = Math.round((lineTotal / (1 + vatRate / 100)) * 100) / 100;
+        const lineVat = Math.round((lineTotal - lineBase) * 100) / 100;
+        total += lineTotal;
+        totalBase += lineBase;
+        totalVat += lineVat;
+        itemsWithVat.push({
+          product_id: item.product_id,
+          qty: item.qty,
+          price: item.price,
+          vat_rate: vatRate,
+          notes: item.notes || null,
+        });
+      }
+      total = Math.round(total * 100) / 100;
+      totalBase = Math.round(totalBase * 100) / 100;
+      totalVat = Math.round(totalVat * 100) / 100;
+
       // Generate daily order number
       const countRes = await client.query(
         `SELECT COUNT(*)::int AS count FROM pos.orders WHERE created_at::date = CURRENT_DATE`
@@ -108,12 +136,12 @@ export async function POST(request: NextRequest) {
       );
       const order = orderRes.rows[0];
 
-      // Insert order items
-      for (const item of items) {
+      // Insert order items with their actual VAT rate
+      for (const item of itemsWithVat) {
         await client.query(
           `INSERT INTO pos.order_items (order_id, product_id, qty, unit_price, vat_rate, notes)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [order.id, item.product_id, item.qty, item.price, 10, item.notes || null]
+          [order.id, item.product_id, item.qty, item.price, item.vat_rate, item.notes]
         );
       }
 

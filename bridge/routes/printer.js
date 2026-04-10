@@ -1,7 +1,32 @@
+const fs = require("fs");
+const path = require("path");
 const {
   printer: ThermalPrinter,
   types: PrinterTypes,
 } = require("node-thermal-printer");
+
+// Print error log — operators can diagnose missed tickets
+const PRINT_LOG_DIR = path.join(__dirname, "..", "logs");
+const PRINT_LOG_FILE = path.join(PRINT_LOG_DIR, "print-errors.log");
+
+function logPrintError(printerType, payload, err) {
+  try {
+    if (!fs.existsSync(PRINT_LOG_DIR)) fs.mkdirSync(PRINT_LOG_DIR, { recursive: true });
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      printer: printerType,
+      error: err.message || String(err),
+      orderNumber: payload.orderNumber,
+      invoiceNumber: payload.invoiceNumber,
+      tableNumber: payload.tableNumber,
+      total: payload.total,
+      itemCount: Array.isArray(payload.items) ? payload.items.length : 0,
+    }) + "\n";
+    fs.appendFileSync(PRINT_LOG_FILE, line);
+  } catch (logErr) {
+    console.error("[Printer] Failed to write error log:", logErr.message);
+  }
+}
 
 // Receipt printer — Mostrador (EPSON TM-m30 via USB or TCP)
 function createReceiptPrinter() {
@@ -165,6 +190,7 @@ async function handlePrintTicket(req, res) {
     return res.json({ success: true });
   } catch (err) {
     console.error("[Printer] Error:", err.message);
+    logPrintError("receipt", req.body, err);
     return res.json({ success: false, error: err.message });
   }
 }
@@ -234,6 +260,7 @@ async function handlePrintKitchenTicket(req, res) {
     return res.json({ success: true });
   } catch (err) {
     console.error("[Kitchen] Error:", err.message);
+    logPrintError("kitchen", req.body, err);
     return res.json({ success: false, error: err.message });
   }
 }

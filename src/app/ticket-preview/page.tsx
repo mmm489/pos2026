@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const DEFAULT_BUSINESS = {
+  name: "APOLO HOLDINGS 2020, S.L.U.",
+  trade_name: "Hi Cream",
+  nif: "B00000000",
+  address: "Calle Ejemplo 1",
+  city: "Salou",
+  postal_code: "43840",
+  province: "Tarragona",
+  phone: "977 000 000",
+};
 
 const SAMPLE_TICKET = {
-  business: {
-    name: "APOLO HOLDINGS 2020, S.L.U.",
-    trade_name: "Hi Cream",
-    nif: "B00000000",
-    address: "Calle Ejemplo 1",
-    city: "Salou",
-    postal_code: "43840",
-    province: "Tarragona",
-    phone: "977 000 000",
-  },
   invoiceNumber: "S-2026/000001",
   orderNumber: "#001",
   date: new Date().toLocaleString("es-ES"),
@@ -34,7 +35,15 @@ function calcTotals(items: { price: number; qty: number }[], vatRate: number) {
 
 export default function TicketPreviewPage() {
   const [ticket] = useState(SAMPLE_TICKET);
+  const [business, setBusiness] = useState(DEFAULT_BUSINESS);
   const { total, base, vat } = calcTotals(ticket.items, ticket.vatRate);
+
+  useEffect(() => {
+    fetch("/api/pos/business")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setBusiness({ ...DEFAULT_BUSINESS, ...data }); })
+      .catch(() => {});
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-200 flex items-center justify-center py-8">
@@ -52,14 +61,14 @@ export default function TicketPreviewPage() {
         >
           {/* Header */}
           <div className="text-center">
-            <p className="text-xl font-black">{ticket.business.trade_name}</p>
-            <p className="text-xs">{ticket.business.name}</p>
-            <p className="text-xs">NIF: {ticket.business.nif}</p>
-            <p className="text-xs">{ticket.business.address}</p>
+            <p className="text-xl font-black">{business.trade_name}</p>
+            <p className="text-xs">{business.name}</p>
+            <p className="text-xs">NIF: {business.nif}</p>
+            <p className="text-xs">{business.address}</p>
             <p className="text-xs">
-              {ticket.business.postal_code} {ticket.business.city} ({ticket.business.province})
+              {business.postal_code} {business.city} ({business.province})
             </p>
-            <p className="text-xs">Tel: {ticket.business.phone}</p>
+            <p className="text-xs">Tel: {business.phone}</p>
           </div>
 
           <Separator />

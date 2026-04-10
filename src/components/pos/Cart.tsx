@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { CartItem } from "@/types/pos";
 
 interface CartProps {
   items: CartItem[];
   onUpdateQty: (productId: number, delta: number) => void;
   onRemove: (productId: number) => void;
+  onSetNote: (productId: number, note: string | null) => void;
   onCheckout: () => void;
 }
 
@@ -13,9 +15,12 @@ export default function Cart({
   items,
   onUpdateQty,
   onRemove,
+  onSetNote,
   onCheckout,
 }: CartProps) {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const [editingNoteFor, setEditingNoteFor] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
   return (
     <div className="flex flex-col h-full bg-white border-l border-gray-200">
@@ -51,6 +56,11 @@ export default function Cart({
                   <p className="text-sm text-gray-500">
                     {Number(item.price).toFixed(2)} &euro; c/u
                   </p>
+                  {item.notes && (
+                    <p className="text-xs text-orange-500 italic mt-0.5 truncate">
+                      📝 {item.notes}
+                    </p>
+                  )}
                 </div>
 
                 {/* Quantity controls */}
@@ -72,17 +82,28 @@ export default function Cart({
                   </button>
                 </div>
 
-                {/* Subtotal + delete */}
+                {/* Subtotal + note + delete */}
                 <div className="flex flex-col items-end gap-1">
                   <span className="font-bold text-gray-800">
                     {(item.price * item.qty).toFixed(2)} &euro;
                   </span>
-                  <button
-                    onClick={() => onRemove(item.product_id)}
-                    className="text-xs text-red-400 hover:text-red-600 transition-colors"
-                  >
-                    Eliminar
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingNoteFor(item.product_id);
+                        setNoteDraft(item.notes || "");
+                      }}
+                      className="text-xs text-orange-500 hover:text-orange-700 transition-colors"
+                    >
+                      Nota
+                    </button>
+                    <button
+                      onClick={() => onRemove(item.product_id)}
+                      className="text-xs text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -106,6 +127,40 @@ export default function Cart({
           COBRAR
         </button>
       </div>
+
+      {/* Note editor modal */}
+      {editingNoteFor !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl">
+            <h3 className="text-lg font-bold text-gray-800 mb-3">Nota per a cuina</h3>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Ex. sense sucre, sense lactosa, extra xocolata..."
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm h-24 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400"
+              autoFocus
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => { setEditingNoteFor(null); setNoteDraft(""); }}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm"
+              >
+                Cancel·lar
+              </button>
+              <button
+                onClick={() => {
+                  onSetNote(editingNoteFor, noteDraft.trim() || null);
+                  setEditingNoteFor(null);
+                  setNoteDraft("");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm"
+              >
+                Desar nota
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

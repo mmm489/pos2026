@@ -14,7 +14,10 @@ type CartAction =
   | { type: "ADD"; product: Product }
   | { type: "UPDATE_QTY"; productId: number; delta: number }
   | { type: "REMOVE"; productId: number }
+  | { type: "SET_NOTE"; productId: number; note: string | null }
   | { type: "CLEAR" };
+
+const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
 
 const POS_CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
@@ -58,6 +61,10 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
     }
     case "REMOVE":
       return state.filter((i) => i.product_id !== action.productId);
+    case "SET_NOTE":
+      return state.map((i) =>
+        i.product_id === action.productId ? { ...i, notes: action.note } : i
+      );
     case "CLEAR":
       return [];
   }
@@ -120,7 +127,7 @@ export default function PosPage() {
 
   // Restore session
   useEffect(() => {
-    const saved = sessionStorage.getItem("pos_employee");
+    const saved = localStorage.getItem("pos_employee");
     if (saved) {
       setEmployee(JSON.parse(saved));
     }
@@ -152,14 +159,35 @@ export default function PosPage() {
       });
   }, [employee]);
 
+  // Inactivity auto-logout
+  useEffect(() => {
+    if (!employee) return;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setEmployee(null);
+        localStorage.removeItem("pos_employee");
+        dispatch({ type: "CLEAR" });
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+    const events = ["mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((e) => window.addEventListener(e, reset));
+    reset();
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [employee]);
+
   const handleLogin = (emp: Employee) => {
     setEmployee(emp);
-    sessionStorage.setItem("pos_employee", JSON.stringify(emp));
+    localStorage.setItem("pos_employee", JSON.stringify(emp));
   };
 
   const handleLogout = () => {
     setEmployee(null);
-    sessionStorage.removeItem("pos_employee");
+    localStorage.removeItem("pos_employee");
     dispatch({ type: "CLEAR" });
     setLoading(true);
   };
@@ -265,6 +293,9 @@ export default function PosPage() {
             }
             onRemove={(productId) =>
               dispatch({ type: "REMOVE", productId })
+            }
+            onSetNote={(productId, note) =>
+              dispatch({ type: "SET_NOTE", productId, note })
             }
             onCheckout={() => setShowCheckout(true)}
           />

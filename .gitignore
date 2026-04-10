@@ -38,3 +38,4 @@ next-env.d.ts
 # bridge
 bridge/node_modules/
 bridge/.env
+bridge/logs/

@@ -1,17 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const sql = getDb();
-    const products = await sql`
-      SELECT p.id, p.name, p.category_id, p.price, p.image_url, p.active, p.sort_order,
-             c.name AS category_name, c.color AS category_color
-      FROM pos.products p
-      JOIN pos.categories c ON c.id = p.category_id
-      WHERE p.active = true
-      ORDER BY c.sort_order ASC, p.sort_order ASC
-    `;
+    const { searchParams } = new URL(request.url);
+    const includeInactive = searchParams.get("all") === "true";
+
+    const products = includeInactive
+      ? await sql`
+          SELECT p.id, p.name, p.category_id, p.price, p.vat_rate, p.image_url, p.active, p.sort_order,
+                 c.name AS category_name, c.color AS category_color
+          FROM pos.products p
+          JOIN pos.categories c ON c.id = p.category_id
+          ORDER BY p.active DESC, c.sort_order ASC, p.sort_order ASC
+        `
+      : await sql`
+          SELECT p.id, p.name, p.category_id, p.price, p.vat_rate, p.image_url, p.active, p.sort_order,
+                 c.name AS category_name, c.color AS category_color
+          FROM pos.products p
+          JOIN pos.categories c ON c.id = p.category_id
+          WHERE p.active = true
+          ORDER BY c.sort_order ASC, p.sort_order ASC
+        `;
+
     return NextResponse.json(products);
   } catch (error) {
     console.error("Error fetching products:", error);
