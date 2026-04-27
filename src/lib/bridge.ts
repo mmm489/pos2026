@@ -236,6 +236,55 @@ export async function printKitchenTicket(data: {
   }
 }
 
+/**
+ * Print a Z closing report. Format is different from a regular ticket
+ * (no items, has VAT breakdown table, invoice range, signature line).
+ */
+export async function printZReport(closing: {
+  z_label?: string | null;
+  closed_at: string;
+  total_cash: number;
+  total_card: number;
+  total_sales: number;
+  total_base: number;
+  total_vat: number;
+  vat_breakdown?: Record<string, { base: number; vat: number; total: number }>;
+  ticket_count: number;
+  cash_count?: number;
+  card_count?: number;
+  cancelled_count?: number;
+  total_refunded?: number;
+  first_invoice?: string | null;
+  last_invoice?: string | null;
+  notes?: string | null;
+  business_snapshot?: {
+    name: string;
+    trade_name?: string;
+    nif: string;
+    address: string;
+    city: string;
+    postal_code: string;
+    province: string;
+    phone?: string;
+  } | null;
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/printer/z-report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(closing),
+      signal: controller.signal,
+    });
+    return (await res.json()) as { success: boolean; error?: string };
+  } catch {
+    return { success: false, error: "Error de conexión con la impresora" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function printTicket(data: {
   orderNumber: string;
   invoiceNumber?: string;

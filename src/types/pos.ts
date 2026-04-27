@@ -81,6 +81,52 @@ export interface KdsEvent {
   timestamp: string;
 }
 
+export interface VatBreakdownEntry {
+  base: number;
+  vat: number;
+  total: number;
+}
+
+export type VatBreakdown = Record<string, VatBreakdownEntry>;
+
+export interface BusinessSnapshot {
+  name: string;
+  trade_name: string;
+  nif: string;
+  address: string;
+  city: string;
+  postal_code: string;
+  province: string;
+  phone?: string;
+  invoice_series: string;
+}
+
+export interface CashClosing {
+  id: number;
+  z_number: number | null;
+  z_label: string | null;
+  employee_id: number | null;
+  employee_name?: string | null;
+  opened_at: string;
+  closed_at: string;
+  total_cash: number;
+  total_card: number;
+  total_sales: number;
+  total_base: number;
+  total_vat: number;
+  vat_breakdown: VatBreakdown;
+  ticket_count: number;
+  card_count: number;
+  cash_count: number;
+  cancelled_count: number;
+  total_refunded: number;
+  first_invoice: string | null;
+  last_invoice: string | null;
+  notes: string | null;
+  business_snapshot: BusinessSnapshot | null;
+  synced: boolean;
+}
+
 export interface CartItem {
   product_id: number;
   name: string;

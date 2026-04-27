@@ -265,4 +265,127 @@ async function handlePrintKitchenTicket(req, res) {
   }
 }
 
-module.exports = { handlePrintTicket, handlePrintKitchenTicket };
+async function handlePrintZReport(req, res) {
+  const c = req.body || {};
+  if (!c.z_label || c.total_sales === undefined) {
+    return res.status(400).json({ success: false, error: "Falta z_label o total_sales" });
+  }
+
+  const biz = c.business_snapshot || {};
+
+  try {
+    const printer = createReceiptPrinter();
+    const isConnected = await printer.isPrinterConnected();
+
+    // ========== HEADER ==========
+    printer.alignCenter();
+    printer.setTextSize(1, 1);
+    printer.bold(true);
+    printer.println(biz.trade_name || "HI CREAM");
+    printer.bold(false);
+    printer.setTextNormal();
+    printer.println(biz.name || "APOLO HOLDINGS 2020, S.L.U.");
+    printer.println(`NIF: ${biz.nif || ""}`);
+    if (biz.address) printer.println(biz.address);
+    if (biz.postal_code || biz.city) {
+      printer.println(`${biz.postal_code || ""} ${biz.city || ""} ${biz.province ? `(${biz.province})` : ""}`.trim());
+    }
+    printer.drawLine();
+
+    // ========== TANCAMENT Z ==========
+    printer.alignCenter();
+    printer.bold(true);
+    printer.setTextSize(1, 1);
+    printer.println("TANCAMENT Z");
+    printer.println(c.z_label);
+    printer.bold(false);
+    printer.setTextNormal();
+    printer.println(new Date(c.closed_at).toLocaleString("es-ES"));
+    printer.drawLine();
+
+    // ========== INVOICE RANGE ==========
+    if (c.first_invoice || c.last_invoice) {
+      printer.alignLeft();
+      printer.println("Factures emeses:");
+      printer.println(`  Des de: ${c.first_invoice || "-"}`);
+      printer.println(`  Fins a: ${c.last_invoice || "-"}`);
+      printer.drawLine();
+    }
+
+    // ========== TOTALS PER MÈTODE ==========
+    printer.alignLeft();
+    printer.bold(true);
+    printer.println("VENDES PER METODE");
+    printer.bold(false);
+    printer.println(rightAlign(`Efectiu (${c.cash_count || 0}):`, `${Number(c.total_cash || 0).toFixed(2)} EUR`));
+    printer.println(rightAlign(`Targeta (${c.card_count || 0}):`, `${Number(c.total_card || 0).toFixed(2)} EUR`));
+    printer.drawLine();
+
+    // ========== IVA BREAKDOWN ==========
+    if (c.vat_breakdown && Object.keys(c.vat_breakdown).length > 0) {
+      printer.bold(true);
+      printer.println("DESGLOSSAMENT IVA");
+      printer.bold(false);
+      for (const [rate, e] of Object.entries(c.vat_breakdown)) {
+        printer.println(`IVA ${rate}%`);
+        printer.println(rightAlign("  Base:", `${Number(e.base).toFixed(2)} EUR`));
+        printer.println(rightAlign("  Quota:", `${Number(e.vat).toFixed(2)} EUR`));
+        printer.println(rightAlign("  Subtotal:", `${Number(e.total).toFixed(2)} EUR`));
+      }
+      printer.drawLine();
+    }
+
+    // ========== TOTALS ==========
+    printer.println(rightAlign("Base imposable:", `${Number(c.total_base || 0).toFixed(2)} EUR`));
+    printer.println(rightAlign("Total IVA:", `${Number(c.total_vat || 0).toFixed(2)} EUR`));
+    printer.alignRight();
+    printer.bold(true);
+    printer.setTextSize(1, 1);
+    printer.println(`TOTAL: ${Number(c.total_sales).toFixed(2)} EUR`);
+    printer.bold(false);
+    printer.setTextNormal();
+    printer.drawLine();
+
+    // ========== ANUL·LACIONS ==========
+    if (c.cancelled_count > 0) {
+      printer.alignLeft();
+      printer.println(rightAlign("Anul.lacions:", String(c.cancelled_count)));
+      printer.println(rightAlign("Import retornat:", `${Number(c.total_refunded || 0).toFixed(2)} EUR`));
+      printer.drawLine();
+    }
+
+    // ========== TICKETS ==========
+    printer.alignLeft();
+    printer.println(rightAlign("Tickets totals:", String(c.ticket_count)));
+    if (c.notes) {
+      printer.drawLine();
+      printer.println("Notes:");
+      printer.println(c.notes);
+    }
+
+    // ========== FOOTER ==========
+    printer.newLine();
+    printer.alignCenter();
+    printer.bold(true);
+    printer.println("--- TANCAMENT Z ---");
+    printer.bold(false);
+    printer.println("Document immutable a efectes fiscals");
+    printer.newLine();
+    printer.cut();
+
+    if (isConnected) {
+      await printer.execute();
+      console.log(`[Printer] Z imprès: ${c.z_label}`);
+    } else {
+      console.log(`[Printer] Z generat (sense impressora): ${c.z_label}`);
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[Printer Z] Error:", err.message);
+    logPrintError("z-report", { orderNumber: c.z_label, total: c.total_sales, items: [] }, err);
+    return res.json({ success: false, error: err.message });
+  }
+}
+
+module.exports = { handlePrintTicket, handlePrintKitchenTicket, handlePrintZReport };

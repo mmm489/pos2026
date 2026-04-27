@@ -256,6 +256,12 @@ export default function PosPage() {
               >
                 Empleats
               </a>
+              <a
+                href="/admin/closings"
+                className="px-3 py-1.5 rounded-lg bg-pink-50 text-pink-600 text-sm font-semibold hover:bg-pink-100 transition-colors"
+              >
+                Tancaments
+              </a>
               <button
                 onClick={() => setShowCashClosing(true)}
                 className="px-3 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-sm font-semibold hover:bg-orange-200 transition-colors"

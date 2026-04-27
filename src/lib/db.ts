@@ -11,6 +11,19 @@ function getPool() {
   return pool;
 }
 
+/**
+ * Parameterized query against the shared pool. Use this when the tagged-template
+ * `getDb()` API is awkward (e.g. dynamic SQL fragments shared between transactional
+ * and non-transactional callers).
+ */
+export async function rawQuery<T = Record<string, unknown>>(
+  text: string,
+  values: unknown[] = []
+): Promise<T[]> {
+  const result = await getPool().query(text, values);
+  return result.rows as T[];
+}
+
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>
 ): Promise<T> {
