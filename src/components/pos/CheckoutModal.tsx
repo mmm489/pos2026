@@ -49,6 +49,9 @@ export default function CheckoutModal({
   const [depositedEur, setDepositedEur] = useState(0);
   const [cashStatus, setCashStatus] = useState<string>("");
   const [business, setBusiness] = useState<Business | null>(null);
+  // Card receipt text held until we ask the customer if they want a copy.
+  const [pendingCustomerReceipt, setPendingCustomerReceipt] = useState<string | null>(null);
+  const [printingCustomerCopy, setPrintingCustomerCopy] = useState(false);
   const demoIdRef = useRef(Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -257,16 +260,17 @@ export default function CheckoutModal({
         items: items.map((i) => ({ name: i.name, qty: i.qty, notes: i.notes })),
       }).catch(() => {});
 
-      // Card payments: print the bank receipt (merchant + customer copies).
-      // Verifone P400 ENGAGE has no built-in printer, so REDSYS returns the
-      // formatted receipt as text via paymentResult.receipt.
+      // Card payments: always print the merchant copy (we need it for our records),
+      // and stash the receipt text so the success screen can ask the customer
+      // if they want a copy too. Verifone P400 ENGAGE has no built-in printer,
+      // so REDSYS returns the formatted receipt as text via paymentResult.receipt.
       const cardReceipt =
         paymentMethod === "card" && "receipt" in paymentResult
           ? (paymentResult as { receipt?: string }).receipt
           : null;
       if (cardReceipt) {
         printCardReceipt(cardReceipt, "merchant", order.order_number).catch(() => {});
-        printCardReceipt(cardReceipt, "customer", order.order_number).catch(() => {});
+        setPendingCustomerReceipt(cardReceipt);
       }
 
       setStep("success");
@@ -506,12 +510,50 @@ export default function CheckoutModal({
                 Canvi: {change.toFixed(2)} &euro;
               </p>
             )}
-            <button
-              onClick={onComplete}
-              className="mt-6 px-8 py-4 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-lg font-bold transition-colors"
-            >
-              Nova comanda
-            </button>
+
+            {pendingCustomerReceipt ? (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+                <p className="text-base font-semibold text-blue-900 mb-3">
+                  Vol còpia del rebut bancari?
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setPendingCustomerReceipt(null);
+                      onComplete();
+                    }}
+                    disabled={printingCustomerCopy}
+                    className="flex-1 px-6 py-3 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold transition-colors disabled:opacity-50"
+                  >
+                    No, gràcies
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setPrintingCustomerCopy(true);
+                      await printCardReceipt(
+                        pendingCustomerReceipt,
+                        "customer",
+                        orderNumber
+                      ).catch(() => {});
+                      setPendingCustomerReceipt(null);
+                      setPrintingCustomerCopy(false);
+                      onComplete();
+                    }}
+                    disabled={printingCustomerCopy}
+                    className="flex-1 px-6 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {printingCustomerCopy ? "Imprimint..." : "Sí, imprimir"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={onComplete}
+                className="mt-6 px-8 py-4 rounded-2xl bg-green-500 hover:bg-green-600 text-white text-lg font-bold transition-colors"
+              >
+                Nova comanda
+              </button>
+            )}
           </div>
         )}
 
