@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Order } from "@/types/pos";
-import { queryIngenicoTransaction, IngenicoResult } from "@/lib/bridge";
+import { queryIngenicoTransaction, printCardReceipt, IngenicoResult } from "@/lib/bridge";
 
 const CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
@@ -29,6 +29,7 @@ export default function AdminOrdersPage() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [queryingId, setQueryingId] = useState<number | null>(null);
   const [queryResults, setQueryResults] = useState<Map<number, IngenicoResult>>(new Map());
+  const [reprintingReceipt, setReprintingReceipt] = useState<{ id: number; copy: "merchant" | "customer" } | null>(null);
 
   useEffect(() => {
     loadOrders();
@@ -83,6 +84,13 @@ export default function AdminOrdersPage() {
       setCancelError("Error de connexió al anul·lar la comanda");
     }
     setCancelLoading(false);
+  };
+
+  const handleReprintReceipt = async (order: Order, copy: "merchant" | "customer") => {
+    if (!order.card_receipt_text) return;
+    setReprintingReceipt({ id: order.id, copy });
+    await printCardReceipt(order.card_receipt_text, copy, order.order_number).catch(() => {});
+    setReprintingReceipt(null);
   };
 
   const handleQuery = async (order: Order) => {
@@ -391,16 +399,52 @@ export default function AdminOrdersPage() {
                             Targeta — ref {order.card_reference}
                             {order.card_authorization && ` · auth ${order.card_authorization}`}
                           </p>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleQuery(order);
-                            }}
-                            disabled={queryingId === order.id}
-                            className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50 transition-colors"
-                          >
-                            {queryingId === order.id ? "Consultant..." : "Consultar al datàfon"}
-                          </button>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {order.card_receipt_text && (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReprintReceipt(order, "merchant");
+                                  }}
+                                  disabled={
+                                    reprintingReceipt?.id === order.id &&
+                                    reprintingReceipt?.copy === "merchant"
+                                  }
+                                  className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                                >
+                                  {reprintingReceipt?.id === order.id && reprintingReceipt?.copy === "merchant"
+                                    ? "Imprimint..."
+                                    : "Re-imprimir comerç"}
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReprintReceipt(order, "customer");
+                                  }}
+                                  disabled={
+                                    reprintingReceipt?.id === order.id &&
+                                    reprintingReceipt?.copy === "customer"
+                                  }
+                                  className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                                >
+                                  {reprintingReceipt?.id === order.id && reprintingReceipt?.copy === "customer"
+                                    ? "Imprimint..."
+                                    : "Re-imprimir client"}
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuery(order);
+                              }}
+                              disabled={queryingId === order.id}
+                              className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                            >
+                              {queryingId === order.id ? "Consultant..." : "Consultar al datàfon"}
+                            </button>
+                          </div>
                         </div>
                         {queryResults.has(order.id) && (() => {
                           const q = queryResults.get(order.id)!;

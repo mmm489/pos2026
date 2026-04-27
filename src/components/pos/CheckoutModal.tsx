@@ -211,6 +211,11 @@ export default function CheckoutModal({
         paymentMethod === "card" && "authorizationCode" in paymentResult
           ? (paymentResult as { authorizationCode?: string }).authorizationCode || null
           : null;
+      // Persist the raw receipt text so the bank receipt can be re-printed later.
+      const cardReceiptText =
+        paymentMethod === "card" && "receipt" in paymentResult
+          ? (paymentResult as { receipt?: string }).receipt || null
+          : null;
 
       // Create order via API
       let order: Order | null = null;
@@ -225,6 +230,7 @@ export default function CheckoutModal({
             table_number: tableNumber || null,
             card_reference: cardReference,
             card_authorization: cardAuthorization,
+            card_receipt_text: cardReceiptText,
           }),
         });
         if (orderRes.ok) {

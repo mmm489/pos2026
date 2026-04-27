@@ -37,6 +37,7 @@ export interface Order {
   // Card payment audit trail — populated when payment_method = "card"
   card_reference?: string | null; // REDSYS factura, used as originalReference for refund/cancel
   card_authorization?: string | null; // Authorization code from datafono
+  card_receipt_text?: string | null; // Raw DatosRecibo text — used to re-print the bank receipt
   refund_reference?: string | null; // REDSYS factura returned by refund/cancel op
   refund_at?: string | null;
   items?: OrderItem[];
