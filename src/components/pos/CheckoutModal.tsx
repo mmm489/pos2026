@@ -14,6 +14,7 @@ import {
 } from "@/lib/bridge";
 import { broadcastNewOrder } from "@/lib/demo-channel";
 import { Business } from "@/types/pos";
+import { useDatafonoHealth } from "@/hooks/useDatafonoHealth";
 
 function getNextDemoOrderNumber(): string {
   const key = "pos_demo_order_count";
@@ -54,6 +55,9 @@ export default function CheckoutModal({
   const [pendingCustomerReceipt, setPendingCustomerReceipt] = useState<string | null>(null);
   const [printingCustomerCopy, setPrintingCustomerCopy] = useState(false);
   const [aborting, setAborting] = useState(false);
+  // Poll datafono health every 15s while the modal is open so the cashier
+  // sees a fresh status indicator without spamming the bridge.
+  const datafono = useDatafonoHealth(15_000);
   const demoIdRef = useRef(Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -377,12 +381,34 @@ export default function CheckoutModal({
 
               <button
                 onClick={() => processPayment("card")}
-                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-blue-50 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 active:bg-blue-200 transition-all"
+                disabled={!datafono.online && datafono.lastCheck !== null}
+                title={
+                  !datafono.online && datafono.lastCheck !== null
+                    ? `Datàfon desconnectat${datafono.error ? `: ${datafono.error}` : ""}`
+                    : datafono.pinpadInfo || ""
+                }
+                className="flex flex-col items-center justify-center p-6 rounded-2xl bg-blue-50 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-100 active:bg-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-blue-200 disabled:hover:bg-blue-50 relative"
               >
                 <span className="text-4xl mb-2">&#128179;</span>
                 <span className="text-lg font-bold text-blue-700">
                   TARGETA
                 </span>
+                <span
+                  className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ${
+                    datafono.lastCheck === null
+                      ? "bg-gray-300"
+                      : datafono.online
+                      ? "bg-green-500"
+                      : "bg-red-500"
+                  }`}
+                  aria-label={
+                    datafono.lastCheck === null
+                      ? "Comprovant datàfon"
+                      : datafono.online
+                      ? "Datàfon connectat"
+                      : "Datàfon desconnectat"
+                  }
+                />
               </button>
 
               <button

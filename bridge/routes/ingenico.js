@@ -1,13 +1,23 @@
+const txLog = require("../lib/transaction-log");
+
 const VERIFONE_URL = process.env.VERIFONE_SERVICE_URL || "http://127.0.0.1:3007";
 const TIMEOUT_MS = 135_000; // longer than VerifoneService's 120s timeout, shorter than frontend's 150s
 
+// Map "/charge" -> "charge" so it's a clean operation label for the audit log.
+function opNameFromPath(p) {
+  return (p || "").replace(/^\/+/, "");
+}
+
 /**
- * Forwards an operation (charge/refund/cancel) to the local VerifoneService.
- * VerifoneService does the polling and returns the final result.
+ * Forwards an operation (charge/refund/cancel/query) to the local VerifoneService.
+ * VerifoneService does the polling and returns the final result. Every call is
+ * persisted to pos.card_transactions for fiscal audit and reconciliation.
  */
 async function forwardToVerifone(opPath, body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const start = Date.now();
+  let data;
 
   try {
     const response = await fetch(`${VERIFONE_URL}${opPath}`, {
@@ -16,22 +26,33 @@ async function forwardToVerifone(opPath, body) {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    // Always parse — VerifoneService returns JSON even on error.
-    let data;
     try {
       data = await response.json();
     } catch {
-      return { success: false, error: `HTTP ${response.status}: respuesta inválida del datáfono` };
+      data = { success: false, error: `HTTP ${response.status}: respuesta inválida del datáfono` };
     }
-    return data;
   } catch (err) {
     if (err.name === "AbortError") {
-      return { success: false, error: "Timeout: el datàfon no ha respost" };
+      data = { success: false, error: "Timeout: el datàfon no ha respost" };
+    } else {
+      data = { success: false, error: `No s'ha pogut connectar amb VerifoneService: ${err.message}` };
     }
-    return { success: false, error: `No s'ha pogut connectar amb VerifoneService: ${err.message}` };
   } finally {
     clearTimeout(timeout);
   }
+
+  // Fire-and-forget log. We don't await: a slow DB shouldn't block the response
+  // back to the cashier.
+  txLog
+    .log({
+      operation: opNameFromPath(opPath),
+      request: body,
+      response: data,
+      durationMs: Date.now() - start,
+    })
+    .catch(() => {});
+
+  return data;
 }
 
 async function handleIngenicoCharge(req, res) {
@@ -106,6 +127,8 @@ async function handleIngenicoQuery(req, res) {
  */
 async function handleIngenicoAbort(_req, res) {
   console.log("[Verifone] Abort sol.licitat des del POS");
+  const start = Date.now();
+  let data;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5_000);
@@ -116,14 +139,17 @@ async function handleIngenicoAbort(_req, res) {
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    const data = await response.json().catch(() => ({}));
-    return res.json(data);
+    data = await response.json().catch(() => ({}));
   } catch (err) {
-    return res.json({
+    data = {
       success: false,
       error: `No s'ha pogut contactar amb VerifoneService: ${err.message}`,
-    });
+    };
   }
+  txLog
+    .log({ operation: "abort", request: {}, response: data, durationMs: Date.now() - start })
+    .catch(() => {});
+  return res.json(data);
 }
 
 async function handleVerifoneStatus(_req, res) {

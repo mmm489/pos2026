@@ -107,6 +107,33 @@ export async function refundIngenico(
 }
 
 /**
+ * Probe the datáfono health. Used by the POS to disable "Targeta" when offline.
+ * Returns quickly — short timeout so a polling loop never blocks the UI thread.
+ */
+export async function getIngenicoHealth(): Promise<{
+  online: boolean;
+  pinpadInfo?: string;
+  error?: string;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/health`, { signal: controller.signal });
+    if (!res.ok) return { online: false, error: `HTTP ${res.status}` };
+    const data = (await res.json()) as { status?: string; pinpadInfo?: string; error?: string };
+    return {
+      online: data.status === "ok",
+      pinpadInfo: data.pinpadInfo,
+      error: data.error,
+    };
+  } catch {
+    return { online: false, error: "No connectat" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Abort an in-flight card operation. Tells the datáfono to stop waiting for
  * the card and signals the polling loop to bail out. Short timeout — this
  * should be near-instant and is fire-and-forget from the UI's perspective.
