@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useReducer, useState, useCallback } from "react";
+import { useEffect, useReducer, useState, useCallback, useMemo } from "react";
 import { Product, Category, CartItem, Order } from "@/types/pos";
 import ProductGrid from "@/components/pos/ProductGrid";
+import ModifiersModal from "@/components/pos/ModifiersModal";
 import Cart from "@/components/pos/Cart";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import PinLogin from "@/components/pos/PinLogin";
@@ -18,6 +19,16 @@ type CartAction =
   | { type: "CLEAR" };
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
+
+// Categories whose name contains any of these keywords are treated as
+// "modifier" categories — their products appear in the long-press popup
+// instead of being eligible to trigger their own modifier popup.
+const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "complemento"];
+
+function isModifierCategory(name: string): boolean {
+  const lower = name.toLowerCase();
+  return MODIFIER_CATEGORY_KEYWORDS.some((k) => lower.includes(k));
+}
 
 const POS_CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
@@ -89,6 +100,27 @@ export default function PosPage() {
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
+  const [modifiersFor, setModifiersFor] = useState<Product | null>(null);
+
+  // Split products by whether they belong to a modifier category. Modifier
+  // products show up in the modifiers picker; everything else is a base product
+  // that can OPEN the modifiers picker via long-press.
+  const modifierCategoryIds = useMemo(
+    () => new Set(categories.filter((c) => isModifierCategory(c.name)).map((c) => c.id)),
+    [categories]
+  );
+  const modifierProducts = useMemo(
+    () => products.filter((p) => modifierCategoryIds.has(p.category_id) && p.active !== false),
+    [products, modifierCategoryIds]
+  );
+  const modifierCategories = useMemo(
+    () => categories.filter((c) => modifierCategoryIds.has(c.id)),
+    [categories, modifierCategoryIds]
+  );
+  const modifierProductIds = useMemo(
+    () => new Set(modifierProducts.map((p) => p.id)),
+    [modifierProducts]
+  );
 
   const loadRecentOrders = useCallback(async () => {
     try {
@@ -287,6 +319,10 @@ export default function PosPage() {
             products={products}
             categories={categories}
             onAddToCart={(p) => dispatch({ type: "ADD", product: p })}
+            onLongPress={
+              modifierProducts.length > 0 ? (p) => setModifiersFor(p) : undefined
+            }
+            noLongPressIds={modifierProductIds}
           />
         </div>
 
@@ -316,6 +352,37 @@ export default function PosPage() {
           employeeId={employee.id}
           onClose={() => setShowCheckout(false)}
           onComplete={handleCheckoutComplete}
+        />
+      )}
+
+      {/* Modifiers modal — opened on long-press of a base product */}
+      {modifiersFor && (
+        <ModifiersModal
+          baseProduct={modifiersFor}
+          modifierProducts={modifierProducts}
+          modifierCategories={modifierCategories}
+          onCancel={() => setModifiersFor(null)}
+          onConfirm={(extras, note) => {
+            // Add the base product first (with the optional note)
+            dispatch({ type: "ADD", product: modifiersFor });
+            if (note) {
+              dispatch({ type: "SET_NOTE", productId: modifiersFor.id, note });
+            }
+            // Then add each selected modifier with the requested qty
+            for (const { product, qty } of extras) {
+              for (let i = 0; i < qty; i++) {
+                dispatch({ type: "ADD", product });
+              }
+              // Tag the modifier line with the base it belongs to so the
+              // kitchen and the receipt know they go together.
+              dispatch({
+                type: "SET_NOTE",
+                productId: product.id,
+                note: `Per ${modifiersFor.name}`,
+              });
+            }
+            setModifiersFor(null);
+          }}
         />
       )}
 

@@ -7,7 +7,13 @@ interface ProductGridProps {
   products: Product[];
   categories: Category[];
   onAddToCart: (product: Product) => void;
+  /** Optional: triggered on long press (~500ms) for products that allow modifiers. */
+  onLongPress?: (product: Product) => void;
+  /** Optional: ids of products that should NOT trigger long-press (e.g. modifier products themselves). */
+  noLongPressIds?: Set<number>;
 }
+
+const LONG_PRESS_MS = 500;
 
 function hexToRgba(hex: string, alpha: number) {
   const h = hex.replace("#", "");
@@ -25,6 +31,8 @@ export default function ProductGrid({
   products,
   categories,
   onAddToCart,
+  onLongPress,
+  noLongPressIds,
 }: ProductGridProps) {
   // Square-style two-step navigation: start on category overview,
   // click a category to drill into its products. Search jumps over the
@@ -138,6 +146,8 @@ export default function ProductGrid({
             }
             flashId={flashId}
             onAdd={handleAdd}
+            onLongPress={onLongPress}
+            noLongPressIds={noLongPressIds}
             isSearching={isSearching}
           />
         )}
@@ -216,11 +226,15 @@ function ProductsGrid({
   products,
   flashId,
   onAdd,
+  onLongPress,
+  noLongPressIds,
   isSearching,
 }: {
   products: Product[];
   flashId: number | null;
   onAdd: (p: Product) => void;
+  onLongPress?: (p: Product) => void;
+  noLongPressIds?: Set<number>;
   isSearching: boolean;
 }) {
   if (products.length === 0) {
@@ -239,45 +253,115 @@ function ProductsGrid({
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-      {products.map((product) => {
-        const color = product.category_color || "#6B7280";
-        const isFlashing = flashId === product.id;
-        return (
-          <button
-            key={product.id}
-            onClick={() => onAdd(product)}
-            className={`group flex flex-col bg-white rounded-2xl border overflow-hidden active:scale-[0.97] transition-all min-h-[110px] ${
-              isFlashing
-                ? "border-green-500 ring-2 ring-green-200"
-                : "border-gray-200 hover:shadow-md hover:-translate-y-0.5"
-            }`}
-          >
-            {/* Color stripe */}
-            <div
-              className="h-1.5"
-              style={{ backgroundColor: isFlashing ? "#10B981" : color }}
-            />
-            {/* Body */}
-            <div className="flex-1 flex flex-col justify-between p-3">
-              <span className="text-sm font-bold text-gray-800 text-left leading-snug line-clamp-2">
-                {product.name}
-              </span>
-              <div className="flex items-baseline justify-between mt-2">
-                <span
-                  className="text-lg font-black tabular-nums"
-                  style={{ color: isFlashing ? "#10B981" : "#111827" }}
-                >
-                  {Number(product.price).toFixed(2)}
-                  <span className="text-sm font-bold ml-0.5">€</span>
-                </span>
-                {isFlashing && (
-                  <span className="text-green-600 text-xl leading-none">&#10003;</span>
-                )}
-              </div>
-            </div>
-          </button>
-        );
-      })}
+      {products.map((product) => (
+        <ProductCard
+          key={product.id}
+          product={product}
+          isFlashing={flashId === product.id}
+          onAdd={onAdd}
+          onLongPress={
+            onLongPress && !noLongPressIds?.has(product.id) ? onLongPress : undefined
+          }
+        />
+      ))}
     </div>
+  );
+}
+
+function ProductCard({
+  product,
+  isFlashing,
+  onAdd,
+  onLongPress,
+}: {
+  product: Product;
+  isFlashing: boolean;
+  onAdd: (p: Product) => void;
+  onLongPress?: (p: Product) => void;
+}) {
+  const color = product.category_color || "#6B7280";
+  // Long-press detection. We track the timer + a "did long press" flag so the
+  // mouseup that ends a long press doesn't ALSO fire the regular click.
+  const [pressing, setPressing] = useState(false);
+
+  // We use refs through the closure rather than useRef to keep the file flat.
+  // The handlers below are stable enough for this small component.
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let firedLongPress = false;
+
+  const start = () => {
+    if (!onLongPress) return;
+    firedLongPress = false;
+    setPressing(true);
+    timer = setTimeout(() => {
+      firedLongPress = true;
+      setPressing(false);
+      onLongPress(product);
+    }, LONG_PRESS_MS);
+  };
+  const cancel = () => {
+    if (timer) clearTimeout(timer);
+    setPressing(false);
+  };
+  const handleClick = () => {
+    if (firedLongPress) {
+      // The long-press already fired the modifiers modal — swallow this click.
+      firedLongPress = false;
+      return;
+    }
+    onAdd(product);
+  };
+
+  return (
+    <button
+      onMouseDown={start}
+      onMouseUp={cancel}
+      onMouseLeave={cancel}
+      onTouchStart={start}
+      onTouchEnd={cancel}
+      onTouchCancel={cancel}
+      onClick={handleClick}
+      onContextMenu={(e) => {
+        // Suppress the right-click menu on long press for desktop testers.
+        if (onLongPress) e.preventDefault();
+      }}
+      className={`group flex flex-col bg-white rounded-2xl border overflow-hidden active:scale-[0.97] transition-all min-h-[110px] relative ${
+        isFlashing
+          ? "border-green-500 ring-2 ring-green-200"
+          : pressing
+          ? "border-pink-400 ring-2 ring-pink-200"
+          : "border-gray-200 hover:shadow-md hover:-translate-y-0.5"
+      }`}
+    >
+      <div
+        className="h-1.5"
+        style={{ backgroundColor: isFlashing ? "#10B981" : color }}
+      />
+      <div className="flex-1 flex flex-col justify-between p-3">
+        <span className="text-sm font-bold text-gray-800 text-left leading-snug line-clamp-2">
+          {product.name}
+        </span>
+        <div className="flex items-baseline justify-between mt-2">
+          <span
+            className="text-lg font-black tabular-nums"
+            style={{ color: isFlashing ? "#10B981" : "#111827" }}
+          >
+            {Number(product.price).toFixed(2)}
+            <span className="text-sm font-bold ml-0.5">€</span>
+          </span>
+          {isFlashing && (
+            <span className="text-green-600 text-xl leading-none">&#10003;</span>
+          )}
+        </div>
+      </div>
+      {onLongPress && (
+        <span
+          className="absolute top-1.5 right-2 text-[10px] text-gray-300 group-hover:text-gray-400 select-none pointer-events-none"
+          aria-hidden
+        >
+          +
+        </span>
+      )}
+    </button>
   );
 }
