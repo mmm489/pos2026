@@ -107,6 +107,36 @@ export async function refundIngenico(
 }
 
 /**
+ * Read-only consultation: ask the datáfono what REDSYS recorded for a given reference.
+ * Use this to recover from crashes mid-payment when the local order state is uncertain.
+ * Does NOT modify any local state — caller decides what to do with the result.
+ */
+export async function queryIngenicoTransaction(
+  reference: string,
+  orderId?: string
+): Promise<IngenicoResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reference, orderId }),
+      signal: controller.signal,
+    });
+    return (await res.json()) as IngenicoResult;
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      return { success: false, error: "Timeout: el datáfono no respondió" };
+    }
+    return { success: false, error: "Error de conexión con el datáfono" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Cancel a previous card sale (same-day annulment, before settlement).
  * For sales already settled, use refundIngenico() instead.
  */

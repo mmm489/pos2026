@@ -30,6 +30,8 @@ class VerifoneService
     const string OP_SALE = "0";
     const string OP_REFUND = "3";
     const string OP_CANCEL = "9"; // Anulación
+    const string OP_QUERY = "8";  // Consulta — no monetary movement, used to ask
+                                   // REDSYS the real outcome of a previous reference.
 
     static void Main(string[] args)
     {
@@ -139,6 +141,10 @@ class VerifoneService
             {
                 HandleOperation(req, res, OP_CANCEL, "cancel");
             }
+            else if (path == "/query" && method == "POST")
+            {
+                HandleOperation(req, res, OP_QUERY, "query");
+            }
             else if (path == "/charge/status" && method == "GET")
             {
                 Respond(res, 200, json.Serialize(new {
@@ -160,13 +166,16 @@ class VerifoneService
     }
 
     /// <summary>
-    /// Handles SALE / REFUND / CANCEL operations. All three use TrataPeticionOperacion with a different TipoOperacion.
-    /// Body: { amount: number, orderId?: string, originalReference?: string }
+    /// Handles SALE / REFUND / CANCEL / QUERY operations. All four use TrataPeticionOperacion with a different TipoOperacion.
+    /// Body: { amount?: number, orderId?: string, originalReference?: string }
     /// - SALE: amount required.
     /// - REFUND/CANCEL: amount + originalReference (the factura/reference of the original sale).
+    /// - QUERY: only originalReference required — read-only lookup, no monetary movement.
     /// </summary>
     static void HandleOperation(HttpListenerRequest req, HttpListenerResponse res, string tipoOperacion, string opName)
     {
+        bool isQuery = (tipoOperacion == OP_QUERY);
+
         // Atomic check-and-set so concurrent requests cannot both pass the guard.
         lock (txLock)
         {
@@ -176,7 +185,7 @@ class VerifoneService
                 return;
             }
             transactionInProgress = true;
-            currentStatus = "waiting_card";
+            currentStatus = isQuery ? "querying" : "waiting_card";
             currentOperation = opName;
         }
 
@@ -187,13 +196,23 @@ class VerifoneService
                 body = reader.ReadToEnd();
 
             var data = json.Deserialize<System.Collections.Generic.Dictionary<string, object>>(body);
-            if (data == null || !data.ContainsKey("amount"))
+            if (data == null)
+            {
+                Respond(res, 400, json.Serialize(new { success = false, error = "Body invalid" }));
+                return;
+            }
+
+            // amount: required for SALE/REFUND/CANCEL, ignored for QUERY (sent as zeros).
+            decimal amount = 0m;
+            if (data.ContainsKey("amount") && data["amount"] != null)
+            {
+                amount = Convert.ToDecimal(data["amount"]);
+            }
+            else if (!isQuery)
             {
                 Respond(res, 400, json.Serialize(new { success = false, error = "Falta amount" }));
                 return;
             }
-
-            decimal amount = Convert.ToDecimal(data["amount"]);
             int amountCents = (int)Math.Round(amount * 100);
             string importeRedsys = amountCents.ToString("D12");
 
@@ -210,11 +229,24 @@ class VerifoneService
                 factura = DateTime.Now.ToString("yyyyMMddHHmmss").Substring(0, 12);
             }
 
-            // For refunds and cancels, REDSYS may require the original reference.
+            // REDSYS uses originalReference as the factura we are asking about (query)
+            // or as the link to the original sale (refund/cancel).
             string originalRef = "";
             if (data.ContainsKey("originalReference") && data["originalReference"] != null)
             {
                 originalRef = data["originalReference"].ToString();
+            }
+
+            // For QUERY, the reference we're asking about is the only meaningful field —
+            // factura passed to REDSYS should be the originalReference, not a new one.
+            if (isQuery)
+            {
+                if (string.IsNullOrEmpty(originalRef))
+                {
+                    Respond(res, 400, json.Serialize(new { success = false, error = "Falta originalReference per consultar" }));
+                    return;
+                }
+                factura = originalRef.Length > 12 ? originalRef.Substring(0, 12) : originalRef;
             }
 
             Console.WriteLine(string.Format("[Verifone] {0}: {1:F2} EUR (factura: {2}, orig: {3})",

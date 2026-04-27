@@ -79,6 +79,26 @@ async function handleIngenicoCancel(req, res) {
   return res.json(data);
 }
 
+/**
+ * Read-only lookup against REDSYS. Asks the datafono "what happened with reference X?"
+ * without performing any monetary movement. Useful when the POS crashed mid-payment
+ * and we don't know whether the sale was actually approved.
+ */
+async function handleIngenicoQuery(req, res) {
+  const { reference, orderId } = req.body;
+  if (!reference) {
+    return res.status(400).json({
+      success: false,
+      error: "Falta reference (referència de la transacció a consultar)",
+    });
+  }
+  console.log(`[Verifone] Consulta ref ${reference}`);
+  // amount is ignored by the query op but the underlying ActiveX still expects a number.
+  const data = await forwardToVerifone("/query", { amount: 0, originalReference: reference, orderId });
+  console.log(`[Verifone] Resposta query:`, data);
+  return res.json(data);
+}
+
 async function handleVerifoneStatus(_req, res) {
   try {
     const response = await fetch(`${VERIFONE_URL}/charge/status`);
@@ -103,6 +123,7 @@ module.exports = {
   handleIngenicoCharge,
   handleIngenicoRefund,
   handleIngenicoCancel,
+  handleIngenicoQuery,
   handleVerifoneStatus,
   handleVerifoneHealth,
 };

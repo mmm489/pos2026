@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Order } from "@/types/pos";
+import { queryIngenicoTransaction, IngenicoResult } from "@/lib/bridge";
 
 const CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
@@ -26,6 +27,8 @@ export default function AdminOrdersPage() {
   const [refundCard, setRefundCard] = useState(true);
   const [preferRefund, setPreferRefund] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [queryingId, setQueryingId] = useState<number | null>(null);
+  const [queryResults, setQueryResults] = useState<Map<number, IngenicoResult>>(new Map());
 
   useEffect(() => {
     loadOrders();
@@ -80,6 +83,21 @@ export default function AdminOrdersPage() {
       setCancelError("Error de connexió al anul·lar la comanda");
     }
     setCancelLoading(false);
+  };
+
+  const handleQuery = async (order: Order) => {
+    if (!order.card_reference) return;
+    setQueryingId(order.id);
+    const result = await queryIngenicoTransaction(
+      order.card_reference,
+      String(order.order_number || order.id)
+    );
+    setQueryResults((prev) => {
+      const next = new Map(prev);
+      next.set(order.id, result);
+      return next;
+    });
+    setQueryingId(null);
   };
 
   const filtered = orders.filter((o) => {
@@ -361,10 +379,62 @@ export default function AdminOrdersPage() {
                       <p className="text-xs text-gray-500 mb-2">Factura: {order.invoice_number}</p>
                     )}
                     {order.payment_method === "card" && order.card_reference && (
-                      <p className="text-xs text-gray-400 mb-2">
-                        Targeta — ref {order.card_reference}
-                        {order.card_authorization && ` · auth ${order.card_authorization}`}
-                      </p>
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <p className="text-xs text-gray-400">
+                            Targeta — ref {order.card_reference}
+                            {order.card_authorization && ` · auth ${order.card_authorization}`}
+                          </p>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleQuery(order);
+                            }}
+                            disabled={queryingId === order.id}
+                            className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                          >
+                            {queryingId === order.id ? "Consultant..." : "Consultar al datàfon"}
+                          </button>
+                        </div>
+                        {queryResults.has(order.id) && (() => {
+                          const q = queryResults.get(order.id)!;
+                          // Detect mismatch: REDSYS approved a charge but our local order is pending/cancelled.
+                          const localStatus = order.status;
+                          const localApproved = localStatus === "completed" || localStatus === "ready" || localStatus === "preparing";
+                          const localCancelled = localStatus === "cancelled";
+                          let mismatch: string | null = null;
+                          if (q.success && localCancelled) {
+                            mismatch = "REDSYS dóna la transacció com aprovada però la comanda local està anul·lada. Pot ser una anul·lació pendent al datàfon — revisa-ho manualment.";
+                          } else if (!q.success && localApproved && !localCancelled) {
+                            mismatch = "REDSYS NO confirma la transacció però la comanda local consta com cobrada. Verifica si realment es va fer el cobrament.";
+                          }
+                          return (
+                            <div
+                              className={`mt-2 p-3 rounded-lg border text-xs ${
+                                q.success
+                                  ? "bg-green-50 border-green-200"
+                                  : "bg-red-50 border-red-200"
+                              }`}
+                            >
+                              <p className={`font-semibold ${q.success ? "text-green-800" : "text-red-800"}`}>
+                                {q.success ? "✓ Aprovada al datàfon" : "✗ No aprovada / no trobada"}
+                              </p>
+                              <div className={`mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 ${q.success ? "text-green-700" : "text-red-700"}`}>
+                                {q.responseCode && <p>Codi: {q.responseCode}</p>}
+                                {q.authorizationCode && <p>Auth: {q.authorizationCode}</p>}
+                                {q.reference && <p className="col-span-2">Ref: {q.reference}</p>}
+                                {q.result && <p className="col-span-2">{q.result}</p>}
+                                {q.error && <p className="col-span-2">Error: {q.error}</p>}
+                              </div>
+                              {mismatch && (
+                                <p className="mt-2 px-2 py-1.5 bg-amber-100 border border-amber-300 rounded text-amber-900 font-medium">
+                                  ⚠ {mismatch}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     )}
                     {order.items && (
                       <table className="w-full text-sm">
