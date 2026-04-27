@@ -197,6 +197,17 @@ export default function CheckoutModal({
         setChange(paymentResult.change ?? null);
       }
 
+      // For card payments, capture REDSYS reference + authorization code so we can
+      // later refund/cancel through the same datafono (and so it shows on Comercia portal).
+      const cardReference =
+        paymentMethod === "card" && "reference" in paymentResult
+          ? (paymentResult as { reference?: string }).reference || null
+          : null;
+      const cardAuthorization =
+        paymentMethod === "card" && "authorizationCode" in paymentResult
+          ? (paymentResult as { authorizationCode?: string }).authorizationCode || null
+          : null;
+
       // Create order via API
       let order: Order | null = null;
       try {
@@ -208,6 +219,8 @@ export default function CheckoutModal({
             payment_method: paymentMethod,
             employee_id: employeeId,
             table_number: tableNumber || null,
+            card_reference: cardReference,
+            card_authorization: cardAuthorization,
           }),
         });
         if (orderRes.ok) {

@@ -12,14 +12,14 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       const statuses = statusFilter.split(",");
       orders = await sql`
-        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by
+        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, refund_reference, refund_at
         FROM pos.orders
         WHERE status = ANY(${statuses})
         ORDER BY created_at DESC
       `;
     } else {
       orders = await sql`
-        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by
+        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, refund_reference, refund_at
         FROM pos.orders
         ORDER BY created_at DESC
         LIMIT 500
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { items, payment_method, employee_id, table_number } = body;
+    const { items, payment_method, employee_id, table_number, card_reference, card_authorization } = body;
 
     if (!items || items.length === 0 || !payment_method) {
       return NextResponse.json(
@@ -73,6 +73,8 @@ export async function POST(request: NextRequest) {
 
     const empId = employee_id || null;
     const tblNum = table_number || null;
+    const cardRef = (payment_method === "card" && card_reference) ? String(card_reference).slice(0, 20) : null;
+    const cardAuth = (payment_method === "card" && card_authorization) ? String(card_authorization).slice(0, 20) : null;
 
     const completeOrder = await withTransaction(async (client) => {
       // Fetch actual VAT rate per product from DB (don't trust client)
@@ -127,12 +129,12 @@ export async function POST(request: NextRequest) {
       const year = new Date().getFullYear();
       const invoiceNumber = `${invoice_series}-${year}/${String(invoice_num).padStart(6, "0")}`;
 
-      // Create order with invoice number and VAT breakdown
+      // Create order with invoice number, VAT breakdown, and card audit trail
       const orderRes = await client.query(
-        `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number)
-         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8)
-         RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at`,
-        [orderNumber, invoiceNumber, total, totalBase, totalVat, payment_method, empId, tblNum]
+        `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, card_reference, card_authorization)
+         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, $10)
+         RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, card_reference, card_authorization`,
+        [orderNumber, invoiceNumber, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth]
       );
       const order = orderRes.rows[0];
 

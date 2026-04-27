@@ -23,6 +23,9 @@ export default function AdminOrdersPage() {
   const [cancelReason, setCancelReason] = useState("client");
   const [cancelNotes, setCancelNotes] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [refundCard, setRefundCard] = useState(true);
+  const [preferRefund, setPreferRefund] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrders();
@@ -43,28 +46,40 @@ export default function AdminOrdersPage() {
 
   const handleCancel = async () => {
     if (!cancellingId) return;
+    const order = orders.find((o) => o.id === cancellingId);
     setCancelLoading(true);
+    setCancelError(null);
     const reason = CANCEL_REASONS.find((r) => r.value === cancelReason)?.label || cancelReason;
     const fullReason = cancelNotes ? `${reason}: ${cancelNotes}` : reason;
+    const shouldRefund =
+      refundCard && order?.payment_method === "card" && !!order?.card_reference;
     try {
       const res = await fetch(`/api/pos/orders/${cancellingId}/cancel`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: fullReason }),
+        body: JSON.stringify({
+          reason: fullReason,
+          refund_card: shouldRefund,
+          prefer_refund: preferRefund,
+        }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const updated = await res.json();
         setOrders((prev) =>
-          prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+          prev.map((o) => (o.id === data.id ? { ...o, ...data } : o))
         );
+        setCancellingId(null);
+        setCancelReason("client");
+        setCancelNotes("");
+        setRefundCard(true);
+        setPreferRefund(false);
+      } else {
+        setCancelError(data.error || "Error al anul·lar la comanda");
       }
     } catch {
-      // Error cancelling
+      setCancelError("Error de connexió al anul·lar la comanda");
     }
     setCancelLoading(false);
-    setCancellingId(null);
-    setCancelReason("client");
-    setCancelNotes("");
   };
 
   const filtered = orders.filter((o) => {
@@ -334,10 +349,22 @@ export default function AdminOrdersPage() {
                             Anul·lat el {new Date(order.cancelled_at).toLocaleString("ca-ES")}
                           </p>
                         )}
+                        {order.refund_reference && (
+                          <p className="text-xs text-red-600 mt-1">
+                            <span className="font-semibold">↩ Tornat al datàfon:</span> ref {order.refund_reference}
+                            {order.refund_at && ` el ${new Date(order.refund_at).toLocaleString("ca-ES")}`}
+                          </p>
+                        )}
                       </div>
                     )}
                     {order.invoice_number && (
                       <p className="text-xs text-gray-500 mb-2">Factura: {order.invoice_number}</p>
+                    )}
+                    {order.payment_method === "card" && order.card_reference && (
+                      <p className="text-xs text-gray-400 mb-2">
+                        Targeta — ref {order.card_reference}
+                        {order.card_authorization && ` · auth ${order.card_authorization}`}
+                      </p>
                     )}
                     {order.items && (
                       <table className="w-full text-sm">
@@ -383,66 +410,127 @@ export default function AdminOrdersPage() {
       </div>
 
       {/* Cancel confirmation modal */}
-      {cancellingId !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
-            <h3 className="text-xl font-bold text-gray-800 mb-1">Anul·lar comanda</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Comanda {orders.find((o) => o.id === cancellingId)?.order_number}
-              {orders.find((o) => o.id === cancellingId)?.invoice_number && (
-                <span className="block text-xs text-gray-400">
-                  Factura: {orders.find((o) => o.id === cancellingId)?.invoice_number}
-                </span>
+      {cancellingId !== null && (() => {
+        const cancellingOrder = orders.find((o) => o.id === cancellingId);
+        const isCard = cancellingOrder?.payment_method === "card";
+        const hasCardRef = !!cancellingOrder?.card_reference;
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
+              <h3 className="text-xl font-bold text-gray-800 mb-1">Anul·lar comanda</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Comanda {cancellingOrder?.order_number}
+                {cancellingOrder?.invoice_number && (
+                  <span className="block text-xs text-gray-400">
+                    Factura: {cancellingOrder?.invoice_number}
+                  </span>
+                )}
+                {isCard && hasCardRef && (
+                  <span className="block text-xs text-gray-400">
+                    Targeta — ref {cancellingOrder?.card_reference}
+                  </span>
+                )}
+              </p>
+
+              {cancellingOrder?.status === "completed" && (
+                <div className="mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  <strong>⚠ Atenció:</strong> Aquesta comanda ja està completada i té factura emesa. L&apos;anul·lació quedarà registrada però no s&apos;esborra la factura.
+                </div>
               )}
-            </p>
 
-            {orders.find((o) => o.id === cancellingId)?.status === "completed" && (
-              <div className="mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                <strong>⚠ Atenció:</strong> Aquesta comanda ja està completada i té factura emesa. L&apos;anul·lació quedarà registrada però no s&apos;esborra la factura.
+              {isCard && !hasCardRef && (
+                <div className="mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+                  Aquesta comanda no té referència de targeta guardada (es va cobrar abans d&apos;activar el seguiment), per això no es pot tornar diners automàticament al datàfon.
+                </div>
+              )}
+
+              <label className="block text-sm font-medium text-gray-700 mb-1">Motiu</label>
+              <select
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm"
+              >
+                {CANCEL_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (opcional)</label>
+              <textarea
+                value={cancelNotes}
+                onChange={(e) => setCancelNotes(e.target.value)}
+                placeholder="Detalls addicionals..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm h-20 resize-none"
+              />
+
+              {isCard && hasCardRef && (
+                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={refundCard}
+                      onChange={(e) => setRefundCard(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-semibold text-blue-900">
+                        Tornar diners al datàfon
+                      </span>
+                      <p className="text-xs text-blue-700 mt-0.5">
+                        El client haurà de tornar a passar la targeta. S&apos;intentarà
+                        primer una anul·lació (gratuïta, mateix dia) i si no, una devolució.
+                      </p>
+                    </div>
+                  </label>
+                  {refundCard && (
+                    <label className="flex items-center gap-2 mt-2 ml-6 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preferRefund}
+                        onChange={(e) => setPreferRefund(e.target.checked)}
+                      />
+                      <span className="text-xs text-blue-700">
+                        Forçar devolució (la venda ja està liquidada / no és del mateix dia)
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+
+              {cancelError && (
+                <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {cancelError}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setCancellingId(null);
+                    setCancelReason("client");
+                    setCancelNotes("");
+                    setRefundCard(true);
+                    setPreferRefund(false);
+                    setCancelError(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors text-sm"
+                >
+                  Tornar
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors text-sm disabled:opacity-50"
+                >
+                  {cancelLoading
+                    ? (isCard && refundCard && hasCardRef ? "Tornant al datàfon..." : "Anul·lant...")
+                    : "Confirmar anul·lació"}
+                </button>
               </div>
-            )}
-
-            <label className="block text-sm font-medium text-gray-700 mb-1">Motiu</label>
-            <select
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm"
-            >
-              {CANCEL_REASONS.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
-            </select>
-
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (opcional)</label>
-            <textarea
-              value={cancelNotes}
-              onChange={(e) => setCancelNotes(e.target.value)}
-              placeholder="Detalls addicionals..."
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm h-20 resize-none"
-            />
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setCancellingId(null);
-                  setCancelReason("client");
-                  setCancelNotes("");
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors text-sm"
-              >
-                Tornar
-              </button>
-              <button
-                onClick={handleCancel}
-                disabled={cancelLoading}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors text-sm disabled:opacity-50"
-              >
-                {cancelLoading ? "Anul·lant..." : "Confirmar anul·lació"}
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

@@ -34,6 +34,11 @@ export interface Order {
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
   cancelled_by?: number | null;
+  // Card payment audit trail — populated when payment_method = "card"
+  card_reference?: string | null; // REDSYS factura, used as originalReference for refund/cancel
+  card_authorization?: string | null; // Authorization code from datafono
+  refund_reference?: string | null; // REDSYS factura returned by refund/cancel op
+  refund_at?: string | null;
   items?: OrderItem[];
 }
 
