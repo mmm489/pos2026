@@ -134,12 +134,19 @@ export async function POST(request: NextRequest) {
       const year = new Date().getFullYear();
       const invoiceNumber = `${invoice_series}-${year}/${String(invoice_num).padStart(6, "0")}`;
 
+      // Manual sales (cash/card collected outside the system, e.g. testing) skip
+      // the KDS pending → preparing → ready flow because there's no kitchen
+      // workflow involved — just record the sale as already completed so it
+      // counts immediately on the Z report.
+      const initialStatus = payment_method === "manual" ? "completed" : "pending";
+      const initialCompletedAt = payment_method === "manual" ? "NOW()" : "NULL";
+
       // Create order with invoice number, VAT breakdown, and card audit trail
       const orderRes = await client.query(
-        `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text)
-         VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, card_reference, card_authorization, card_receipt_text`,
-        [orderNumber, invoiceNumber, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText]
+        `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text, completed_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ${initialCompletedAt})
+         RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
+        [orderNumber, invoiceNumber, initialStatus, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText]
       );
       const order = orderRes.rows[0];
 
