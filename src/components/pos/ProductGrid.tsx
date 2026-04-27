@@ -18,7 +18,7 @@ function hexToRgba(hex: string, alpha: number) {
 }
 
 function normalize(s: string) {
-  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
 
 export default function ProductGrid({
@@ -26,21 +26,27 @@ export default function ProductGrid({
   categories,
   onAddToCart,
 }: ProductGridProps) {
-  const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  // Square-style two-step navigation: start on category overview,
+  // click a category to drill into its products. Search jumps over the
+  // category gate so cashiers can find anything fast.
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [search, setSearch] = useState("");
   const [flashId, setFlashId] = useState<number | null>(null);
 
+  const isSearching = search.trim().length > 0;
+  const showProducts = selectedCategory !== null || isSearching;
+
   const filtered = useMemo(() => {
     let list = products;
-    if (activeCategory) {
-      list = list.filter((p) => p.category_id === activeCategory);
+    if (selectedCategory && !isSearching) {
+      list = list.filter((p) => p.category_id === selectedCategory.id);
     }
-    if (search.trim()) {
+    if (isSearching) {
       const q = normalize(search.trim());
       list = list.filter((p) => normalize(p.name).includes(q));
     }
     return list;
-  }, [products, activeCategory, search]);
+  }, [products, selectedCategory, search, isSearching]);
 
   const handleAdd = (product: Product) => {
     onAddToCart(product);
@@ -48,7 +54,6 @@ export default function ProductGrid({
     setTimeout(() => setFlashId((curr) => (curr === product.id ? null : curr)), 400);
   };
 
-  // Category counts
   const countByCategory = useMemo(() => {
     const map = new Map<number, number>();
     for (const p of products) {
@@ -58,124 +63,221 @@ export default function ProductGrid({
   }, [products]);
 
   return (
-    <div className="flex h-full">
-      {/* Category sidebar */}
-      <aside className="w-36 flex-shrink-0 bg-white border-r border-gray-200 overflow-y-auto">
-        <button
-          onClick={() => setActiveCategory(null)}
-          className={`w-full text-left px-3 py-3 border-b border-gray-100 transition-colors ${
-            activeCategory === null
-              ? "bg-gray-800 text-white font-bold"
-              : "hover:bg-gray-50 text-gray-700 font-semibold"
-          }`}
-        >
-          <div className="text-sm">Tots</div>
-          <div className={`text-xs ${activeCategory === null ? "text-gray-300" : "text-gray-400"}`}>
-            {products.length}
-          </div>
-        </button>
-        {categories.map((cat) => {
-          const active = activeCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
-              className="w-full text-left px-3 py-3 border-b border-gray-100 transition-all"
-              style={{
-                backgroundColor: active ? cat.color : "white",
-                color: active ? "white" : "#374151",
-                borderLeft: `4px solid ${cat.color}`,
-              }}
-            >
-              <div className="text-sm font-bold leading-tight">{cat.name}</div>
-              <div
-                className="text-xs mt-0.5"
-                style={{ color: active ? "rgba(255,255,255,0.8)" : "#9CA3AF" }}
-              >
-                {countByCategory.get(cat.id) || 0}
-              </div>
-            </button>
-          );
-        })}
-      </aside>
+    <div className="flex flex-col h-full bg-gray-50">
+      {/* Top bar — search + breadcrumb */}
+      <div className="flex items-center gap-3 px-5 py-4 bg-white border-b border-gray-200 flex-shrink-0">
+        {showProducts && !isSearching && (
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className="flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 font-semibold text-sm transition-colors"
+            aria-label="Tornar a categories"
+          >
+            <span className="text-lg leading-none">&#8592;</span>
+            <span>Categories</span>
+          </button>
+        )}
 
-      {/* Main area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Search bar */}
-        <div className="p-3 border-b border-gray-100 bg-white flex-shrink-0">
-          <div className="relative">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cercar producte..."
-              className="w-full pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pink-400 focus:bg-white"
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-              &#128269;
-            </span>
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200"
-              >
-                &#10005;
-              </button>
-            )}
-          </div>
+        {selectedCategory && !isSearching && (
+          <>
+            <span className="text-gray-300">/</span>
+            <div className="flex items-center gap-2">
+              <span
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: selectedCategory.color }}
+              />
+              <h2 className="text-lg font-bold text-gray-800">{selectedCategory.name}</h2>
+              <span className="text-sm text-gray-400">
+                ({countByCategory.get(selectedCategory.id) || 0})
+              </span>
+            </div>
+          </>
+        )}
+
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cercar producte..."
+            className="w-full pl-10 pr-10 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 focus:bg-white transition-all"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+            &#128269;
+          </span>
           {search && (
-            <p className="text-xs text-gray-500 mt-1.5">
-              {filtered.length} resultat{filtered.length !== 1 ? "s" : ""}
-            </p>
-          )}
-        </div>
-
-        {/* Product grid */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {filtered.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-400">
-              <div className="text-center">
-                <p className="text-4xl mb-2">&#128269;</p>
-                <p className="text-lg font-semibold">Cap producte</p>
-                {search && (
-                  <p className="text-sm mt-1">Prova amb un altre text</p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-              {filtered.map((product) => {
-                const color = product.category_color || "#6B7280";
-                const isFlashing = flashId === product.id;
-                return (
-                  <button
-                    key={product.id}
-                    onClick={() => handleAdd(product)}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 active:scale-95 transition-all min-h-[90px] ${
-                      isFlashing
-                        ? "border-green-500 scale-95"
-                        : "border-transparent hover:border-gray-300 hover:shadow-md"
-                    }`}
-                    style={{
-                      backgroundColor: isFlashing ? "#D1FAE5" : hexToRgba(color, 0.12),
-                    }}
-                  >
-                    <span className="text-sm font-bold text-gray-800 text-center leading-tight line-clamp-2">
-                      {product.name}
-                    </span>
-                    <span
-                      className="mt-1.5 text-base font-black"
-                      style={{ color }}
-                    >
-                      {Number(product.price).toFixed(2)}&euro;
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200"
+              aria-label="Esborrar cerca"
+            >
+              &#10005;
+            </button>
           )}
         </div>
       </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-5">
+        {!showProducts ? (
+          <CategoryGrid
+            categories={categories}
+            counts={countByCategory}
+            onSelect={setSelectedCategory}
+            totalProducts={products.length}
+            onSelectAll={() => {
+              // Pseudo-category for "all products" — no color, no id match.
+              setSelectedCategory({ id: -1, name: "Tots els productes", sort_order: 0, color: "#374151" });
+            }}
+          />
+        ) : (
+          <ProductsGrid
+            products={
+              selectedCategory && selectedCategory.id === -1 && !isSearching
+                ? products
+                : filtered
+            }
+            flashId={flashId}
+            onAdd={handleAdd}
+            isSearching={isSearching}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// =====================================================================
+// Category overview — Square-style large tiles
+// =====================================================================
+
+function CategoryGrid({
+  categories,
+  counts,
+  totalProducts,
+  onSelect,
+  onSelectAll,
+}: {
+  categories: Category[];
+  counts: Map<number, number>;
+  totalProducts: number;
+  onSelect: (cat: Category) => void;
+  onSelectAll: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      {/* "Tots" tile */}
+      <button
+        onClick={onSelectAll}
+        className="group flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all min-h-[140px]"
+      >
+        <div className="h-2 bg-gray-800" />
+        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+          <span className="text-3xl mb-2">&#128722;</span>
+          <span className="text-base font-bold text-gray-800 leading-tight">
+            Tots els productes
+          </span>
+          <span className="text-sm text-gray-400 mt-1">{totalProducts}</span>
+        </div>
+      </button>
+
+      {categories.map((cat) => (
+        <button
+          key={cat.id}
+          onClick={() => onSelect(cat)}
+          className="group flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all min-h-[140px]"
+          style={{
+            // Subtle tinted background using the category color.
+            backgroundColor: hexToRgba(cat.color, 0.06),
+          }}
+        >
+          <div className="h-2" style={{ backgroundColor: cat.color }} />
+          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+            <span
+              className="text-base font-bold leading-tight"
+              style={{ color: cat.color }}
+            >
+              {cat.name}
+            </span>
+            <span className="text-sm text-gray-500 mt-1">
+              {counts.get(cat.id) || 0} producte{(counts.get(cat.id) || 0) !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// =====================================================================
+// Products grid — clean white cards with color accent
+// =====================================================================
+
+function ProductsGrid({
+  products,
+  flashId,
+  onAdd,
+  isSearching,
+}: {
+  products: Product[];
+  flashId: number | null;
+  onAdd: (p: Product) => void;
+  isSearching: boolean;
+}) {
+  if (products.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-gray-400">
+        <div className="text-center">
+          <p className="text-5xl mb-3">&#128269;</p>
+          <p className="text-lg font-semibold">Cap producte</p>
+          {isSearching && (
+            <p className="text-sm mt-1">Prova amb un altre text</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+      {products.map((product) => {
+        const color = product.category_color || "#6B7280";
+        const isFlashing = flashId === product.id;
+        return (
+          <button
+            key={product.id}
+            onClick={() => onAdd(product)}
+            className={`group flex flex-col bg-white rounded-2xl border overflow-hidden active:scale-[0.97] transition-all min-h-[110px] ${
+              isFlashing
+                ? "border-green-500 ring-2 ring-green-200"
+                : "border-gray-200 hover:shadow-md hover:-translate-y-0.5"
+            }`}
+          >
+            {/* Color stripe */}
+            <div
+              className="h-1.5"
+              style={{ backgroundColor: isFlashing ? "#10B981" : color }}
+            />
+            {/* Body */}
+            <div className="flex-1 flex flex-col justify-between p-3">
+              <span className="text-sm font-bold text-gray-800 text-left leading-snug line-clamp-2">
+                {product.name}
+              </span>
+              <div className="flex items-baseline justify-between mt-2">
+                <span
+                  className="text-lg font-black tabular-nums"
+                  style={{ color: isFlashing ? "#10B981" : "#111827" }}
+                >
+                  {Number(product.price).toFixed(2)}
+                  <span className="text-sm font-bold ml-0.5">€</span>
+                </span>
+                {isFlashing && (
+                  <span className="text-green-600 text-xl leading-none">&#10003;</span>
+                )}
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
