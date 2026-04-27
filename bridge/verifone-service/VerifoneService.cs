@@ -18,7 +18,10 @@ class VerifoneService
     static readonly object txLock = new object();
     static bool transactionInProgress = false;
     static string currentStatus = "idle";
-    static string currentOperation = ""; // "sale" | "refund" | "cancel"
+    static string currentOperation = ""; // "sale" | "refund" | "cancel" | "query"
+    // Set by /abort to ask the polling loop to bail out early. volatile so the
+    // worker thread sees the change immediately without a memory barrier.
+    static volatile bool abortRequested = false;
 
     static string comercio;
     static string terminal;
@@ -145,6 +148,10 @@ class VerifoneService
             {
                 HandleOperation(req, res, OP_QUERY, "query");
             }
+            else if (path == "/abort" && method == "POST")
+            {
+                HandleAbort(res);
+            }
             else if (path == "/charge/status" && method == "GET")
             {
                 Respond(res, 200, json.Serialize(new {
@@ -187,6 +194,7 @@ class VerifoneService
             transactionInProgress = true;
             currentStatus = isQuery ? "querying" : "waiting_card";
             currentOperation = opName;
+            abortRequested = false; // fresh slate for this operation
         }
 
         try
@@ -263,6 +271,19 @@ class VerifoneService
             {
                 Thread.Sleep(500);
 
+                // Operator-initiated abort (POST /abort came in on another thread).
+                // We've already asked the ActiveX to cancel; just exit the poll.
+                if (abortRequested)
+                {
+                    currentStatus = "aborted";
+                    Respond(res, 200, json.Serialize(new {
+                        success = false,
+                        operation = opName,
+                        error = "Operacio cancel.lada per l'operador"
+                    }));
+                    return;
+                }
+
                 int fin = 0;
                 try { fin = pinpad.FinTransaccion; } catch { }
 
@@ -331,6 +352,52 @@ class VerifoneService
                 currentOperation = "";
             }
         }
+    }
+
+    /// <summary>
+    /// Cancels the in-flight operation. Tells the datafono to stop waiting
+    /// for the card (CancelaOperacion ActiveX call) AND sets a flag so the
+    /// polling worker bails out as soon as it wakes up.
+    /// Idempotent: calling /abort when nothing is in flight is a no-op.
+    /// </summary>
+    static void HandleAbort(HttpListenerResponse res)
+    {
+        if (!transactionInProgress)
+        {
+            Respond(res, 200, json.Serialize(new {
+                success = false,
+                error = "No hi ha cap transaccio en curs"
+            }));
+            return;
+        }
+
+        // Try the native cancel first — if the ActiveX exposes it, this stops
+        // the datafono immediately. The exact method name in REDSYS TPV-PC is
+        // CancelaOperacion(); some firmwares may also accept CancelaTransaccion.
+        // Both are best-effort; if neither exists, the polling loop still exits
+        // when it sees abortRequested = true.
+        bool cancelOk = false;
+        try
+        {
+            pinpad.CancelaOperacion();
+            cancelOk = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[Verifone] CancelaOperacion lan�o excepcion: " + ex.Message);
+        }
+
+        abortRequested = true;
+        currentStatus = "aborting";
+
+        Console.WriteLine("[Verifone] Abort sol.licitat (CancelaOperacion="
+            + (cancelOk ? "OK" : "fail") + ")");
+
+        Respond(res, 200, json.Serialize(new {
+            success = true,
+            cancelled = cancelOk,
+            message = "Cancel.lacio sol.licitada"
+        }));
     }
 
     static void Respond(HttpListenerResponse res, int status, string body)

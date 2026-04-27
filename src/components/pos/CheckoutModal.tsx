@@ -6,6 +6,7 @@ import {
   chargeCashlogy,
   chargeIngenico,
   cancelCashlogy,
+  abortIngenico,
   getCashlogyChargeStatus,
   printTicket,
   printKitchenTicket,
@@ -52,6 +53,7 @@ export default function CheckoutModal({
   // Card receipt text held until we ask the customer if they want a copy.
   const [pendingCustomerReceipt, setPendingCustomerReceipt] = useState<string | null>(null);
   const [printingCustomerCopy, setPrintingCustomerCopy] = useState(false);
+  const [aborting, setAborting] = useState(false);
   const demoIdRef = useRef(Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -485,12 +487,29 @@ export default function CheckoutModal({
           <div className="text-center py-8">
             <div className="animate-spin w-16 h-16 border-4 border-gray-200 border-t-blue-500 rounded-full mx-auto mb-6" />
             <p className="text-xl font-semibold text-gray-700">
-              Passi la targeta al datàfon...
+              {aborting ? "Cancel·lant operació..." : "Passi la targeta al datàfon..."}
             </p>
             <p className="text-gray-500 mt-2">{total.toFixed(2)} &euro;</p>
             {tableNumber && (
               <p className="text-pink-500 mt-1 font-medium">Taula {tableNumber}</p>
             )}
+            <button
+              onClick={async () => {
+                setAborting(true);
+                // The /charge request is still pending in chargeIngenico above —
+                // /abort travels on a separate connection and signals the
+                // VerifoneService polling thread to bail out, which then resolves
+                // the original /charge with success: false and we transition to
+                // the error step normally.
+                await abortIngenico().catch(() => {});
+                // Don't reset aborting — the original promise will land in error
+                // state and the component will close/re-open from there.
+              }}
+              disabled={aborting}
+              className="mt-6 px-6 py-3 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-semibold disabled:opacity-50 transition-colors"
+            >
+              {aborting ? "Cancel·lant..." : "Cancel·lar pagament"}
+            </button>
           </div>
         )}
 

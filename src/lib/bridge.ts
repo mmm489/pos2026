@@ -107,6 +107,28 @@ export async function refundIngenico(
 }
 
 /**
+ * Abort an in-flight card operation. Tells the datáfono to stop waiting for
+ * the card and signals the polling loop to bail out. Short timeout — this
+ * should be near-instant and is fire-and-forget from the UI's perspective.
+ */
+export async function abortIngenico(): Promise<{ success: boolean; cancelled?: boolean; error?: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/abort`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+    });
+    return (await res.json()) as { success: boolean; cancelled?: boolean; error?: string };
+  } catch {
+    return { success: false, error: "Error de conexión con el datáfono" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Read-only consultation: ask the datáfono what REDSYS recorded for a given reference.
  * Use this to recover from crashes mid-payment when the local order state is uncertain.
  * Does NOT modify any local state — caller decides what to do with the result.

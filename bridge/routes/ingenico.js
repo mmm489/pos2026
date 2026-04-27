@@ -99,6 +99,33 @@ async function handleIngenicoQuery(req, res) {
   return res.json(data);
 }
 
+/**
+ * Cancel an in-flight card operation (sale/refund/cancel/query). Used when the
+ * cashier needs to abort because the customer changed their mind or the queue
+ * needs to move on. Short timeout — abort should be near-instant.
+ */
+async function handleIngenicoAbort(_req, res) {
+  console.log("[Verifone] Abort sol.licitat des del POS");
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    const response = await fetch(`${VERIFONE_URL}/abort`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await response.json().catch(() => ({}));
+    return res.json(data);
+  } catch (err) {
+    return res.json({
+      success: false,
+      error: `No s'ha pogut contactar amb VerifoneService: ${err.message}`,
+    });
+  }
+}
+
 async function handleVerifoneStatus(_req, res) {
   try {
     const response = await fetch(`${VERIFONE_URL}/charge/status`);
@@ -124,6 +151,7 @@ module.exports = {
   handleIngenicoRefund,
   handleIngenicoCancel,
   handleIngenicoQuery,
+  handleIngenicoAbort,
   handleVerifoneStatus,
   handleVerifoneHealth,
 };

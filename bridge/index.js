@@ -7,6 +7,7 @@ const {
   handleIngenicoRefund,
   handleIngenicoCancel,
   handleIngenicoQuery,
+  handleIngenicoAbort,
   handleVerifoneStatus,
   handleVerifoneHealth,
 } = require("./routes/ingenico");
@@ -48,6 +49,7 @@ app.post("/ingenico/charge", handleIngenicoCharge);
 app.post("/ingenico/refund", handleIngenicoRefund);
 app.post("/ingenico/cancel", handleIngenicoCancel);
 app.post("/ingenico/query", handleIngenicoQuery);
+app.post("/ingenico/abort", handleIngenicoAbort);
 app.get("/ingenico/status", handleVerifoneStatus);
 app.get("/ingenico/health", handleVerifoneHealth);
 app.post("/printer/ticket", handlePrintTicket);
