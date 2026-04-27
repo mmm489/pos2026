@@ -137,6 +137,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS cash_closings_immutable ON pos.cash_closings;
+-- EXECUTE PROCEDURE for compatibility with PostgreSQL 9.6 (heladería server).
+-- On PG 11+ both PROCEDURE and FUNCTION work for trigger functions.
 CREATE TRIGGER cash_closings_immutable
   BEFORE UPDATE OR DELETE ON pos.cash_closings
-  FOR EACH ROW EXECUTE FUNCTION pos.prevent_z_mutation();
+  FOR EACH ROW EXECUTE PROCEDURE pos.prevent_z_mutation();

@@ -37,15 +37,27 @@ export default function CashClosingModal({
   onComplete,
 }: CashClosingModalProps) {
   const [data, setData] = useState<CashClosingData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
     fetch(`/api/pos/cash-closing?employee_id=${employeeId}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setData(d);
+      .then(async (r) => {
+        const body = await r.json().catch(() => ({} as Record<string, unknown>));
+        if (!r.ok || (body as { error?: string }).error) {
+          setLoadError(
+            (body as { error?: string }).error ||
+              `No s'han pogut carregar les dades (HTTP ${r.status})`
+          );
+        } else {
+          setData(body as CashClosingData);
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        setLoadError(err.message || "Error de connexió");
         setLoading(false);
       });
   }, [employeeId]);
@@ -72,15 +84,40 @@ export default function CashClosingModal({
     }
   };
 
-  if (loading || !data) {
+  if (loading) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div className="bg-white rounded-3xl p-8 w-full max-w-2xl">
-          <p className="text-center text-gray-500">Cargando datos...</p>
+          <p className="text-center text-gray-500">Carregant dades...</p>
         </div>
       </div>
     );
   }
+
+  if (loadError || !data) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-3xl p-8 w-full max-w-md mx-4 shadow-2xl">
+          <h2 className="text-xl font-bold text-gray-800 mb-2">No es pot tancar caixa</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            {loadError || "Resposta inesperada del servidor."}
+          </p>
+          <p className="text-xs text-gray-500 mb-4">
+            Si és la primera vegada, executa <code className="bg-gray-100 px-1">scripts/migrate-v4.sql</code> a la BD.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold"
+          >
+            Tancar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Defensive numeric coercion — server numbers may be strings (NUMERIC) or undefined.
+  const n = (v: unknown): number => Number(v ?? 0);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-8">
@@ -106,19 +143,19 @@ export default function CashClosingModal({
           <div className="bg-green-50 rounded-xl p-4 text-center">
             <p className="text-sm text-green-600 font-medium">Efectivo</p>
             <p className="text-2xl font-bold text-green-700">
-              {data.total_cash.toFixed(2)} &euro;
+              {n(data.total_cash).toFixed(2)} &euro;
             </p>
           </div>
           <div className="bg-blue-50 rounded-xl p-4 text-center">
             <p className="text-sm text-blue-600 font-medium">Tarjeta</p>
             <p className="text-2xl font-bold text-blue-700">
-              {data.total_card.toFixed(2)} &euro;
+              {n(data.total_card).toFixed(2)} &euro;
             </p>
           </div>
           <div className="bg-gray-50 rounded-xl p-4 text-center">
             <p className="text-sm text-gray-600 font-medium">Total</p>
             <p className="text-2xl font-bold text-gray-800">
-              {data.total_sales.toFixed(2)} &euro;
+              {n(data.total_sales).toFixed(2)} &euro;
             </p>
           </div>
         </div>
@@ -127,22 +164,22 @@ export default function CashClosingModal({
         <div className="flex gap-6 mb-6 text-center">
           <div>
             <p className="text-sm text-gray-500">Tickets</p>
-            <p className="text-xl font-bold text-gray-800">{data.ticket_count}</p>
+            <p className="text-xl font-bold text-gray-800">{data.ticket_count ?? 0}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Ticket medio</p>
             <p className="text-xl font-bold text-gray-800">
-              {data.ticket_medio.toFixed(2)} &euro;
+              {n(data.ticket_medio).toFixed(2)} &euro;
             </p>
           </div>
-          {data.cancelled_count > 0 && (
+          {(data.cancelled_count ?? 0) > 0 && (
             <div>
               <p className="text-sm text-red-500">Anul·lacions</p>
               <p className="text-xl font-bold text-red-600">
                 {data.cancelled_count}
               </p>
               <p className="text-xs text-red-400">
-                {data.total_refunded.toFixed(2)} &euro; tornats
+                {n(data.total_refunded).toFixed(2)} &euro; tornats
               </p>
             </div>
           )}
@@ -165,16 +202,16 @@ export default function CashClosingModal({
                 {Object.entries(data.vat_breakdown).map(([rate, e]) => (
                   <tr key={rate} className="border-t border-gray-200">
                     <td className="px-3 py-1.5">IVA {rate}%</td>
-                    <td className="text-right px-3 py-1.5">{Number(e.base).toFixed(2)} €</td>
-                    <td className="text-right px-3 py-1.5">{Number(e.vat).toFixed(2)} €</td>
-                    <td className="text-right px-3 py-1.5 font-medium">{Number(e.total).toFixed(2)} €</td>
+                    <td className="text-right px-3 py-1.5">{n(e.base).toFixed(2)} €</td>
+                    <td className="text-right px-3 py-1.5">{n(e.vat).toFixed(2)} €</td>
+                    <td className="text-right px-3 py-1.5 font-medium">{n(e.total).toFixed(2)} €</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-gray-300 bg-white font-semibold">
                   <td className="px-3 py-1.5">TOTAL</td>
-                  <td className="text-right px-3 py-1.5">{data.total_base.toFixed(2)} €</td>
-                  <td className="text-right px-3 py-1.5">{data.total_vat.toFixed(2)} €</td>
-                  <td className="text-right px-3 py-1.5">{data.total_sales.toFixed(2)} €</td>
+                  <td className="text-right px-3 py-1.5">{n(data.total_base).toFixed(2)} €</td>
+                  <td className="text-right px-3 py-1.5">{n(data.total_vat).toFixed(2)} €</td>
+                  <td className="text-right px-3 py-1.5">{n(data.total_sales).toFixed(2)} €</td>
                 </tr>
               </tbody>
             </table>
@@ -182,14 +219,14 @@ export default function CashClosingModal({
         )}
 
         {/* By employee */}
-        {data.by_employee.length > 0 && (
+        {(data.by_employee?.length ?? 0) > 0 && (
           <div className="mb-6">
             <h3 className="text-sm font-semibold text-gray-600 mb-2">Por empleado</h3>
             <div className="bg-gray-50 rounded-xl p-3 space-y-1">
               {data.by_employee.map((e) => (
                 <div key={e.name} className="flex justify-between text-sm">
                   <span className="text-gray-700">{e.name} ({e.tickets} tickets)</span>
-                  <span className="font-semibold">{e.total.toFixed(2)} &euro;</span>
+                  <span className="font-semibold">{n(e.total).toFixed(2)} &euro;</span>
                 </div>
               ))}
             </div>
@@ -197,7 +234,7 @@ export default function CashClosingModal({
         )}
 
         {/* Top products */}
-        {data.top_products.length > 0 && (
+        {(data.top_products?.length ?? 0) > 0 && (
           <div className="mb-6">
             <h3 className="text-sm font-semibold text-gray-600 mb-2">
               Productos más vendidos
@@ -208,7 +245,7 @@ export default function CashClosingModal({
                   <span className="text-gray-700">
                     {p.qty}x {p.name}
                   </span>
-                  <span className="font-semibold">{p.revenue.toFixed(2)} &euro;</span>
+                  <span className="font-semibold">{n(p.revenue).toFixed(2)} &euro;</span>
                 </div>
               ))}
             </div>
