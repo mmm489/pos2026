@@ -276,8 +276,7 @@ async function handlePrintCardReceipt(req, res) {
   if (!receipt || typeof receipt !== "string") {
     return res.status(400).json({ success: false, error: "Falta receipt" });
   }
-  const isMerchant = copy === "merchant";
-  const copyLabel = isMerchant ? "COPIA COMERC" : "COPIA CLIENT";
+  const copyLabel = copy === "merchant" ? "COPIA COMERC" : "COPIA CLIENT";
 
   try {
     const printer = createReceiptPrinter();
@@ -289,19 +288,13 @@ async function handlePrintCardReceipt(req, res) {
     printer.bold(false);
     printer.drawLine();
 
-    // Render the raw receipt text (datáfono already formatted it).
-    // The library expects line-by-line printing for monospace alignment.
+    // Render the raw receipt text (datáfono already formatted it, including
+    // a signature line ONLY when REDSYS deems it necessary — e.g. mag stripe
+    // or fallback. PIN/contactless transactions don't need signature, so we
+    // don't add one ourselves; trust the receipt text as-is.
     printer.alignLeft();
     for (const line of receipt.split(/\r?\n/)) {
       printer.println(line);
-    }
-
-    if (isMerchant) {
-      printer.newLine();
-      printer.alignCenter();
-      printer.println("Signatura del client:");
-      printer.newLine();
-      printer.println("________________________");
     }
 
     printer.newLine();
