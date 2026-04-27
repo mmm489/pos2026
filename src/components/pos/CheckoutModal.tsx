@@ -9,6 +9,7 @@ import {
   getCashlogyChargeStatus,
   printTicket,
   printKitchenTicket,
+  printCardReceipt,
 } from "@/lib/bridge";
 import { broadcastNewOrder } from "@/lib/demo-channel";
 import { Business } from "@/types/pos";
@@ -255,6 +256,18 @@ export default function CheckoutModal({
         tableNumber: tableNumber || undefined,
         items: items.map((i) => ({ name: i.name, qty: i.qty, notes: i.notes })),
       }).catch(() => {});
+
+      // Card payments: print the bank receipt (merchant + customer copies).
+      // Verifone P400 ENGAGE has no built-in printer, so REDSYS returns the
+      // formatted receipt as text via paymentResult.receipt.
+      const cardReceipt =
+        paymentMethod === "card" && "receipt" in paymentResult
+          ? (paymentResult as { receipt?: string }).receipt
+          : null;
+      if (cardReceipt) {
+        printCardReceipt(cardReceipt, "merchant", order.order_number).catch(() => {});
+        printCardReceipt(cardReceipt, "customer", order.order_number).catch(() => {});
+      }
 
       setStep("success");
     } catch {

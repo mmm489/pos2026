@@ -265,6 +265,65 @@ async function handlePrintKitchenTicket(req, res) {
   }
 }
 
+/**
+ * Print the bank receipt returned by the datáfono (DatosRecibo from REDSYS).
+ * The Verifone P400 ENGAGE has no built-in printer, so we render the receipt
+ * text on the same Epson TM-m30. Two copies are typically printed: merchant
+ * (with signature line) and customer.
+ */
+async function handlePrintCardReceipt(req, res) {
+  const { receipt, copy, orderNumber } = req.body || {};
+  if (!receipt || typeof receipt !== "string") {
+    return res.status(400).json({ success: false, error: "Falta receipt" });
+  }
+  const isMerchant = copy === "merchant";
+  const copyLabel = isMerchant ? "COPIA COMERC" : "COPIA CLIENT";
+
+  try {
+    const printer = createReceiptPrinter();
+    const isConnected = await printer.isPrinterConnected();
+
+    printer.alignCenter();
+    printer.bold(true);
+    printer.println(copyLabel);
+    printer.bold(false);
+    printer.drawLine();
+
+    // Render the raw receipt text (datáfono already formatted it).
+    // The library expects line-by-line printing for monospace alignment.
+    printer.alignLeft();
+    for (const line of receipt.split(/\r?\n/)) {
+      printer.println(line);
+    }
+
+    if (isMerchant) {
+      printer.newLine();
+      printer.alignCenter();
+      printer.println("Signatura del client:");
+      printer.newLine();
+      printer.println("________________________");
+    }
+
+    printer.newLine();
+    printer.alignCenter();
+    printer.println(`-- ${copyLabel} --`);
+    printer.newLine();
+    printer.cut();
+
+    if (isConnected) {
+      await printer.execute();
+      console.log(`[Printer] Rebut bancari (${copyLabel}) imprès${orderNumber ? ` per ${orderNumber}` : ""}`);
+    } else {
+      console.log(`[Printer] Rebut bancari generat sense impressora (${copyLabel})`);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[Printer card-receipt] Error:", err.message);
+    logPrintError("card-receipt", { orderNumber, total: 0, items: [] }, err);
+    return res.json({ success: false, error: err.message });
+  }
+}
+
 async function handlePrintZReport(req, res) {
   const c = req.body || {};
   if (!c.z_label || c.total_sales === undefined) {
@@ -388,4 +447,9 @@ async function handlePrintZReport(req, res) {
   }
 }
 
-module.exports = { handlePrintTicket, handlePrintKitchenTicket, handlePrintZReport };
+module.exports = {
+  handlePrintTicket,
+  handlePrintKitchenTicket,
+  handlePrintCardReceipt,
+  handlePrintZReport,
+};

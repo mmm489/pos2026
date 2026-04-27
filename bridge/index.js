@@ -10,7 +10,12 @@ const {
   handleVerifoneStatus,
   handleVerifoneHealth,
 } = require("./routes/ingenico");
-const { handlePrintTicket, handlePrintKitchenTicket, handlePrintZReport } = require("./routes/printer");
+const {
+  handlePrintTicket,
+  handlePrintKitchenTicket,
+  handlePrintCardReceipt,
+  handlePrintZReport,
+} = require("./routes/printer");
 
 const app = express();
 const PORT = process.env.PORT || 3006;
@@ -47,6 +52,7 @@ app.get("/ingenico/status", handleVerifoneStatus);
 app.get("/ingenico/health", handleVerifoneHealth);
 app.post("/printer/ticket", handlePrintTicket);
 app.post("/printer/kitchen", handlePrintKitchenTicket);
+app.post("/printer/card-receipt", handlePrintCardReceipt);
 app.post("/printer/z-report", handlePrintZReport);
 
 app.listen(PORT, () => {

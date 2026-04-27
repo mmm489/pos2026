@@ -237,6 +237,32 @@ export async function printKitchenTicket(data: {
 }
 
 /**
+ * Print a bank card receipt (DatosRecibo from REDSYS) on the receipt printer.
+ * Two copies should be printed for every approved card sale: merchant + customer.
+ */
+export async function printCardReceipt(
+  receipt: string,
+  copy: "merchant" | "customer",
+  orderNumber?: string
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/printer/card-receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ receipt, copy, orderNumber }),
+      signal: controller.signal,
+    });
+    return (await res.json()) as { success: boolean; error?: string };
+  } catch {
+    return { success: false, error: "Error de conexión con la impresora" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Print a Z closing report. Format is different from a regular ticket
  * (no items, has VAT breakdown table, invoice range, signature line).
  */
