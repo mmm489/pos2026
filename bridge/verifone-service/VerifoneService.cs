@@ -9,19 +9,27 @@ using AXTPVPCPINPADWSLib;
 /// <summary>
 /// HTTP wrapper for REDSYS AxTpvpcPinPadWS ActiveX.
 /// Exposes card payment via REST on port 3007.
+/// Operations: charge (sale), refund, cancel.
 /// </summary>
 class VerifoneService
 {
     static TpvpcPinPadClass pinpad;
     static JavaScriptSerializer json = new JavaScriptSerializer();
+    static readonly object txLock = new object();
     static bool transactionInProgress = false;
     static string currentStatus = "idle";
+    static string currentOperation = ""; // "sale" | "refund" | "cancel"
 
     static string comercio;
     static string terminal;
     static string claveFirma;
     static string urlWsdl;
     static string portConfig;
+
+    // REDSYS TipoOperacion codes
+    const string OP_SALE = "0";
+    const string OP_REFUND = "3";
+    const string OP_CANCEL = "9"; // Anulación
 
     static void Main(string[] args)
     {
@@ -81,6 +89,7 @@ class VerifoneService
         Directory.CreateDirectory(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs"));
 
         var listener = new HttpListener();
+        // Bind only to loopback for security — POS and bridge run on the same machine.
         listener.Prefixes.Add(string.Format("http://localhost:{0}/", port));
         listener.Prefixes.Add(string.Format("http://127.0.0.1:{0}/", port));
         listener.Start();
@@ -101,7 +110,8 @@ class VerifoneService
         string path = req.Url.AbsolutePath;
         string method = req.HttpMethod;
 
-        res.Headers.Add("Access-Control-Allow-Origin", "*");
+        // Restrict CORS to loopback origin only (bridge on same host).
+        res.Headers.Add("Access-Control-Allow-Origin", "http://127.0.0.1:3006");
         res.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
         res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
 
@@ -119,11 +129,23 @@ class VerifoneService
             }
             else if (path == "/charge" && method == "POST")
             {
-                HandleCharge(req, res);
+                HandleOperation(req, res, OP_SALE, "sale");
+            }
+            else if (path == "/refund" && method == "POST")
+            {
+                HandleOperation(req, res, OP_REFUND, "refund");
+            }
+            else if (path == "/cancel" && method == "POST")
+            {
+                HandleOperation(req, res, OP_CANCEL, "cancel");
             }
             else if (path == "/charge/status" && method == "GET")
             {
-                Respond(res, 200, json.Serialize(new { active = transactionInProgress, status = currentStatus }));
+                Respond(res, 200, json.Serialize(new {
+                    active = transactionInProgress,
+                    status = currentStatus,
+                    operation = currentOperation
+                }));
             }
             else
             {
@@ -137,39 +159,70 @@ class VerifoneService
         }
     }
 
-    static void HandleCharge(HttpListenerRequest req, HttpListenerResponse res)
+    /// <summary>
+    /// Handles SALE / REFUND / CANCEL operations. All three use TrataPeticionOperacion with a different TipoOperacion.
+    /// Body: { amount: number, orderId?: string, originalReference?: string }
+    /// - SALE: amount required.
+    /// - REFUND/CANCEL: amount + originalReference (the factura/reference of the original sale).
+    /// </summary>
+    static void HandleOperation(HttpListenerRequest req, HttpListenerResponse res, string tipoOperacion, string opName)
     {
-        if (transactionInProgress)
+        // Atomic check-and-set so concurrent requests cannot both pass the guard.
+        lock (txLock)
         {
-            Respond(res, 409, json.Serialize(new { success = false, error = "Ja hi ha una transaccio en curs" }));
-            return;
+            if (transactionInProgress)
+            {
+                Respond(res, 409, json.Serialize(new { success = false, error = "Ja hi ha una transaccio en curs" }));
+                return;
+            }
+            transactionInProgress = true;
+            currentStatus = "waiting_card";
+            currentOperation = opName;
         }
-
-        string body;
-        using (var reader = new StreamReader(req.InputStream, Encoding.UTF8))
-            body = reader.ReadToEnd();
-
-        var data = json.Deserialize<System.Collections.Generic.Dictionary<string, object>>(body);
-        if (data == null || !data.ContainsKey("amount"))
-        {
-            Respond(res, 400, json.Serialize(new { success = false, error = "Falta amount" }));
-            return;
-        }
-
-        decimal amount = Convert.ToDecimal(data["amount"]);
-        int amountCents = (int)Math.Round(amount * 100);
-        string importeRedsys = amountCents.ToString("D12");
-        string factura = DateTime.Now.ToString("yyyyMMddHHmmss");
-
-        Console.WriteLine(string.Format("[Verifone] Cobrant: {0:F2} EUR (REDSYS: {1})", amount, importeRedsys));
-
-        transactionInProgress = true;
-        currentStatus = "waiting_card";
 
         try
         {
-            // Start payment — TipoOperacion "0" = venta, Moneda "978" = EUR
-            string callResult = pinpad.TrataPeticionOperacion(importeRedsys, "978", factura, "0", "");
+            string body;
+            using (var reader = new StreamReader(req.InputStream, Encoding.UTF8))
+                body = reader.ReadToEnd();
+
+            var data = json.Deserialize<System.Collections.Generic.Dictionary<string, object>>(body);
+            if (data == null || !data.ContainsKey("amount"))
+            {
+                Respond(res, 400, json.Serialize(new { success = false, error = "Falta amount" }));
+                return;
+            }
+
+            decimal amount = Convert.ToDecimal(data["amount"]);
+            int amountCents = (int)Math.Round(amount * 100);
+            string importeRedsys = amountCents.ToString("D12");
+
+            // Use orderId if provided so transactions are reconcilable on the Comercia portal.
+            // factura must be ≤ 12 chars typically; we truncate to 12 to be safe.
+            string factura;
+            if (data.ContainsKey("orderId") && data["orderId"] != null)
+            {
+                string oid = data["orderId"].ToString();
+                factura = oid.Length > 12 ? oid.Substring(0, 12) : oid;
+            }
+            else
+            {
+                factura = DateTime.Now.ToString("yyyyMMddHHmmss").Substring(0, 12);
+            }
+
+            // For refunds and cancels, REDSYS may require the original reference.
+            string originalRef = "";
+            if (data.ContainsKey("originalReference") && data["originalReference"] != null)
+            {
+                originalRef = data["originalReference"].ToString();
+            }
+
+            Console.WriteLine(string.Format("[Verifone] {0}: {1:F2} EUR (factura: {2}, orig: {3})",
+                opName.ToUpper(), amount, factura, originalRef));
+
+            // TrataPeticionOperacion(importe, moneda, factura, tipoOperacion, datosAdicionales)
+            // Moneda 978 = EUR
+            string callResult = pinpad.TrataPeticionOperacion(importeRedsys, "978", factura, tipoOperacion, originalRef);
             Console.WriteLine("[Verifone] TrataPeticionOperacion: " + callResult);
 
             // Poll FinTransaccion property until done or timeout
@@ -186,9 +239,11 @@ class VerifoneService
                     string resultado = "";
                     string codigoResp = "";
                     string recibo = "";
+                    string codAutorizacion = "";
                     try { resultado = pinpad.Resultado ?? ""; } catch { }
                     try { codigoResp = pinpad.CodigoRespuesta ?? ""; } catch { }
                     try { recibo = pinpad.DatosRecibo ?? ""; } catch { }
+                    try { codAutorizacion = pinpad.CodigoAutorizacion ?? ""; } catch { }
 
                     bool approved = !string.IsNullOrEmpty(codigoResp) &&
                         (codigoResp.StartsWith("000") || codigoResp == "0000" || codigoResp == "00");
@@ -198,10 +253,14 @@ class VerifoneService
 
                     Respond(res, 200, json.Serialize(new {
                         success = approved,
+                        operation = opName,
                         result = resultado,
                         responseCode = codigoResp,
+                        authorizationCode = codAutorizacion,
+                        reference = factura,
+                        // Keep receipt minimal — full receipt may include cardholder data.
                         receipt = recibo,
-                        error = approved ? (string)null : (resultado != "" ? resultado : "Pagament denegat")
+                        error = approved ? (string)null : (resultado != "" ? resultado : (opName + " denegat"))
                     }));
                     return;
                 }
@@ -217,7 +276,7 @@ class VerifoneService
 
             // Timeout
             currentStatus = "error";
-            Respond(res, 200, json.Serialize(new { success = false, error = "Timeout: el datafon no ha respost" }));
+            Respond(res, 200, json.Serialize(new { success = false, operation = opName, error = "Timeout: el datafon no ha respost" }));
         }
         catch (Exception ex)
         {
@@ -227,13 +286,18 @@ class VerifoneService
             currentStatus = "error";
             Respond(res, 200, json.Serialize(new {
                 success = false,
+                operation = opName,
                 error = string.IsNullOrEmpty(lastErr) ? ex.Message : lastErr
             }));
         }
         finally
         {
-            transactionInProgress = false;
-            currentStatus = "idle";
+            lock (txLock)
+            {
+                transactionInProgress = false;
+                currentStatus = "idle";
+                currentOperation = "";
+            }
         }
     }
 

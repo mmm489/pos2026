@@ -37,22 +37,95 @@ export async function chargeCashlogy(amount: number) {
   }
 }
 
-export async function chargeIngenico(amount: number) {
+export interface IngenicoResult {
+  success: boolean;
+  operation?: "sale" | "refund" | "cancel";
+  // Reference (factura) sent to REDSYS — store this to enable later refund/cancel.
+  reference?: string;
+  responseCode?: string;
+  authorizationCode?: string;
+  result?: string;
+  receipt?: string;
+  // Legacy field kept for compatibility — same value as reference.
+  transactionId?: string;
+  error?: string;
+}
+
+// Frontend timeout must be longer than bridge (135s) and service (120s).
+const INGENICO_TIMEOUT_MS = 150_000;
+
+export async function chargeIngenico(amount: number, orderId?: string): Promise<IngenicoResult> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
 
   try {
     const res = await fetch(`${BRIDGE_URL}/ingenico/charge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ amount, orderId }),
       signal: controller.signal,
     });
-    return (await res.json()) as {
-      success: boolean;
-      transactionId?: string;
-      error?: string;
-    };
+    return (await res.json()) as IngenicoResult;
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      return { success: false, error: "Timeout: el datáfono no respondió" };
+    }
+    return { success: false, error: "Error de conexión con el datáfono" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Refund a previous card sale.
+ * `originalReference` is the `reference` returned by the original chargeIngenico().
+ */
+export async function refundIngenico(
+  amount: number,
+  originalReference: string,
+  orderId?: string
+): Promise<IngenicoResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/refund`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, orderId, originalReference }),
+      signal: controller.signal,
+    });
+    return (await res.json()) as IngenicoResult;
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      return { success: false, error: "Timeout: el datáfono no respondió" };
+    }
+    return { success: false, error: "Error de conexión con el datáfono" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Cancel a previous card sale (same-day annulment, before settlement).
+ * For sales already settled, use refundIngenico() instead.
+ */
+export async function cancelIngenico(
+  amount: number,
+  originalReference: string,
+  orderId?: string
+): Promise<IngenicoResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, orderId, originalReference }),
+      signal: controller.signal,
+    });
+    return (await res.json()) as IngenicoResult;
   } catch (error) {
     if ((error as Error).name === "AbortError") {
       return { success: false, error: "Timeout: el datáfono no respondió" };
