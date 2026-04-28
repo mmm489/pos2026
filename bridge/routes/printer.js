@@ -62,6 +62,24 @@ function createKitchenPrinter() {
   });
 }
 
+async function probePrinter(factory) {
+  try {
+    const printer = factory();
+    const connected = await printer.isPrinterConnected();
+    return { connected: !!connected };
+  } catch (err) {
+    return { connected: false, error: err.message || String(err) };
+  }
+}
+
+async function handlePrinterStatus(_req, res) {
+  const [receipt, kitchen] = await Promise.all([
+    probePrinter(createReceiptPrinter),
+    probePrinter(createKitchenPrinter),
+  ]);
+  res.json({ receipt, kitchen });
+}
+
 function rightAlign(left, right, width = 48) {
   const spaces = width - left.length - right.length;
   return left + " ".repeat(Math.max(1, spaces)) + right;
@@ -445,4 +463,5 @@ module.exports = {
   handlePrintKitchenTicket,
   handlePrintCardReceipt,
   handlePrintZReport,
+  handlePrinterStatus,
 };

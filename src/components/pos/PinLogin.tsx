@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import DeviceStatusBar from "./DeviceStatusBar";
 
 interface PinLoginProps {
   onLogin: (employee: { id: number; name: string; role: string }) => void;
@@ -76,7 +77,7 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"];
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-pink-50 to-pink-100">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-pink-50 to-pink-100 py-6 gap-4">
       <div className="bg-white rounded-3xl shadow-xl p-10 w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
@@ -138,6 +139,8 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
           <div className="mt-4 text-center text-gray-500">Verificando...</div>
         )}
       </div>
+
+      <DeviceStatusBar className="max-w-md w-full px-4" />
     </div>
   );
 }

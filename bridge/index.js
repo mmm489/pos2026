@@ -16,6 +16,7 @@ const {
   handlePrintKitchenTicket,
   handlePrintCardReceipt,
   handlePrintZReport,
+  handlePrinterStatus,
 } = require("./routes/printer");
 
 const app = express();
@@ -56,6 +57,7 @@ app.post("/printer/ticket", handlePrintTicket);
 app.post("/printer/kitchen", handlePrintKitchenTicket);
 app.post("/printer/card-receipt", handlePrintCardReceipt);
 app.post("/printer/z-report", handlePrintZReport);
+app.get("/printer/status", handlePrinterStatus);
 
 app.listen(PORT, () => {
   console.log(`[${new Date().toISOString()}] Hi Cream Bridge running on port ${PORT}`);

@@ -251,6 +251,38 @@ export async function cancelCashlogy() {
   }
 }
 
+export async function getPrinterStatus(): Promise<{
+  receipt: { connected: boolean; error?: string };
+  kitchen: { connected: boolean; error?: string };
+  bridgeOnline: boolean;
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/printer/status`, { signal: controller.signal });
+    if (!res.ok) {
+      return {
+        receipt: { connected: false, error: `HTTP ${res.status}` },
+        kitchen: { connected: false, error: `HTTP ${res.status}` },
+        bridgeOnline: true,
+      };
+    }
+    const data = (await res.json()) as {
+      receipt: { connected: boolean; error?: string };
+      kitchen: { connected: boolean; error?: string };
+    };
+    return { ...data, bridgeOnline: true };
+  } catch {
+    return {
+      receipt: { connected: false, error: "Bridge offline" },
+      kitchen: { connected: false, error: "Bridge offline" },
+      bridgeOnline: false,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function getCashlogyState() {
   try {
     const res = await fetch(`${BRIDGE_URL}/cashlogy/state`);
