@@ -1,7 +1,7 @@
 "use client";
 
 import { Product, Category } from "@/types/pos";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 interface ProductGridProps {
   products: Product[];
@@ -280,33 +280,35 @@ function ProductCard({
   onLongPress?: (p: Product) => void;
 }) {
   const color = product.category_color || "#6B7280";
-  // Long-press detection. We track the timer + a "did long press" flag so the
-  // mouseup that ends a long press doesn't ALSO fire the regular click.
+  // Long-press detection. Refs survive re-renders so the timer started in
+  // mousedown is the same one cleared in mouseup. Plain `let` variables would
+  // be reset to null/false on every render and the cleanup wouldn't fire,
+  // making every short tap also trigger a long-press.
   const [pressing, setPressing] = useState(false);
-
-  // We use refs through the closure rather than useRef to keep the file flat.
-  // The handlers below are stable enough for this small component.
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let firedLongPress = false;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firedLongPressRef = useRef(false);
 
   const start = () => {
     if (!onLongPress) return;
-    firedLongPress = false;
+    firedLongPressRef.current = false;
     setPressing(true);
-    timer = setTimeout(() => {
-      firedLongPress = true;
+    timerRef.current = setTimeout(() => {
+      firedLongPressRef.current = true;
       setPressing(false);
       onLongPress(product);
     }, LONG_PRESS_MS);
   };
   const cancel = () => {
-    if (timer) clearTimeout(timer);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setPressing(false);
   };
   const handleClick = () => {
-    if (firedLongPress) {
+    if (firedLongPressRef.current) {
       // The long-press already fired the modifiers modal — swallow this click.
-      firedLongPress = false;
+      firedLongPressRef.current = false;
       return;
     }
     onAdd(product);
