@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order } from "@/types/pos";
-import { queryIngenicoTransaction, printCardReceipt, IngenicoResult } from "@/lib/bridge";
+import { Order, Business } from "@/types/pos";
+import { queryIngenicoTransaction, printCardReceipt, printTicket, IngenicoResult } from "@/lib/bridge";
 
 const CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
@@ -30,9 +30,15 @@ export default function AdminOrdersPage() {
   const [queryingId, setQueryingId] = useState<number | null>(null);
   const [queryResults, setQueryResults] = useState<Map<number, IngenicoResult>>(new Map());
   const [reprintingReceipt, setReprintingReceipt] = useState<{ id: number; copy: "merchant" | "customer" } | null>(null);
+  const [reprintingTicketId, setReprintingTicketId] = useState<number | null>(null);
+  const [business, setBusiness] = useState<Business | null>(null);
 
   useEffect(() => {
     loadOrders();
+    fetch("/api/pos/business")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b && setBusiness(b))
+      .catch(() => {});
   }, []);
 
   const loadOrders = async () => {
@@ -84,6 +90,43 @@ export default function AdminOrdersPage() {
       setCancelError("Error de connexió al anul·lar la comanda");
     }
     setCancelLoading(false);
+  };
+
+  const handleReprintTicket = async (order: Order) => {
+    if (!order.items || order.items.length === 0) return;
+    setReprintingTicketId(order.id);
+    const total = Number(order.total);
+    const totalBase =
+      order.total_base != null
+        ? Number(order.total_base)
+        : Math.round((total / 1.1) * 100) / 100;
+    const totalVat =
+      order.total_vat != null
+        ? Number(order.total_vat)
+        : Math.round((total - total / 1.1) * 100) / 100;
+    const paymentLabel =
+      order.payment_method === "cash"
+        ? "Efectiu"
+        : order.payment_method === "card"
+        ? "Targeta"
+        : "Manual";
+    await printTicket({
+      orderNumber: order.order_number,
+      invoiceNumber: order.invoice_number,
+      items: order.items.map((i) => ({
+        name: i.product_name || "",
+        qty: i.qty,
+        price: Number(i.unit_price),
+      })),
+      total,
+      totalBase,
+      totalVat,
+      vatRate: 10,
+      paymentMethod: paymentLabel,
+      date: new Date(order.created_at).toLocaleString("es-ES"),
+      business: business || undefined,
+    }).catch(() => {});
+    setReprintingTicketId(null);
   };
 
   const handleReprintReceipt = async (order: Order, copy: "merchant" | "customer") => {
@@ -484,6 +527,20 @@ export default function AdminOrdersPage() {
                             </div>
                           );
                         })()}
+                      </div>
+                    )}
+                    {order.items && order.items.length > 0 && (
+                      <div className="flex justify-end mb-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReprintTicket(order);
+                          }}
+                          disabled={reprintingTicketId === order.id}
+                          className="px-3 py-1.5 rounded-lg bg-pink-50 text-pink-600 text-xs font-semibold hover:bg-pink-100 disabled:opacity-50 transition-colors"
+                        >
+                          {reprintingTicketId === order.id ? "Imprimint..." : "Re-imprimir ticket"}
+                        </button>
                       </div>
                     )}
                     {order.items && (
