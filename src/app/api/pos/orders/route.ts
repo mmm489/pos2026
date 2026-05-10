@@ -134,12 +134,11 @@ export async function POST(request: NextRequest) {
       const year = new Date().getFullYear();
       const invoiceNumber = `${invoice_series}-${year}/${String(invoice_num).padStart(6, "0")}`;
 
-      // Manual sales (cash/card collected outside the system, e.g. testing) skip
-      // the KDS pending → preparing → ready flow because there's no kitchen
-      // workflow involved — just record the sale as already completed so it
-      // counts immediately on the Z report.
-      const initialStatus = payment_method === "manual" ? "completed" : "pending";
-      const initialCompletedAt = payment_method === "manual" ? "NOW()" : "NULL";
+      // All sales — including "manual" — start as "pending" so they go through
+      // the KDS pending → preparing → ready flow. The Z report counts pending
+      // and ready orders alike, so analytics aren't affected.
+      const initialStatus = "pending";
+      const initialCompletedAt = "NULL";
 
       // Create order with invoice number, VAT breakdown, and card audit trail
       const orderRes = await client.query(
