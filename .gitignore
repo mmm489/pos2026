@@ -39,3 +39,6 @@ next-env.d.ts
 bridge/node_modules/
 bridge/.env
 bridge/logs/
+bridge/verifone-service/logs.activex.txt
+bridge/verifone-service/verifone-service.log
+bridge/verifone-service/logs/

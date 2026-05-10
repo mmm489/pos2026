@@ -6,6 +6,16 @@ using System.Threading;
 using System.Web.Script.Serialization;
 using AXTPVPCPINPADWSLib;
 
+// OBSOLETE: replaced by verifone-service.ps1.
+// On the gelateria PC the AxTpvpcPinPadWS ActiveX (v2.5.0.5 from the REDSYS
+// TpvpcWinService plugin) refused to configure the COM port when called from
+// C# (tried Interop, dynamic dispatch, [STAThread], late binding — nothing
+// worked, EstConfiguracionPuerto consistently returned 1). The same calls
+// from PowerShell DO work, provided a specific warm-up pattern: a throwaway
+// pinpad with EsNavegador=1 kept alive in the apartment while a second
+// pinpad with EsNavegador=0 does the real work. See verifone-service.ps1.
+// Kept here as reference; not built or run.
+
 /// <summary>
 /// HTTP wrapper for REDSYS AxTpvpcPinPadWS ActiveX.
 /// Exposes card payment via REST on port 3007.
