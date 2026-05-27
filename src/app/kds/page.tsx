@@ -86,7 +86,7 @@ export default function KdsPage() {
           });
         })
         .catch(() => {});
-    }, 3000);
+    }, 1500);
     return () => clearInterval(interval);
   }, []);
 
@@ -122,6 +122,41 @@ export default function KdsPage() {
     } catch {
       // API not available — broadcast for demo mode
       broadcastOrderUpdated({ id: orderId, status });
+    }
+  }, []);
+
+  const handleItemReadyChange = useCallback(async (orderId: number, itemId: number, ready: boolean) => {
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) return order;
+        return {
+          ...order,
+          items: order.items?.map((item) =>
+            item.id === itemId ? { ...item, kds_ready: ready } : item
+          ),
+        };
+      })
+    );
+
+    try {
+      const res = await fetch(`/api/pos/orders/${orderId}/items/${itemId}/ready`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ready }),
+      });
+      if (!res.ok) throw new Error("Error updating item");
+    } catch {
+      setOrders((prev) =>
+        prev.map((order) => {
+          if (order.id !== orderId) return order;
+          return {
+            ...order,
+            items: order.items?.map((item) =>
+              item.id === itemId ? { ...item, kds_ready: !ready } : item
+            ),
+          };
+        })
+      );
     }
   }, []);
 
@@ -184,6 +219,7 @@ export default function KdsPage() {
                 key={order.id}
                 order={order}
                 onStatusChange={handleStatusChange}
+                onItemReadyChange={handleItemReadyChange}
               />
             ))}
           </div>

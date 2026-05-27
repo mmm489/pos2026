@@ -51,6 +51,8 @@ export interface OrderItem {
   unit_price: number;
   vat_rate: number;
   notes: string | null;
+  kds_ready?: boolean;
+  kds_ready_at?: string | null;
   product_name?: string;
 }
 

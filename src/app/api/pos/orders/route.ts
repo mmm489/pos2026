@@ -4,8 +4,25 @@ import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
 
 export const dynamic = "force-dynamic";
 
+let kdsReadyColumnsEnsured = false;
+
+async function ensureKdsReadyColumns() {
+  if (kdsReadyColumnsEnsured) return;
+  const sql = getDb();
+  await sql`
+    ALTER TABLE pos.order_items
+    ADD COLUMN IF NOT EXISTS kds_ready BOOLEAN NOT NULL DEFAULT false
+  `;
+  await sql`
+    ALTER TABLE pos.order_items
+    ADD COLUMN IF NOT EXISTS kds_ready_at TIMESTAMPTZ
+  `;
+  kdsReadyColumnsEnsured = true;
+}
+
 export async function GET(request: NextRequest) {
   try {
+    await ensureKdsReadyColumns();
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
@@ -33,6 +50,7 @@ export async function GET(request: NextRequest) {
     if (orderIds.length > 0) {
       const items = await sql`
         SELECT oi.id, oi.order_id, oi.product_id, oi.qty, oi.unit_price, oi.notes,
+               oi.kds_ready, oi.kds_ready_at,
                p.name AS product_name
         FROM pos.order_items oi
         JOIN pos.products p ON p.id = oi.product_id

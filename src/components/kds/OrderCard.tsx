@@ -6,6 +6,7 @@ import { Order } from "@/types/pos";
 interface OrderCardProps {
   order: Order;
   onStatusChange: (orderId: number, status: string) => void;
+  onItemReadyChange: (orderId: number, itemId: number, ready: boolean) => void;
 }
 
 function getElapsedSeconds(createdAt: string) {
@@ -24,9 +25,8 @@ function getTimerColor(seconds: number) {
   return "bg-red-500";
 }
 
-export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
+export default function OrderCard({ order, onStatusChange, onItemReadyChange }: OrderCardProps) {
   const [elapsed, setElapsed] = useState(getElapsedSeconds(order.created_at));
-  const [readyItems, setReadyItems] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -37,19 +37,12 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
 
   const timerColor = getTimerColor(elapsed);
   const totalItems = order.items?.length || 0;
-  const readyCount = readyItems.size;
+  const readyCount = order.items?.filter((item) => item.kds_ready).length || 0;
   const allReady = totalItems > 0 && readyCount === totalItems;
 
   const toggleItem = (itemId: number) => {
-    setReadyItems((prev) => {
-      const next = new Set(prev);
-      if (next.has(itemId)) {
-        next.delete(itemId);
-      } else {
-        next.add(itemId);
-      }
-      return next;
-    });
+    const item = order.items?.find((candidate) => candidate.id === itemId);
+    onItemReadyChange(order.id, itemId, !item?.kds_ready);
   };
 
   return (
@@ -87,7 +80,7 @@ export default function OrderCard({ order, onStatusChange }: OrderCardProps) {
       <div className="flex-1 p-1.5 overflow-y-auto min-h-0">
         <ul className="space-y-1">
           {order.items?.map((item) => {
-            const isReady = readyItems.has(item.id);
+            const isReady = Boolean(item.kds_ready);
             return (
               <li
                 key={item.id}
