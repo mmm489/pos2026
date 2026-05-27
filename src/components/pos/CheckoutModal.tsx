@@ -33,6 +33,7 @@ interface CheckoutModalProps {
 }
 
 type Step = "select" | "processing" | "success" | "error";
+type TicketPrintData = Parameters<typeof printTicket>[0];
 
 export default function CheckoutModal({
   items,
@@ -54,6 +55,10 @@ export default function CheckoutModal({
   // Card receipt text held until we ask the customer if they want a copy.
   const [pendingCustomerReceipt, setPendingCustomerReceipt] = useState<string | null>(null);
   const [printingCustomerCopy, setPrintingCustomerCopy] = useState(false);
+  const [pendingTicket, setPendingTicket] = useState<TicketPrintData | null>(null);
+  const [printingTicket, setPrintingTicket] = useState(false);
+  const [ticketPrinted, setTicketPrinted] = useState(false);
+  const [ticketError, setTicketError] = useState("");
   const [aborting, setAborting] = useState(false);
   // Poll datafono health every 15s while the modal is open so the cashier
   // sees a fresh status indicator without spamming the bridge.
@@ -117,6 +122,32 @@ export default function CheckoutModal({
     };
   };
 
+  const buildTicketData = (order: Order, paymentLabel: string): TicketPrintData => ({
+    orderNumber: order.order_number,
+    invoiceNumber: order.invoice_number,
+    items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
+    total,
+    totalBase: order.total_base ?? Math.round((total / 1.10) * 100) / 100,
+    totalVat: order.total_vat ?? Math.round((total - total / 1.10) * 100) / 100,
+    vatRate: 10,
+    paymentMethod: paymentLabel,
+    date: new Date().toLocaleString("es-ES"),
+    business: business || undefined,
+  });
+
+  const handlePrintOrderTicket = async () => {
+    if (!pendingTicket) return;
+    setPrintingTicket(true);
+    setTicketError("");
+    const result = await printTicket(pendingTicket);
+    if (result.success) {
+      setTicketPrinted(true);
+    } else {
+      setTicketError(result.error || "No s'ha pogut imprimir el ticket");
+    }
+    setPrintingTicket(false);
+  };
+
   const handleCancel = async () => {
     if (method === "cash" && step === "processing") {
       await cancelCashlogy();
@@ -159,18 +190,9 @@ export default function CheckoutModal({
 
       setOrderNumber(order.order_number);
 
-      printTicket({
-        orderNumber: order.order_number,
-        invoiceNumber: order.invoice_number,
-        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
-        total,
-        totalBase: order.total_base ?? Math.round((total / 1.10) * 100) / 100,
-        totalVat: order.total_vat ?? Math.round((total - total / 1.10) * 100) / 100,
-        vatRate: 10,
-        paymentMethod: "Manual",
-        date: new Date().toLocaleString("es-ES"),
-        business: business || undefined,
-      }).catch(() => {});
+      setPendingTicket(buildTicketData(order, "Manual"));
+      setTicketPrinted(false);
+      setTicketError("");
 
       printKitchenTicket({
         orderNumber: order.order_number,
@@ -253,18 +275,9 @@ export default function CheckoutModal({
 
       setOrderNumber(order.order_number);
 
-      printTicket({
-        orderNumber: order.order_number,
-        invoiceNumber: order.invoice_number,
-        items: items.map((i) => ({ name: i.name, qty: i.qty, price: i.price })),
-        total,
-        totalBase: order.total_base ?? Math.round((total / 1.10) * 100) / 100,
-        totalVat: order.total_vat ?? Math.round((total - total / 1.10) * 100) / 100,
-        vatRate: 10,
-        paymentMethod: paymentMethod === "cash" ? "Efectiu" : "Targeta",
-        date: new Date().toLocaleString("es-ES"),
-        business: business || undefined,
-      }).catch(() => {});
+      setPendingTicket(buildTicketData(order, paymentMethod === "cash" ? "Efectiu" : "Targeta"));
+      setTicketPrinted(false);
+      setTicketError("");
 
       printKitchenTicket({
         orderNumber: order.order_number,
@@ -587,6 +600,35 @@ export default function CheckoutModal({
               <p className="text-lg text-orange-600 font-semibold">
                 Canvi: {change.toFixed(2)} &euro;
               </p>
+            )}
+
+            {pendingTicket && (
+              <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                <p className="text-base font-semibold text-amber-900 mb-3">
+                  Ticket del pedido
+                </p>
+                <button
+                  onClick={handlePrintOrderTicket}
+                  disabled={printingTicket}
+                  className="w-full px-6 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold transition-colors disabled:opacity-50"
+                >
+                  {printingTicket
+                    ? "Imprimint..."
+                    : ticketPrinted
+                      ? "Reimprimir ticket"
+                      : "Imprimir ticket"}
+                </button>
+                {ticketPrinted && (
+                  <p className="mt-2 text-sm font-semibold text-green-700">
+                    Ticket imprès
+                  </p>
+                )}
+                {ticketError && (
+                  <p className="mt-2 text-sm font-semibold text-red-700">
+                    {ticketError}
+                  </p>
+                )}
+              </div>
             )}
 
             {pendingCustomerReceipt ? (
