@@ -9,7 +9,7 @@ export async function chargeCashlogy(amount: number) {
     const res = await fetch(`${BRIDGE_URL}/cashlogy/charge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount }),
+      body: JSON.stringify({ amount, screenVisible: false, topMost: false }),
       signal: controller.signal,
     });
     // Parse even on HTTP errors — bridge returns JSON with error details

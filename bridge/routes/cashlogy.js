@@ -8,11 +8,23 @@ const INIT_TIMEOUT_MS = Number(process.env.CASHLOGY_INIT_TIMEOUT_MS) || 60_000;
 const CHARGE_TIMEOUT_MS = Number(process.env.CASHLOGY_CHARGE_TIMEOUT_MS) || 180_000;
 const OPERATION_TIMEOUT_MS = Number(process.env.CASHLOGY_OPERATION_TIMEOUT_MS) || 120_000;
 const MACHINE_CODE = process.env.CASHLOGY_MACHINE_CODE || "hicream-pos";
+const CHARGE_SCREEN_VISIBLE = parseBoolean(process.env.CASHLOGY_CHARGE_SCREEN_VISIBLE, false);
+const CHARGE_TOP_MOST = parseBoolean(process.env.CASHLOGY_CHARGE_TOP_MOST, false);
 
 let currentCharge = null;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseBoolean(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "si", "s"].includes(normalized)) return true;
+  if (["0", "false", "no", "n"].includes(normalized)) return false;
+  return fallback;
 }
 
 function readApiKeyFromFile(filePath) {
@@ -340,8 +352,8 @@ async function handleCashlogyCharge(req, res) {
         machineCode: req.body?.machineCode || MACHINE_CODE,
         secondScreen: Boolean(req.body?.secondScreen),
         processManually: Boolean(req.body?.processManually),
-        screenVisible: req.body?.screenVisible !== false,
-        topMost: req.body?.topMost !== false,
+        screenVisible: parseBoolean(req.body?.screenVisible, CHARGE_SCREEN_VISIBLE),
+        topMost: parseBoolean(req.body?.topMost, CHARGE_TOP_MOST),
         type: req.body?.type || "CASH",
         peripheralId: req.body?.peripheralId || "",
       },

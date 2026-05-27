@@ -74,7 +74,7 @@ export default function CheckoutModal({
     if (step === "processing" && method === "cash") {
       pollRef.current = setInterval(async () => {
         const st = await getCashlogyChargeStatus();
-        if (st.active) {
+        if (st.active || st.status) {
           setDepositedEur((st.depositedCents || 0) / 100);
           setCashStatus(st.status || "");
           if (st.status === "done" || st.status === "error" || st.status === "cancelled") {
@@ -293,6 +293,28 @@ export default function CheckoutModal({
   };
 
   const remaining = Math.max(0, total - depositedEur);
+  const cashStatusText =
+    cashStatus === "depositing"
+      ? "Esperant bitllets o monedes"
+      : cashStatus === "closing"
+      ? "Validant cobrament"
+      : cashStatus === "dispensing"
+      ? "Donant canvi"
+      : cashStatus === "done"
+      ? "Pagament completat"
+      : cashStatus === "cancelled"
+      ? "Pagament cancel.lat"
+      : cashStatus === "error"
+      ? "Incidencia en el cobrament"
+      : "Preparant Cashlogy";
+  const cashStatusHelp =
+    cashStatus === "depositing"
+      ? "El client ja pot introduir l'efectiu a la maquina."
+      : cashStatus === "closing"
+      ? "Cashlogy esta confirmant l'import rebut."
+      : cashStatus === "dispensing"
+      ? "Cashlogy esta entregant el canvi."
+      : "Mantingues aquesta pantalla oberta fins que acabi.";
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -437,6 +459,11 @@ export default function CheckoutModal({
             <h2 className="text-xl font-bold text-center text-gray-700 mb-6">
               Processant pagament en efectiu
             </h2>
+
+            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-center">
+              <p className="text-2xl font-bold text-emerald-700">{cashStatusText}</p>
+              <p className="mt-1 text-sm text-emerald-800">{cashStatusHelp}</p>
+            </div>
 
             {/* Spinner while depositing */}
             {cashStatus === "depositing" && (
