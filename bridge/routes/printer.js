@@ -330,7 +330,9 @@ function createReceiptPrinter() {
   if (iface === "tcp") {
     options.interface = `tcp://${process.env.PRINTER_HOST || "127.0.0.1"}:${process.env.PRINTER_PORT || "9100"}`;
   } else if (isReceiptWindowsPrinter()) {
-    options.interface = `printer:${getReceiptPrinterName()}`;
+    // We only use node-thermal-printer to build the ESC/POS buffer here.
+    // The actual Windows USB spool is done by printRawBufferToWindowsPrinter().
+    options.interface = "tcp://127.0.0.1:9";
   } else {
     options.interface = process.env.PRINTER_PATH || "//localhost/printer";
   }
