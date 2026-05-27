@@ -1,5 +1,7 @@
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const { execFile } = require("child_process");
 const {
   printer: ThermalPrinter,
   types: PrinterTypes,
@@ -29,11 +31,219 @@ function logPrintError(printerType, payload, err) {
 }
 
 // Receipt printer — Mostrador (EPSON TM-m30 via USB or TCP)
+function getPrinterCharacterSet() {
+  return process.env.PRINTER_CHARACTER_SET || "PC858_EURO";
+}
+
+function getReceiptMode() {
+  return (process.env.PRINTER_INTERFACE || "windows").toLowerCase();
+}
+
+function isReceiptWindowsPrinter() {
+  return ["windows", "win", "spooler"].includes(getReceiptMode());
+}
+
+function getReceiptPrinterName() {
+  return process.env.PRINTER_NAME || process.env.RECEIPT_PRINTER_NAME || "EPSON TM-m30 Receipt";
+}
+
+function psQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function runPowerShell(script, timeout = 30000) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+      { windowsHide: true, timeout },
+      (err, stdout, stderr) => {
+        if (err) {
+          err.message = stderr?.trim() || err.message;
+          reject(err);
+          return;
+        }
+        resolve(stdout);
+      }
+    );
+  });
+}
+
+async function probeWindowsPrinter(printerName) {
+  try {
+    await runPowerShell(`Get-Printer -Name ${psQuote(printerName)} -ErrorAction Stop | Out-Null`, 10000);
+    return { connected: true, name: printerName };
+  } catch (err) {
+    return { connected: false, name: printerName, error: err.message || String(err) };
+  }
+}
+
+async function printTextToWindowsPrinter(printerName, text) {
+  const file = path.join(
+    os.tmpdir(),
+    `hicream-print-${Date.now()}-${Math.random().toString(16).slice(2)}.txt`
+  );
+  fs.writeFileSync(file, text, "utf8");
+  try {
+    await runPowerShell(
+      `Get-Content -LiteralPath ${psQuote(file)} | Out-Printer -Name ${psQuote(printerName)}`,
+      45000
+    );
+  } finally {
+    fs.unlink(file, () => {});
+  }
+}
+
+function money(value) {
+  return `${Number(value || 0).toFixed(2)} EUR`;
+}
+
+function line(left, right, width = 42) {
+  const l = String(left || "");
+  const r = String(right || "");
+  return l + " ".repeat(Math.max(1, width - l.length - r.length)) + r;
+}
+
+function center(text, width = 42) {
+  const value = String(text || "");
+  const pad = Math.max(0, Math.floor((width - value.length) / 2));
+  return " ".repeat(pad) + value;
+}
+
+function separator(width = 42) {
+  return "-".repeat(width);
+}
+
+function formatReceiptText(payload) {
+  const {
+    orderNumber,
+    invoiceNumber,
+    items = [],
+    total,
+    totalBase,
+    totalVat,
+    vatRate,
+    paymentMethod,
+    date,
+    business,
+  } = payload;
+  const biz = business || {};
+  const vatPct = vatRate || 10;
+  const calcTotal = total || items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 0), 0);
+  const calcBase = totalBase || Math.round((calcTotal / (1 + vatPct / 100)) * 100) / 100;
+  const calcVat = totalVat || Math.round((calcTotal - calcBase) * 100) / 100;
+  const lines = [];
+
+  lines.push(center(biz.trade_name || "HI CREAM"));
+  lines.push(center(biz.name || "APOLO HOLDINGS 2020, S.L.U."));
+  if (biz.nif) lines.push(center(`NIF: ${biz.nif}`));
+  if (biz.address) lines.push(center(biz.address));
+  lines.push(center(`${biz.postal_code || ""} ${biz.city || "Salou"} ${biz.province ? `(${biz.province})` : ""}`.trim()));
+  if (biz.phone) lines.push(center(`Tel: ${biz.phone}`));
+  lines.push(separator());
+  lines.push(center("FACTURA SIMPLIFICADA"));
+  if (invoiceNumber) lines.push(center(`N.: ${invoiceNumber}`));
+  lines.push(center(`Pedido: ${orderNumber}`));
+  lines.push(center(date || new Date().toLocaleString("es-ES")));
+  lines.push(separator());
+  lines.push(line("PRODUCTO", "IMPORTE"));
+  lines.push(separator());
+
+  for (const item of items) {
+    const qty = Number(item.qty || 0);
+    const price = Number(item.price || 0);
+    const subtotal = qty * price;
+    if (qty === 1) {
+      lines.push(line(item.name, money(subtotal)));
+    } else {
+      lines.push(String(item.name || ""));
+      lines.push(line(`  ${qty} x ${money(price)}`, money(subtotal)));
+    }
+  }
+
+  lines.push(separator());
+  lines.push(line("Base imponible:", money(calcBase)));
+  lines.push(line(`IVA ${vatPct}%:`, money(calcVat)));
+  lines.push(separator());
+  lines.push(line("TOTAL:", money(calcTotal)));
+  lines.push("");
+  lines.push(center(`Pago: ${paymentMethod || ""}`));
+  lines.push("");
+  lines.push(center("Gracias por su visita"));
+  lines.push(center("IVA incluido en precios"));
+  lines.push("", "", "", "");
+  return lines.join(os.EOL);
+}
+
+function formatCardReceiptText(receipt, copyLabel) {
+  return [
+    center(copyLabel),
+    separator(),
+    String(receipt || ""),
+    "",
+    center(`-- ${copyLabel} --`),
+    "",
+    "",
+    "",
+  ].join(os.EOL);
+}
+
+function formatZReportText(c) {
+  const biz = c.business_snapshot || {};
+  const lines = [];
+  lines.push(center(biz.trade_name || "HI CREAM"));
+  lines.push(center(biz.name || "APOLO HOLDINGS 2020, S.L.U."));
+  if (biz.nif) lines.push(center(`NIF: ${biz.nif}`));
+  if (biz.address) lines.push(center(biz.address));
+  lines.push(separator());
+  lines.push(center("TANCAMENT Z"));
+  lines.push(center(c.z_label));
+  lines.push(center(new Date(c.closed_at).toLocaleString("es-ES")));
+  lines.push(separator());
+  if (c.first_invoice || c.last_invoice) {
+    lines.push("Factures emeses:");
+    lines.push(`  Des de: ${c.first_invoice || "-"}`);
+    lines.push(`  Fins a: ${c.last_invoice || "-"}`);
+    lines.push(separator());
+  }
+  lines.push("VENDES PER METODE");
+  lines.push(line(`Efectiu (${c.cash_count || 0}):`, money(c.total_cash)));
+  lines.push(line(`Targeta (${c.card_count || 0}):`, money(c.total_card)));
+  lines.push(separator());
+  if (c.vat_breakdown && Object.keys(c.vat_breakdown).length > 0) {
+    lines.push("DESGLOSSAMENT IVA");
+    for (const [rate, e] of Object.entries(c.vat_breakdown)) {
+      lines.push(`IVA ${rate}%`);
+      lines.push(line("  Base:", money(e.base)));
+      lines.push(line("  Quota:", money(e.vat)));
+      lines.push(line("  Subtotal:", money(e.total)));
+    }
+    lines.push(separator());
+  }
+  lines.push(line("Base imposable:", money(c.total_base)));
+  lines.push(line("Total IVA:", money(c.total_vat)));
+  lines.push(line("TOTAL:", money(c.total_sales)));
+  lines.push(separator());
+  if (c.cancelled_count > 0) {
+    lines.push(line("Anul.lacions:", String(c.cancelled_count)));
+    lines.push(line("Import retornat:", money(c.total_refunded)));
+    lines.push(separator());
+  }
+  lines.push(line("Tickets totals:", String(c.ticket_count || 0)));
+  if (c.notes) {
+    lines.push(separator());
+    lines.push("Notes:");
+    lines.push(c.notes);
+  }
+  lines.push("", center("--- TANCAMENT Z ---"), "", "", "");
+  return lines.join(os.EOL);
+}
+
 function createReceiptPrinter() {
-  const iface = process.env.PRINTER_INTERFACE || "tcp";
+  const iface = getReceiptMode();
   let options = {
     type: PrinterTypes.EPSON,
-    characterSet: "CHARCODE_PC858",
+    characterSet: getPrinterCharacterSet(),
     removeSpecialCharacters: false,
     lineCharacter: "-",
     width: 48,
@@ -54,7 +264,7 @@ function createKitchenPrinter() {
   const port = process.env.KITCHEN_PRINTER_PORT || "9100";
   return new ThermalPrinter({
     type: PrinterTypes.EPSON,
-    characterSet: "CHARCODE_PC858",
+    characterSet: getPrinterCharacterSet(),
     removeSpecialCharacters: false,
     lineCharacter: "-",
     width: 48,
@@ -74,7 +284,9 @@ async function probePrinter(factory) {
 
 async function handlePrinterStatus(_req, res) {
   const [receipt, kitchen] = await Promise.all([
-    probePrinter(createReceiptPrinter),
+    isReceiptWindowsPrinter()
+      ? probeWindowsPrinter(getReceiptPrinterName())
+      : probePrinter(createReceiptPrinter),
     probePrinter(createKitchenPrinter),
   ]);
   res.json({ receipt, kitchen });
@@ -115,6 +327,12 @@ async function handlePrintTicket(req, res) {
   const calcVat = totalVat || Math.round((calcTotal - calcBase) * 100) / 100;
 
   try {
+    if (isReceiptWindowsPrinter()) {
+      await printTextToWindowsPrinter(getReceiptPrinterName(), formatReceiptText(req.body));
+      console.log(`[Printer] Ticket impreso por Windows: ${invoiceNumber || orderNumber}`);
+      return res.json({ success: true });
+    }
+
     const printer = createReceiptPrinter();
     const isConnected = await printer.isPrinterConnected();
 
@@ -297,6 +515,12 @@ async function handlePrintCardReceipt(req, res) {
   const copyLabel = copy === "merchant" ? "COPIA COMERC" : "COPIA CLIENT";
 
   try {
+    if (isReceiptWindowsPrinter()) {
+      await printTextToWindowsPrinter(getReceiptPrinterName(), formatCardReceiptText(receipt, copyLabel));
+      console.log(`[Printer] Rebut bancari Windows (${copyLabel}) imprÃ¨s${orderNumber ? ` per ${orderNumber}` : ""}`);
+      return res.json({ success: true });
+    }
+
     const printer = createReceiptPrinter();
     const isConnected = await printer.isPrinterConnected();
 
@@ -344,6 +568,12 @@ async function handlePrintZReport(req, res) {
   const biz = c.business_snapshot || {};
 
   try {
+    if (isReceiptWindowsPrinter()) {
+      await printTextToWindowsPrinter(getReceiptPrinterName(), formatZReportText(c));
+      console.log(`[Printer] Z Windows imprÃ¨s: ${c.z_label}`);
+      return res.json({ success: true });
+    }
+
     const printer = createReceiptPrinter();
     const isConnected = await printer.isPrinterConnected();
 
