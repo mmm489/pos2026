@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_ORDER_UPDATED } from "@/lib/pusher";
 
+export const dynamic = "force-dynamic";
+
 const VALID_TRANSITIONS: Record<string, string[]> = {
   pending: ["preparing", "cancelled"],
   preparing: ["ready", "cancelled"],

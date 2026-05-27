@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCashlogyState } from "@/lib/bridge";
+import {
+  closeCashlogy,
+  dispenseCashlogy,
+  endCashlogyAddChange,
+  exitCashlogyBackOffice,
+  getCashlogyState,
+  initCashlogy,
+  openCashlogyBackOffice,
+  startCashlogyAddChange,
+} from "@/lib/bridge";
 
 interface CashlogyModalProps {
   onClose: () => void;
@@ -16,6 +25,9 @@ export default function CashlogyModal({ onClose }: CashlogyModalProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<Record<string, unknown> | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [dispenseAmount, setDispenseAmount] = useState("");
 
   const fetchState = async () => {
     setLoading(true);
@@ -32,6 +44,33 @@ export default function CashlogyModal({ onClose }: CashlogyModalProps) {
   useEffect(() => {
     fetchState();
   }, []);
+
+  const runAction = async (
+    label: string,
+    action: () => Promise<{ success?: boolean; error?: string }>
+  ) => {
+    setActionLoading(label);
+    setActionMessage(null);
+    const result = await action();
+    if (result.error || result.success === false) {
+      setActionMessage(result.error || `${label}: error`);
+    } else {
+      setActionMessage(`${label}: OK`);
+    }
+    setActionLoading(null);
+    fetchState();
+  };
+
+  const handleDispense = async () => {
+    const amount = Number(dispenseAmount.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setActionMessage("Import invalid");
+      return;
+    }
+    const confirmed = window.confirm(`Dispensar ${amount.toFixed(2)} EUR de Cashlogy?`);
+    if (!confirmed) return;
+    await runAction("Dispensar", () => dispenseCashlogy(amount));
+  };
 
   // Parse denominations from cashlogy state
   function parseDenominations(): { coins: DenominationInfo[]; bills: DenominationInfo[]; total: number } {
@@ -130,6 +169,78 @@ export default function CashlogyModal({ onClose }: CashlogyModalProps) {
             <div className="bg-emerald-50 rounded-2xl px-6 py-4 mb-6 text-center">
               <span className="text-sm font-semibold text-emerald-600">TOTAL A CAIXA</span>
               <p className="text-4xl font-bold text-emerald-700">{total.toFixed(2)} &euro;</p>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="text-sm font-bold text-gray-500 uppercase mb-2">Operacions</h3>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  onClick={() => runAction("Iniciar", initCashlogy)}
+                  disabled={!!actionLoading}
+                  className="py-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Iniciar
+                </button>
+                <button
+                  onClick={() => runAction("Tancar", closeCashlogy)}
+                  disabled={!!actionLoading}
+                  className="py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Tancar sessio
+                </button>
+                <button
+                  onClick={() => runAction("Backoffice", openCashlogyBackOffice)}
+                  disabled={!!actionLoading}
+                  className="py-2 rounded-xl bg-blue-100 hover:bg-blue-200 text-blue-700 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Backoffice
+                </button>
+                <button
+                  onClick={() => runAction("Sortir backoffice", exitCashlogyBackOffice)}
+                  disabled={!!actionLoading}
+                  className="py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Sortir backoffice
+                </button>
+                <button
+                  onClick={() => runAction("Afegir canvi", startCashlogyAddChange)}
+                  disabled={!!actionLoading}
+                  className="py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-700 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Afegir canvi
+                </button>
+                <button
+                  onClick={() => runAction("Fi afegir canvi", endCashlogyAddChange)}
+                  disabled={!!actionLoading}
+                  className="py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Fi afegir canvi
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  value={dispenseAmount}
+                  onChange={(e) => setDispenseAmount(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="Import EUR"
+                  className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800"
+                />
+                <button
+                  onClick={handleDispense}
+                  disabled={!!actionLoading}
+                  className="px-4 py-2 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Dispensar
+                </button>
+              </div>
+
+              {actionMessage && (
+                <p className="mt-2 text-sm text-center text-gray-600">{actionMessage}</p>
+              )}
+              {actionLoading && (
+                <p className="mt-2 text-sm text-center text-gray-400">{actionLoading}...</p>
+              )}
             </div>
 
             {hasDenominations ? (

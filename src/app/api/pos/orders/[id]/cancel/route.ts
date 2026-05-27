@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_ORDER_UPDATED } from "@/lib/pusher";
 
+export const dynamic = "force-dynamic";
+
 const BRIDGE_URL = process.env.BRIDGE_URL || process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3006";
 
 interface RefundResult {

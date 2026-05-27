@@ -219,9 +219,13 @@ export interface CashlogyChargeStatus {
   active: boolean;
   amountCents?: number;
   depositedCents?: number;
+  dispensedCents?: number;
   status?: string;
+  connectorStatus?: string | null;
+  connectorResult?: string | null;
   change?: number | null;
   error?: string | null;
+  chargeId?: string | null;
   depositId?: string | null;
 }
 
@@ -281,6 +285,77 @@ export async function getPrinterStatus(): Promise<{
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function postCashlogyAction<T>(
+  path: string,
+  body?: Record<string, unknown>,
+  timeoutMs = 15_000
+): Promise<T & { success?: boolean; error?: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BRIDGE_URL}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : "{}",
+      signal: controller.signal,
+    });
+    return (await res.json()) as T & { success?: boolean; error?: string };
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      return { success: false, error: "Timeout comunicant amb la Cashlogy" } as T & {
+        success: boolean;
+        error: string;
+      };
+    }
+    return { success: false, error: "Error de connexio amb la Cashlogy" } as T & {
+      success: boolean;
+      error: string;
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function initCashlogy() {
+  return postCashlogyAction("/cashlogy/init", undefined, 70_000);
+}
+
+export function closeCashlogy() {
+  return postCashlogyAction("/cashlogy/close");
+}
+
+export function openCashlogyBackOffice() {
+  return postCashlogyAction("/cashlogy/backoffice", { topMost: true, screenVisible: true });
+}
+
+export function exitCashlogyBackOffice() {
+  return postCashlogyAction("/cashlogy/backoffice/exit");
+}
+
+export function startCashlogyAddChange() {
+  return postCashlogyAction("/cashlogy/add-change", {
+    mode: "NORMAL",
+    topMost: true,
+    screenVisible: true,
+  });
+}
+
+export function endCashlogyAddChange() {
+  return postCashlogyAction("/cashlogy/add-change/end");
+}
+
+export function dispenseCashlogy(amount: number, onlyCoins = false) {
+  return postCashlogyAction(
+    "/cashlogy/dispense",
+    { amount, onlyCoins, topMost: true, screenVisible: true },
+    30_000
+  );
+}
+
+export function cancelCashlogyDispense() {
+  return postCashlogyAction("/cashlogy/dispense/cancel");
 }
 
 export async function getCashlogyState() {

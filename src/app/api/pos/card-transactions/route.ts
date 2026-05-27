@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Recent card-datafono interactions for admin debugging / reconciliation.
  * Filters: ?operation=charge|refund|cancel|query|abort, ?reference=xxx,

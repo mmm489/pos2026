@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 /**
  * List historical cash closings, most recent first. Optional ?month=YYYY-MM filter.
  * Returns lightweight rows for the admin index — full detail goes through /[id].

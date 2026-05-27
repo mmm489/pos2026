@@ -1,43 +1,85 @@
+const fs = require("fs");
+const path = require("path");
+
 const CASHLOGY_BASE = process.env.CASHLOGY_URL || "http://127.0.0.1:3000";
 const CASHLOGY_API = `${CASHLOGY_BASE}/connectorPlus`;
-const CASHLOGY_API_KEY = process.env.CASHLOGY_API_KEY || "";
-const POLL_INTERVAL = 500;
-// Separate timeouts so that a slow deposit doesn't eat into dispense time
-const DEPOSIT_TIMEOUT_MS = Number(process.env.CASHLOGY_DEPOSIT_TIMEOUT_MS) || 180_000; // 3 min
-const DEPOSIT_END_TIMEOUT_MS = Number(process.env.CASHLOGY_DEPOSIT_END_TIMEOUT_MS) || 15_000;
-const DISPENSE_TIMEOUT_MS = Number(process.env.CASHLOGY_DISPENSE_TIMEOUT_MS) || 30_000;
+const POLL_INTERVAL_MS = Number(process.env.CASHLOGY_POLL_INTERVAL_MS) || 500;
+const INIT_TIMEOUT_MS = Number(process.env.CASHLOGY_INIT_TIMEOUT_MS) || 60_000;
+const CHARGE_TIMEOUT_MS = Number(process.env.CASHLOGY_CHARGE_TIMEOUT_MS) || 180_000;
+const OPERATION_TIMEOUT_MS = Number(process.env.CASHLOGY_OPERATION_TIMEOUT_MS) || 120_000;
+const MACHINE_CODE = process.env.CASHLOGY_MACHINE_CODE || "hicream-pos";
 
-// Shared state so the frontend can poll progress
-let currentCharge = null; // { amountCents, depositedCents, status, change, error }
+let currentCharge = null;
 
 function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function cashlogyRequest(path, method = "GET", body = null, timeoutMs = 10_000) {
+function readApiKeyFromFile(filePath) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return "";
+    return fs.readFileSync(filePath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function getCashlogyApiKey() {
+  if (process.env.CASHLOGY_API_KEY) return process.env.CASHLOGY_API_KEY.trim();
+
+  const configuredPath = process.env.CASHLOGY_API_KEY_FILE;
+  const fromConfiguredFile = readApiKeyFromFile(configuredPath);
+  if (fromConfiguredFile) return fromConfiguredFile;
+
+  const userProfile = process.env.USERPROFILE || process.env.HOME || "";
+  const defaultDownloadPath = path.join(
+    userProfile,
+    "Downloads",
+    "Integracion API - ConnectorPlus",
+    "API-KEY.txt"
+  );
+  return readApiKeyFromFile(defaultDownloadPath);
+}
+
+function normalizeErrorMessage(err) {
+  if (!err) return "Error desconegut de Cashlogy";
+  if (err.name === "AbortError") return "Timeout comunicant amb Cashlogy";
+  return err.message || String(err);
+}
+
+async function cashlogyRequest(pathname, method = "GET", body = null, timeoutMs = 10_000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const apiKey = getCashlogyApiKey();
 
-  const options = {
-    method,
-    signal: controller.signal,
-    headers: {
-      "Content-Type": "application/json",
-      ...(CASHLOGY_API_KEY && { X_API_KEY: CASHLOGY_API_KEY }),
-    },
-  };
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers["x-api-key"] = apiKey;
+
+  const options = { method, signal: controller.signal, headers };
   if (body !== null) options.body = JSON.stringify(body);
 
   try {
-    const res = await fetch(`${CASHLOGY_API}${path}`, options);
-    const text = await res.text();
-    if (!res.ok) {
-      throw new Error(`Cashlogy HTTP ${res.status}: ${text}`);
+    const response = await fetch(`${CASHLOGY_API}${pathname}`, options);
+    const text = await response.text();
+    let data = {};
+
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { raw: text };
+      }
     }
-    return text ? JSON.parse(text) : {};
+
+    if (!response.ok) {
+      const detail = text || response.statusText;
+      throw new Error(`Cashlogy HTTP ${response.status}: ${detail}`);
+    }
+
+    return data;
   } catch (err) {
     if (err.name === "AbortError") {
-      throw new Error(`Cashlogy timeout (${timeoutMs}ms) on ${path}`);
+      throw new Error(`Cashlogy timeout (${timeoutMs}ms) on ${pathname}`);
     }
     throw err;
   } finally {
@@ -45,195 +87,549 @@ async function cashlogyRequest(path, method = "GET", body = null, timeoutMs = 10
   }
 }
 
-/**
- * GET /cashlogy/charge/status — frontend polls this for real-time progress
- */
-function handleCashlogyChargeStatus(_req, res) {
-  if (!currentCharge) {
-    return res.json({ active: false });
+function parseAmountCents(amountCents, amountEuros) {
+  if (amountCents !== undefined && amountCents !== null) {
+    const cents = Number(amountCents);
+    if (!Number.isFinite(cents) || cents <= 0) return null;
+    return Math.round(cents);
   }
-  const { amountCents, depositedCents, status, change, error, depositId } = currentCharge;
+
+  const euros = Number(amountEuros);
+  if (!Number.isFinite(euros) || euros <= 0) return null;
+  return Math.round(euros * 100);
+}
+
+function parseCents(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+function connectorChargeToState(op) {
+  if (!op) {
+    return {
+      depositedCents: 0,
+      dispensedCents: 0,
+      status: "depositing",
+      connectorStatus: null,
+      connectorResult: null,
+      error: null,
+      finished: false,
+    };
+  }
+
+  const depositedCents = parseCents(op.amount?.deposited);
+  const dispensedCents = parseCents(op.amount?.dispensed);
+  const connectorStatus = op.status || null;
+  const connectorResult = op.result || null;
+
+  if (connectorStatus === "FINISHED") {
+    if (connectorResult === "SUCCESS") {
+      return {
+        depositedCents,
+        dispensedCents,
+        status: "done",
+        connectorStatus,
+        connectorResult,
+        error: null,
+        finished: true,
+      };
+    }
+    if (connectorResult === "CANCELLED") {
+      return {
+        depositedCents,
+        dispensedCents,
+        status: "cancelled",
+        connectorStatus,
+        connectorResult,
+        error: "Operacio cancel.lada",
+        finished: true,
+      };
+    }
+    return {
+      depositedCents,
+      dispensedCents,
+      status: "error",
+      connectorStatus,
+      connectorResult,
+      error: connectorResult || "Operacio Cashlogy fallida",
+      finished: true,
+    };
+  }
+
+  if (connectorStatus === "DISPENSE_FAILED") {
+    return {
+      depositedCents,
+      dispensedCents,
+      status: "error",
+      connectorStatus,
+      connectorResult,
+      error: "No s'ha pogut dispensar el canvi",
+      finished: true,
+    };
+  }
+
+  const status =
+    connectorStatus === "DISPENSING"
+      ? "dispensing"
+      : connectorStatus === "PROCESSING"
+        ? "closing"
+        : "depositing";
+
+  return {
+    depositedCents,
+    dispensedCents,
+    status,
+    connectorStatus,
+    connectorResult,
+    error: null,
+    finished: false,
+  };
+}
+
+function updateCurrentChargeFromConnector(op) {
+  if (!currentCharge) return null;
+
+  const mapped = connectorChargeToState(op);
+  currentCharge.depositedCents = mapped.depositedCents;
+  currentCharge.dispensedCents = mapped.dispensedCents;
+  currentCharge.status = mapped.status;
+  currentCharge.connectorStatus = mapped.connectorStatus;
+  currentCharge.connectorResult = mapped.connectorResult;
+  currentCharge.error = mapped.error;
+  currentCharge.finishedAt = op?.finishedAt || currentCharge.finishedAt || null;
+  currentCharge.raw = op || currentCharge.raw || null;
+  currentCharge.change = mapped.dispensedCents / 100;
+
+  return mapped;
+}
+
+function isChargeActive() {
+  return Boolean(
+    currentCharge &&
+      !["done", "error", "cancelled"].includes(currentCharge.status)
+  );
+}
+
+async function getPrimaryCashPeripheral() {
+  const peripherals = await cashlogyRequest("/peripherals", "GET", null, 8_000);
+  const cash = Array.isArray(peripherals.cash) ? peripherals.cash : [];
+  return cash.find((p) => p.isPrimary) || cash[0] || null;
+}
+
+async function waitForInit() {
+  const deadline = Date.now() + INIT_TIMEOUT_MS;
+  let lastStatus = null;
+
+  while (Date.now() < deadline) {
+    await sleep(POLL_INTERVAL_MS);
+    lastStatus = await cashlogyRequest("/init/status", "GET", null, 8_000);
+    if (lastStatus.status === "FINISHED") {
+      if (lastStatus.result === "SUCCESS") return lastStatus;
+      throw new Error(`Init Cashlogy fallit: ${lastStatus.result || "FAILED"}`);
+    }
+  }
+
+  throw new Error(`Timeout inicialitzant Cashlogy (${INIT_TIMEOUT_MS}ms)`);
+}
+
+async function ensureInitialized() {
+  const peripheral = await getPrimaryCashPeripheral().catch(() => null);
+  if (peripheral?.status === "AVAILABLE") {
+    return { initialized: true, alreadyAvailable: true, peripheral };
+  }
+
+  const init = await cashlogyRequest("/init", "POST", {}, 15_000);
+  if (init.result !== "SUCCESS") {
+    throw new Error(`No s'ha pogut iniciar Cashlogy: ${init.result || "FAILED"}`);
+  }
+
+  const status = await waitForInit();
+  const refreshedPeripheral = await getPrimaryCashPeripheral().catch(() => null);
+  return { initialized: true, alreadyAvailable: false, status, peripheral: refreshedPeripheral };
+}
+
+async function getChargeOperation(chargeId) {
+  const status = await cashlogyRequest("/charge/status", "GET", null, 8_000);
+  return chargeId ? status?.[chargeId] || null : status;
+}
+
+async function cancelCurrentCharge() {
+  if (!currentCharge?.chargeId) return { success: true, skipped: true };
+  currentCharge.cancelRequested = true;
+  const result = await cashlogyRequest(
+    `/charge/${currentCharge.chargeId}/cancel`,
+    "POST",
+    {},
+    10_000
+  );
+  currentCharge.status = "cancelled";
+  currentCharge.error = "Operacio cancel.lada";
+  return result;
+}
+
+function handleCashlogyChargeStatus(_req, res) {
+  if (!currentCharge) return res.json({ active: false });
+
+  const amountCents = currentCharge.amountCents || 0;
+  const depositedCents = currentCharge.depositedCents || 0;
+  const dispensedCents = currentCharge.dispensedCents || 0;
+  const active = !["done", "error", "cancelled"].includes(currentCharge.status);
+
   return res.json({
-    active: true,
+    active,
     amountCents,
     depositedCents,
-    status, // "depositing" | "closing" | "dispensing" | "done" | "error" | "cancelled"
-    change: change ?? null,
-    error: error ?? null,
-    depositId: depositId ?? null,
+    dispensedCents,
+    status: currentCharge.status,
+    connectorStatus: currentCharge.connectorStatus || null,
+    connectorResult: currentCharge.connectorResult || null,
+    change: dispensedCents / 100,
+    error: currentCharge.error || null,
+    chargeId: currentCharge.chargeId || null,
+    depositId: currentCharge.chargeId || null,
   });
 }
 
-/**
- * Charge flow using deposit + dispense (same as BDP):
- * 1. POST /deposit       → open cash intake
- * 2. GET  /deposit/status → poll until deposited >= amount
- * 3. POST /deposit/end    → close cash intake
- * 4. POST /dispense       → dispense change if needed
- */
 async function handleCashlogyCharge(req, res) {
-  const { amount } = req.body;
+  const amountCents = parseAmountCents(req.body?.amountCents, req.body?.amount);
 
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, error: "Import invàlid" });
+  if (!amountCents) {
+    return res.status(400).json({ success: false, error: "Import invalid" });
   }
 
-  // Idempotency guard: reject if there's an active charge in progress
-  if (currentCharge && ["depositing", "closing", "dispensing"].includes(currentCharge.status)) {
-    console.warn("[Cashlogy] Rebutjant nova càrrega — ja hi ha una operació activa:", currentCharge.status);
+  if (isChargeActive()) {
     return res.status(409).json({
       success: false,
-      error: "Ja hi ha un cobrament en curs. Espera que acabi o cancel·la'l.",
+      error: "Ja hi ha un cobrament en curs. Espera que acabi o cancel.la'l.",
+      chargeId: currentCharge.chargeId,
     });
   }
 
-  const amountCents = Math.round(amount * 100);
+  const ticketNumber =
+    req.body?.ticketNumber ||
+    req.body?.orderId ||
+    `cash-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
 
-  // Initialize shared state
-  currentCharge = { amountCents, depositedCents: 0, status: "depositing", change: null, error: null, depositId: null };
+  currentCharge = {
+    chargeId: null,
+    amountCents,
+    depositedCents: 0,
+    dispensedCents: 0,
+    status: "initializing",
+    connectorStatus: null,
+    connectorResult: null,
+    change: 0,
+    error: null,
+    cancelRequested: false,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    raw: null,
+  };
 
   try {
-    // 1. Start deposit
-    console.log(`[Cashlogy] Iniciant dipòsit: ${amountCents} cèntims (${amount.toFixed(2)}€)`);
-    const depositRes = await cashlogyRequest("/deposit", "POST", {});
-    console.log("[Cashlogy] Deposit response:", JSON.stringify(depositRes));
+    console.log(`[Cashlogy] Init/charge ${amountCents} cents (${ticketNumber})`);
+    await ensureInitialized();
 
-    if (!depositRes.id) {
-      currentCharge.status = "error";
-      currentCharge.error = "No s'ha rebut ID de dipòsit";
-      return res.json({ success: false, error: currentCharge.error });
+    currentCharge.status = "depositing";
+    const start = await cashlogyRequest(
+      "/charge",
+      "POST",
+      {
+        price: amountCents,
+        ticketNumber,
+        machineCode: req.body?.machineCode || MACHINE_CODE,
+        secondScreen: Boolean(req.body?.secondScreen),
+        processManually: Boolean(req.body?.processManually),
+        screenVisible: req.body?.screenVisible !== false,
+        topMost: req.body?.topMost !== false,
+        type: req.body?.type || "CASH",
+        peripheralId: req.body?.peripheralId || "",
+      },
+      15_000
+    );
+
+    if (start.result !== "SUCCESS" || !start.id) {
+      throw new Error(`No s'ha pogut iniciar el cobrament: ${start.result || "FAILED"}`);
     }
 
-    currentCharge.depositId = depositRes.id;
+    currentCharge.chargeId = start.id;
+    currentCharge.startedAt = start.startedAt || currentCharge.startedAt;
 
-    // 2. Poll until enough money or timeout
-    const deadline = Date.now() + DEPOSIT_TIMEOUT_MS;
-    let depositedCents = 0;
+    const deadline = Date.now() + CHARGE_TIMEOUT_MS;
+    let finalState = null;
 
     while (Date.now() < deadline) {
-      // Check if cancelled by frontend
-      if (currentCharge.status === "cancelled") {
-        console.log("[Cashlogy] Cancel·lat pel frontend");
-        try { await cashlogyRequest("/deposit/end", "POST", {}); } catch {}
-        return res.json({ success: false, error: "Cancel·lat per l'usuari" });
-      }
+      await sleep(POLL_INTERVAL_MS);
 
-      await sleep(POLL_INTERVAL);
-
-      const status = await cashlogyRequest("/deposit/status");
-
-      if (status.deposited) {
-        const dep = status.deposited;
-        depositedCents = (dep.coinbox || 0) + (dep.recyclers || 0) + (dep.safebox || 0) + (dep.stacker || 0);
-        currentCharge.depositedCents = depositedCents;
-      }
-
-      if (status.status === "FINISHED") {
-        if (status.result !== "SUCCESS") {
-          currentCharge.status = "cancelled";
-          currentCharge.error = status.result || "Dipòsit cancel·lat";
-          return res.json({ success: false, error: currentCharge.error });
-        }
-        break;
-      }
-
-      if (depositedCents >= amountCents) {
-        console.log(`[Cashlogy] Prou diners: ${depositedCents} cèntims`);
-        currentCharge.status = "closing";
-        try {
-          await cashlogyRequest("/deposit/end", "POST", {});
-        } catch (e) {
-          console.error("[Cashlogy] Error tancant dipòsit:", e.message);
-        }
-        // Wait for FINISHED
-        const endDeadline = Date.now() + DEPOSIT_END_TIMEOUT_MS;
-        while (Date.now() < endDeadline) {
-          await sleep(POLL_INTERVAL);
-          const endStatus = await cashlogyRequest("/deposit/status");
-          if (endStatus.status === "FINISHED") break;
-        }
+      const op = await getChargeOperation(currentCharge.chargeId);
+      const mapped = updateCurrentChargeFromConnector(op);
+      if (mapped?.finished) {
+        finalState = mapped;
         break;
       }
     }
 
-    if (depositedCents < amountCents && Date.now() >= deadline) {
+    if (!finalState) {
       currentCharge.status = "error";
-      currentCharge.error = "Timeout: no s'han introduït prou diners";
-      try { await cashlogyRequest("/deposit/end", "POST", {}); } catch {}
-      return res.json({ success: false, error: currentCharge.error });
-    }
-
-    // 4. Dispense change if needed
-    const changeCents = depositedCents - amountCents;
-    const changeEur = changeCents / 100;
-    currentCharge.change = changeEur;
-
-    if (changeCents > 0) {
-      currentCharge.status = "dispensing";
-      console.log(`[Cashlogy] Dispensant canvi: ${changeCents} cèntims (${changeEur.toFixed(2)}€)`);
+      currentCharge.error = "Timeout: cobrament Cashlogy sense resposta final";
       try {
-        await cashlogyRequest("/dispense", "POST", { amount: changeCents });
-        const dispDeadline = Date.now() + DISPENSE_TIMEOUT_MS;
-        while (Date.now() < dispDeadline) {
-          await sleep(POLL_INTERVAL);
-          const dispStatus = await cashlogyRequest("/status");
-          if (dispStatus.status !== "busy") break;
-        }
-      } catch (dispErr) {
-        // IMPORTANT: do NOT treat dispense failure as success.
-        // If the machine cannot return change (no coins/bills, hardware error),
-        // the employee must know so they can give change manually.
-        console.error("[Cashlogy] Error dispensant canvi:", dispErr.message);
-        currentCharge.status = "error";
-        currentCharge.error = `No s'ha pogut dispensar el canvi (${changeEur.toFixed(2)}€): ${dispErr.message}`;
-        return res.json({
-          success: false,
-          error: currentCharge.error,
-          deposited: depositedCents / 100,
-          changeOwed: changeEur,
-          depositId: currentCharge.depositId,
-        });
+        await cancelCurrentCharge();
+      } catch (cancelErr) {
+        console.warn("[Cashlogy] Error cancelling timed-out charge:", normalizeErrorMessage(cancelErr));
       }
+      return res.json({ success: false, error: currentCharge.error, chargeId: currentCharge.chargeId });
     }
 
-    currentCharge.status = "done";
-    console.log(`[Cashlogy] Cobrament OK — rebut: ${depositedCents} cèntims, canvi: ${changeEur.toFixed(2)}€`);
+    if (finalState.status === "done") {
+      console.log(
+        `[Cashlogy] Charge OK id=${currentCharge.chargeId} deposited=${currentCharge.depositedCents} dispensed=${currentCharge.dispensedCents}`
+      );
+      return res.json({
+        success: true,
+        change: currentCharge.dispensedCents / 100,
+        deposited: currentCharge.depositedCents / 100,
+        chargeId: currentCharge.chargeId,
+        depositId: currentCharge.chargeId,
+      });
+    }
+
     return res.json({
-      success: true,
-      change: changeEur,
-      deposited: depositedCents / 100,
-      depositId: currentCharge.depositId,
+      success: false,
+      error: currentCharge.error || "Cobrament Cashlogy no completat",
+      chargeId: currentCharge.chargeId,
+      deposited: currentCharge.depositedCents / 100,
+      changeOwed: Math.max(0, amountCents - currentCharge.dispensedCents) / 100,
     });
   } catch (err) {
-    console.error("[Cashlogy] Error:", err.message);
+    const message = normalizeErrorMessage(err);
+    console.error("[Cashlogy] Charge error:", message);
     currentCharge.status = "error";
-    currentCharge.error = err.message;
-    return res.json({ success: false, error: err.message });
+    currentCharge.error = message;
+    return res.status(502).json({ success: false, error: message });
   }
 }
 
 async function handleCashlogyCancel(_req, res) {
   try {
-    console.log("[Cashlogy] Cancel·lant operació en curs...");
-    if (currentCharge) currentCharge.status = "cancelled";
-    const endRes = await cashlogyRequest("/deposit/end", "POST", {});
-    console.log("[Cashlogy] Cancel response:", JSON.stringify(endRes));
-    return res.json({ success: true });
+    if (!currentCharge || !currentCharge.chargeId) {
+      return res.json({ success: true, skipped: true });
+    }
+    console.log(`[Cashlogy] Cancelling charge ${currentCharge.chargeId}`);
+    await cancelCurrentCharge();
+    return res.json({ success: true, chargeId: currentCharge.chargeId });
   } catch (err) {
-    console.error("[Cashlogy] Cancel error:", err.message);
-    return res.json({ success: false, error: err.message });
+    const message = normalizeErrorMessage(err);
+    console.error("[Cashlogy] Cancel error:", message);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyInit(_req, res) {
+  try {
+    const data = await ensureInitialized();
+    return res.json({ success: true, ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyClose(_req, res) {
+  try {
+    const data = await cashlogyRequest("/close", "POST", {}, 15_000);
+    return res.json({ success: data.result === "SUCCESS", ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
   }
 }
 
 async function handleCashlogyState(_req, res) {
   try {
-    const state = await cashlogyRequest("/cashlogyState", "POST", {});
-    console.log("[Cashlogy] State:", JSON.stringify(state));
-    return res.json(state);
+    const [status, peripherals, model, accounting, errors] = await Promise.all([
+      cashlogyRequest("/status", "GET", null, 8_000).catch((err) => ({ error: normalizeErrorMessage(err) })),
+      cashlogyRequest("/peripherals", "GET", null, 8_000).catch((err) => ({ error: normalizeErrorMessage(err) })),
+      cashlogyRequest("/cashlogy/model", "GET", null, 8_000).catch((err) => ({ error: normalizeErrorMessage(err) })),
+      cashlogyRequest("/cashlogy/accounting", "GET", null, 8_000).catch((err) => ({ error: normalizeErrorMessage(err) })),
+      cashlogyRequest("/errors", "GET", null, 8_000).catch((err) => ({ error: normalizeErrorMessage(err) })),
+    ]);
+
+    const cash = Array.isArray(peripherals.cash) ? peripherals.cash : [];
+    const primaryCash = cash.find((p) => p.isPrimary) || cash[0] || null;
+    const accountingItems = Array.isArray(accounting.items) ? accounting.items : [];
+    const totalAmount =
+      parseCents(accounting.recyclers?.amount) +
+      parseCents(accounting.stacker?.amount) +
+      parseCents(accounting.coinbox?.amount) +
+      parseCents(accounting.safebox?.amount);
+
+    return res.json({
+      ok: !status.error && !peripherals.error,
+      online: primaryCash?.status === "AVAILABLE",
+      status,
+      peripherals,
+      model,
+      accounting,
+      errors,
+      denominations: accountingItems,
+      totalAmount,
+      total: totalAmount / 100,
+    });
   } catch (err) {
-    console.error("[Cashlogy] State error:", err.message);
-    return res.status(502).json({ error: err.message });
+    const message = normalizeErrorMessage(err);
+    console.error("[Cashlogy] State error:", message);
+    return res.status(502).json({ error: message });
   }
 }
 
-module.exports = { handleCashlogyCharge, handleCashlogyChargeStatus, handleCashlogyCancel, handleCashlogyState };
+async function handleCashlogyBackOffice(req, res) {
+  try {
+    await ensureInitialized();
+    const body = {
+      operations: {
+        addChange: true,
+        giveChange: true,
+        closure: true,
+        withdrawCash: true,
+        collect: true,
+        completeEmpty: true,
+        cashlogyState: true,
+        recyclersSelfprotection: true,
+        accountingMismatch: true,
+        maintenance: true,
+        ...(req.body?.operations || {}),
+      },
+      topMost: req.body?.topMost !== false,
+      screenVisible: req.body?.screenVisible !== false,
+    };
+    const data = await cashlogyRequest("/backOffice", "POST", body, 15_000);
+    return res.json({ success: data.result === "SUCCESS", ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyBackOfficeStatus(_req, res) {
+  try {
+    const data = await cashlogyRequest("/backOffice/status", "GET", null, 8_000);
+    return res.json(data);
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyBackOfficeExit(_req, res) {
+  try {
+    const data = await cashlogyRequest("/backOffice/exit", "POST", {}, 10_000);
+    return res.json({ success: data.success !== false, ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyDispense(req, res) {
+  const amountCents = parseAmountCents(req.body?.amountCents, req.body?.amount);
+  if (!amountCents) return res.status(400).json({ success: false, error: "Import invalid" });
+
+  try {
+    await ensureInitialized();
+    const data = await cashlogyRequest(
+      "/dispense",
+      "POST",
+      {
+        amount: amountCents,
+        onlyCoins: Boolean(req.body?.onlyCoins),
+        screenVisible: req.body?.screenVisible !== false,
+        topMost: req.body?.topMost !== false,
+      },
+      15_000
+    );
+    return res.json({ success: data.result === "SUCCESS", ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyDispenseStatus(_req, res) {
+  try {
+    const data = await cashlogyRequest("/dispense/status", "GET", null, 8_000);
+    return res.json(data);
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyDispenseCancel(_req, res) {
+  try {
+    const data = await cashlogyRequest("/dispense/cancel", "POST", {}, 10_000);
+    return res.json({ success: data.success !== false, ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyAddChange(req, res) {
+  try {
+    await ensureInitialized();
+    const data = await cashlogyRequest(
+      "/addChange",
+      "POST",
+      {
+        mode: req.body?.mode || "NORMAL",
+        coins: req.body?.coins || { acceptAll: false, destination: "DEFAULT" },
+        bills: req.body?.bills || { acceptAll: false, destination: "DEFAULT" },
+        topMost: req.body?.topMost !== false,
+        screenVisible: req.body?.screenVisible !== false,
+      },
+      15_000
+    );
+    return res.json({ success: data.result === "SUCCESS", ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyAddChangeStatus(_req, res) {
+  try {
+    const data = await cashlogyRequest("/addChange/status", "GET", null, 8_000);
+    return res.json(data);
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyAddChangeEnd(_req, res) {
+  try {
+    const data = await cashlogyRequest("/addChange/end", "POST", {}, 10_000);
+    return res.json({ success: data.success !== false, ...data });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+module.exports = {
+  handleCashlogyInit,
+  handleCashlogyClose,
+  handleCashlogyCharge,
+  handleCashlogyChargeStatus,
+  handleCashlogyCancel,
+  handleCashlogyState,
+  handleCashlogyBackOffice,
+  handleCashlogyBackOfficeStatus,
+  handleCashlogyBackOfficeExit,
+  handleCashlogyDispense,
+  handleCashlogyDispenseStatus,
+  handleCashlogyDispenseCancel,
+  handleCashlogyAddChange,
+  handleCashlogyAddChangeStatus,
+  handleCashlogyAddChangeEnd,
+};

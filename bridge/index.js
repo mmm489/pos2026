@@ -1,7 +1,23 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { handleCashlogyCharge, handleCashlogyChargeStatus, handleCashlogyCancel, handleCashlogyState } = require("./routes/cashlogy");
+const {
+  handleCashlogyInit,
+  handleCashlogyClose,
+  handleCashlogyCharge,
+  handleCashlogyChargeStatus,
+  handleCashlogyCancel,
+  handleCashlogyState,
+  handleCashlogyBackOffice,
+  handleCashlogyBackOfficeStatus,
+  handleCashlogyBackOfficeExit,
+  handleCashlogyDispense,
+  handleCashlogyDispenseStatus,
+  handleCashlogyDispenseCancel,
+  handleCashlogyAddChange,
+  handleCashlogyAddChangeStatus,
+  handleCashlogyAddChangeEnd,
+} = require("./routes/cashlogy");
 const {
   handleIngenicoCharge,
   handleIngenicoRefund,
@@ -42,10 +58,21 @@ app.get("/health", (_req, res) => {
 });
 
 // Routes
+app.post("/cashlogy/init", handleCashlogyInit);
+app.post("/cashlogy/close", handleCashlogyClose);
 app.post("/cashlogy/charge", handleCashlogyCharge);
 app.get("/cashlogy/charge/status", handleCashlogyChargeStatus);
 app.post("/cashlogy/cancel", handleCashlogyCancel);
 app.get("/cashlogy/state", handleCashlogyState);
+app.post("/cashlogy/backoffice", handleCashlogyBackOffice);
+app.get("/cashlogy/backoffice/status", handleCashlogyBackOfficeStatus);
+app.post("/cashlogy/backoffice/exit", handleCashlogyBackOfficeExit);
+app.post("/cashlogy/dispense", handleCashlogyDispense);
+app.get("/cashlogy/dispense/status", handleCashlogyDispenseStatus);
+app.post("/cashlogy/dispense/cancel", handleCashlogyDispenseCancel);
+app.post("/cashlogy/add-change", handleCashlogyAddChange);
+app.get("/cashlogy/add-change/status", handleCashlogyAddChangeStatus);
+app.post("/cashlogy/add-change/end", handleCashlogyAddChangeEnd);
 app.post("/ingenico/charge", handleIngenicoCharge);
 app.post("/ingenico/refund", handleIngenicoRefund);
 app.post("/ingenico/cancel", handleIngenicoCancel);

@@ -3,6 +3,8 @@ import { getDb, rawQuery, withTransaction } from "@/lib/db";
 import type { PoolClient } from "pg";
 import type { VatBreakdown } from "@/types/pos";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Compute the cash-closing summary covering the period since the previous Z.
  * Used for both the preview (GET) and the actual closing (POST inside a transaction).
