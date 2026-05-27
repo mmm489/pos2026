@@ -94,6 +94,84 @@ async function printTextToWindowsPrinter(printerName, text) {
   }
 }
 
+async function printRawBufferToWindowsPrinter(printerName, buffer) {
+  const file = path.join(
+    os.tmpdir(),
+    `hicream-print-${Date.now()}-${Math.random().toString(16).slice(2)}.bin`
+  );
+  fs.writeFileSync(file, buffer);
+  try {
+    const script = `
+$printerName = ${psQuote(printerName)}
+$filePath = ${psQuote(file)}
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPStr)] public string pDocName;
+    [MarshalAs(UnmanagedType.LPStr)] public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPStr)] public string pDataType;
+  }
+
+  [DllImport("winspool.Drv", EntryPoint = "OpenPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool OpenPrinter(string szPrinter, out IntPtr hPrinter, IntPtr pd);
+
+  [DllImport("winspool.Drv", EntryPoint = "ClosePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "StartDocPrinterA", SetLastError = true, CharSet = CharSet.Ansi, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In, MarshalAs(UnmanagedType.LPStruct)] DOCINFOA di);
+
+  [DllImport("winspool.Drv", EntryPoint = "EndDocPrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "StartPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "EndPagePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint = "WritePrinter", SetLastError = true, ExactSpelling = true, CallingConvention = CallingConvention.StdCall)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
+
+  public static bool SendBytesToPrinter(string printerName, byte[] bytes) {
+    IntPtr hPrinter = IntPtr.Zero;
+    IntPtr unmanagedBytes = IntPtr.Zero;
+    DOCINFOA di = new DOCINFOA();
+    di.pDocName = "HiCream Ticket";
+    di.pDataType = "RAW";
+    try {
+      if (!OpenPrinter(printerName.Normalize(), out hPrinter, IntPtr.Zero)) return false;
+      if (!StartDocPrinter(hPrinter, 1, di)) return false;
+      if (!StartPagePrinter(hPrinter)) return false;
+      unmanagedBytes = Marshal.AllocCoTaskMem(bytes.Length);
+      Marshal.Copy(bytes, 0, unmanagedBytes, bytes.Length);
+      int written;
+      bool ok = WritePrinter(hPrinter, unmanagedBytes, bytes.Length, out written);
+      EndPagePrinter(hPrinter);
+      EndDocPrinter(hPrinter);
+      return ok && written == bytes.Length;
+    } finally {
+      if (unmanagedBytes != IntPtr.Zero) Marshal.FreeCoTaskMem(unmanagedBytes);
+      if (hPrinter != IntPtr.Zero) ClosePrinter(hPrinter);
+    }
+  }
+}
+"@
+$bytes = [System.IO.File]::ReadAllBytes($filePath)
+if (-not [RawPrinterHelper]::SendBytesToPrinter($printerName, $bytes)) {
+  throw "No se pudo enviar RAW a la impresora $printerName"
+}
+`;
+    await runPowerShell(script, 45000);
+  } finally {
+    fs.unlink(file, () => {});
+  }
+}
+
 function money(value) {
   return `${Number(value || 0).toFixed(2)} EUR`;
 }
@@ -251,6 +329,8 @@ function createReceiptPrinter() {
 
   if (iface === "tcp") {
     options.interface = `tcp://${process.env.PRINTER_HOST || "127.0.0.1"}:${process.env.PRINTER_PORT || "9100"}`;
+  } else if (isReceiptWindowsPrinter()) {
+    options.interface = `printer:${getReceiptPrinterName()}`;
   } else {
     options.interface = process.env.PRINTER_PATH || "//localhost/printer";
   }
@@ -327,14 +407,8 @@ async function handlePrintTicket(req, res) {
   const calcVat = totalVat || Math.round((calcTotal - calcBase) * 100) / 100;
 
   try {
-    if (isReceiptWindowsPrinter()) {
-      await printTextToWindowsPrinter(getReceiptPrinterName(), formatReceiptText(req.body));
-      console.log(`[Printer] Ticket impreso por Windows: ${invoiceNumber || orderNumber}`);
-      return res.json({ success: true });
-    }
-
     const printer = createReceiptPrinter();
-    const isConnected = await printer.isPrinterConnected();
+    const isConnected = isReceiptWindowsPrinter() || await printer.isPrinterConnected();
 
     // ========== HEADER ==========
     printer.alignCenter();
@@ -416,7 +490,10 @@ async function handlePrintTicket(req, res) {
     printer.newLine();
     printer.cut();
 
-    if (isConnected) {
+    if (isReceiptWindowsPrinter()) {
+      await printRawBufferToWindowsPrinter(getReceiptPrinterName(), printer.getBuffer());
+      console.log(`[Printer] Ticket RAW Windows: ${invoiceNumber || orderNumber}`);
+    } else if (isConnected) {
       await printer.execute();
       console.log(`[Printer] Ticket impreso: ${invoiceNumber || orderNumber}`);
     } else {
@@ -515,14 +592,14 @@ async function handlePrintCardReceipt(req, res) {
   const copyLabel = copy === "merchant" ? "COPIA COMERC" : "COPIA CLIENT";
 
   try {
-    if (isReceiptWindowsPrinter()) {
+    if (false && isReceiptWindowsPrinter()) {
       await printTextToWindowsPrinter(getReceiptPrinterName(), formatCardReceiptText(receipt, copyLabel));
       console.log(`[Printer] Rebut bancari Windows (${copyLabel}) imprÃ¨s${orderNumber ? ` per ${orderNumber}` : ""}`);
       return res.json({ success: true });
     }
 
     const printer = createReceiptPrinter();
-    const isConnected = await printer.isPrinterConnected();
+    const isConnected = isReceiptWindowsPrinter() || await printer.isPrinterConnected();
 
     printer.alignCenter();
     printer.bold(true);
@@ -545,7 +622,10 @@ async function handlePrintCardReceipt(req, res) {
     printer.newLine();
     printer.cut();
 
-    if (isConnected) {
+    if (isReceiptWindowsPrinter()) {
+      await printRawBufferToWindowsPrinter(getReceiptPrinterName(), printer.getBuffer());
+      console.log(`[Printer] Rebut bancari RAW Windows (${copyLabel}) impreso${orderNumber ? ` per ${orderNumber}` : ""}`);
+    } else if (isConnected) {
       await printer.execute();
       console.log(`[Printer] Rebut bancari (${copyLabel}) imprès${orderNumber ? ` per ${orderNumber}` : ""}`);
     } else {
@@ -568,14 +648,14 @@ async function handlePrintZReport(req, res) {
   const biz = c.business_snapshot || {};
 
   try {
-    if (isReceiptWindowsPrinter()) {
+    if (false && isReceiptWindowsPrinter()) {
       await printTextToWindowsPrinter(getReceiptPrinterName(), formatZReportText(c));
       console.log(`[Printer] Z Windows imprÃ¨s: ${c.z_label}`);
       return res.json({ success: true });
     }
 
     const printer = createReceiptPrinter();
-    const isConnected = await printer.isPrinterConnected();
+    const isConnected = isReceiptWindowsPrinter() || await printer.isPrinterConnected();
 
     // ========== HEADER ==========
     printer.alignCenter();
@@ -673,7 +753,10 @@ async function handlePrintZReport(req, res) {
     printer.newLine();
     printer.cut();
 
-    if (isConnected) {
+    if (isReceiptWindowsPrinter()) {
+      await printRawBufferToWindowsPrinter(getReceiptPrinterName(), printer.getBuffer());
+      console.log(`[Printer] Z RAW Windows impreso: ${c.z_label}`);
+    } else if (isConnected) {
       await printer.execute();
       console.log(`[Printer] Z imprès: ${c.z_label}`);
     } else {
