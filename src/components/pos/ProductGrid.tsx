@@ -15,10 +15,6 @@ interface ProductGridProps {
 
 const LONG_PRESS_MS = 500;
 
-function normalize(s: string) {
-  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-}
-
 export default function ProductGrid({
   products,
   categories,
@@ -27,26 +23,17 @@ export default function ProductGrid({
   noLongPressIds,
 }: ProductGridProps) {
   // Square-style two-step navigation: start on category overview,
-  // click a category to drill into its products. Search jumps over the
-  // category gate so cashiers can find anything fast.
+  // click a category to drill into its products.
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [search, setSearch] = useState("");
   const [flashId, setFlashId] = useState<number | null>(null);
 
-  const isSearching = search.trim().length > 0;
-  const showProducts = selectedCategory !== null || isSearching;
+  const showProducts = selectedCategory !== null;
 
   const filtered = useMemo(() => {
-    let list = products;
-    if (selectedCategory && !isSearching) {
-      list = list.filter((p) => p.category_id === selectedCategory.id);
-    }
-    if (isSearching) {
-      const q = normalize(search.trim());
-      list = list.filter((p) => normalize(p.name).includes(q));
-    }
-    return list;
-  }, [products, selectedCategory, search, isSearching]);
+    if (!selectedCategory) return [];
+    if (selectedCategory.id === -1) return products;
+    return products.filter((p) => p.category_id === selectedCategory.id);
+  }, [products, selectedCategory]);
 
   const handleAdd = (product: Product) => {
     onAddToCart(product);
@@ -64,9 +51,9 @@ export default function ProductGrid({
 
   return (
     <div className="flex h-full flex-col bg-[#0f172a]">
-      {/* Top bar — search + breadcrumb */}
-      <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/10 bg-slate-950/60 px-5 py-4 shadow-2xl shadow-black/10 backdrop-blur">
-        {showProducts && !isSearching && (
+      {/* Top bar — breadcrumb */}
+      {selectedCategory && (
+        <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/10 bg-slate-950/60 px-5 py-3 shadow-2xl shadow-black/10 backdrop-blur">
           <button
             onClick={() => setSelectedCategory(null)}
             className="flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/15 active:bg-white/20"
@@ -75,9 +62,7 @@ export default function ProductGrid({
             <span className="text-lg leading-none">&#8592;</span>
             <span>Categories</span>
           </button>
-        )}
 
-        {selectedCategory && !isSearching && (
           <>
             <span className="text-slate-600">/</span>
             <div className="flex items-center gap-2">
@@ -91,30 +76,8 @@ export default function ProductGrid({
               </span>
             </div>
           </>
-        )}
-
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cercar producte..."
-            className="w-full rounded-xl border border-white/10 bg-white/10 py-2.5 pl-10 pr-10 text-sm font-medium text-white outline-none transition-all placeholder:text-slate-500 focus:border-sky-300/40 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/10"
-          />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-slate-500">
-            &#128269;
-          </span>
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-white/15 hover:text-slate-200"
-              aria-label="Esborrar cerca"
-            >
-              &#10005;
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-5">
@@ -131,16 +94,11 @@ export default function ProductGrid({
           />
         ) : (
           <ProductsGrid
-            products={
-              selectedCategory && selectedCategory.id === -1 && !isSearching
-                ? products
-                : filtered
-            }
+            products={filtered}
             flashId={flashId}
             onAdd={handleAdd}
             onLongPress={onLongPress}
             noLongPressIds={noLongPressIds}
-            isSearching={isSearching}
           />
         )}
       </div>
@@ -209,14 +167,12 @@ function ProductsGrid({
   onAdd,
   onLongPress,
   noLongPressIds,
-  isSearching,
 }: {
   products: Product[];
   flashId: number | null;
   onAdd: (p: Product) => void;
   onLongPress?: (p: Product) => void;
   noLongPressIds?: Set<number>;
-  isSearching: boolean;
 }) {
   if (products.length === 0) {
     return (
@@ -224,9 +180,6 @@ function ProductsGrid({
         <div className="text-center">
           <p className="mb-3 text-5xl">&#128269;</p>
           <p className="text-lg font-bold">Cap producte</p>
-          {isSearching && (
-            <p className="mt-1 text-sm">Prova amb un altre text</p>
-          )}
         </div>
       </div>
     );
