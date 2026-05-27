@@ -401,12 +401,18 @@ async function handlePrintTicket(req, res) {
   }
 
   const biz = business || {};
-  const vatPct = vatRate || 10;
+  const vatPct = Number(vatRate || 10);
 
   // Calculate tax if not provided
-  const calcTotal = total || items.reduce((s, i) => s + i.price * i.qty, 0);
-  const calcBase = totalBase || Math.round((calcTotal / (1 + vatPct / 100)) * 100) / 100;
-  const calcVat = totalVat || Math.round((calcTotal - calcBase) * 100) / 100;
+  const calcTotal = total !== undefined && total !== null
+    ? Number(total)
+    : items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 0), 0);
+  const calcBase = totalBase !== undefined && totalBase !== null
+    ? Number(totalBase)
+    : Math.round((calcTotal / (1 + vatPct / 100)) * 100) / 100;
+  const calcVat = totalVat !== undefined && totalVat !== null
+    ? Number(totalVat)
+    : Math.round((calcTotal - calcBase) * 100) / 100;
 
   try {
     const printer = createReceiptPrinter();
@@ -445,13 +451,15 @@ async function handlePrintTicket(req, res) {
     printer.drawLine();
 
     for (const item of items) {
-      const subtotal = (item.price * item.qty).toFixed(2);
-      if (item.qty === 1) {
+      const qty = Number(item.qty || 0);
+      const price = Number(item.price || 0);
+      const subtotal = (price * qty).toFixed(2);
+      if (qty === 1) {
         printer.println(rightAlign(item.name, `${subtotal} EUR`));
       } else {
         printer.println(item.name);
         printer.println(rightAlign(
-          `  ${item.qty} x ${item.price.toFixed(2)}`,
+          `  ${qty} x ${price.toFixed(2)}`,
           `${subtotal} EUR`
         ));
       }
