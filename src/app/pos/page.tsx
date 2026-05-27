@@ -261,22 +261,22 @@ export default function PosPage() {
   return (
     <div className="flex h-screen flex-col bg-[#0f172a] text-slate-100">
       {/* Top header */}
-      <header className="flex min-h-[128px] flex-shrink-0 items-center justify-between gap-5 border-b border-slate-700/60 bg-slate-800/95 px-6 py-4 shadow-2xl shadow-black/20 backdrop-blur">
-        <div className="flex min-w-[220px] items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-none bg-slate-100 text-base font-black text-slate-950 shadow-lg shadow-black/20">
+      <header className="flex min-h-[78px] flex-shrink-0 items-center justify-between gap-3 border-b border-slate-700/60 bg-slate-800/95 px-4 py-2 shadow-2xl shadow-black/20 backdrop-blur">
+        <div className="flex min-w-[180px] items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-none bg-slate-100 text-sm font-black text-slate-950 shadow-lg shadow-black/20">
             HC
           </div>
           <div className="min-w-0">
-            <h1 className="text-3xl font-black leading-tight text-white">Hi Cream</h1>
-            <p className="truncate text-base font-semibold text-slate-400">
+            <h1 className="text-2xl font-black leading-tight text-white">Hi Cream</h1>
+            <p className="truncate text-sm font-semibold text-slate-400">
               {employee.name} - {employee.role === "admin" ? "Admin" : "Empleado"}
             </p>
           </div>
         </div>
-        <div className="flex min-h-[88px] min-w-0 flex-1 flex-wrap items-center justify-end gap-2 py-1">
+        <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1.5 overflow-hidden py-1">
           <button
             onClick={() => setShowCashlogy(true)}
-            className="min-h-[46px] whitespace-nowrap rounded-none bg-emerald-300/15 px-4 py-2 text-base font-black text-emerald-100 ring-1 ring-emerald-200/25 transition-colors hover:bg-emerald-300/25 active:bg-emerald-300/30"
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-none bg-emerald-300/15 px-3 py-2 text-sm font-black text-emerald-100 ring-1 ring-emerald-200/25 transition-colors hover:bg-emerald-300/25 active:bg-emerald-300/30"
           >
             Cashlogy
           </button>
@@ -285,7 +285,7 @@ export default function PosPage() {
               loadRecentOrders();
               setShowRecentOrders(true);
             }}
-            className="min-h-[46px] whitespace-nowrap rounded-none bg-sky-300/15 px-4 py-2 text-base font-black text-sky-100 ring-1 ring-sky-200/25 transition-colors hover:bg-sky-300/25 active:bg-sky-300/30"
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-none bg-sky-300/15 px-3 py-2 text-sm font-black text-sky-100 ring-1 ring-sky-200/25 transition-colors hover:bg-sky-300/25 active:bg-sky-300/30"
           >
             Comandes
           </button>
@@ -293,25 +293,25 @@ export default function PosPage() {
             <>
               <a
                 href="/admin/products"
-                className="flex min-h-[46px] items-center whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
+                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-none bg-white/12 px-3 py-2 text-sm font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
               >
                 Productes
               </a>
               <a
                 href="/admin/employees"
-                className="flex min-h-[46px] items-center whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
+                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-none bg-white/12 px-3 py-2 text-sm font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
               >
                 Empleats
               </a>
               <a
                 href="/admin/closings"
-                className="flex min-h-[46px] items-center whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
+                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-none bg-white/12 px-3 py-2 text-sm font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
               >
                 Tancaments
               </a>
               <button
                 onClick={() => setShowCashClosing(true)}
-                className="min-h-[46px] whitespace-nowrap rounded-none bg-amber-300/18 px-4 py-2 text-base font-black text-amber-100 ring-1 ring-amber-200/25 transition-colors hover:bg-amber-300/28 active:bg-amber-300/35"
+                className="min-h-[42px] shrink-0 whitespace-nowrap rounded-none bg-amber-300/18 px-3 py-2 text-sm font-black text-amber-100 ring-1 ring-amber-200/25 transition-colors hover:bg-amber-300/28 active:bg-amber-300/35"
               >
                 Tancar caixa
               </button>
@@ -319,7 +319,7 @@ export default function PosPage() {
           )}
           <button
             onClick={handleLogout}
-            className="min-h-[46px] whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-none bg-white/12 px-3 py-2 text-sm font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
           >
             Canviar empleat
           </button>

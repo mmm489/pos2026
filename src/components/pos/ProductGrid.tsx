@@ -166,20 +166,19 @@ function CategoryGrid({
   onSelectAll: () => void;
 }) {
   const cardClass =
-    "group flex min-h-[156px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-[#27272A] px-4 py-5 text-center shadow-[0_18px_50px_rgba(0,0,0,0.22)] transition-all duration-200 hover:-translate-y-1 hover:border-sky-300/35 hover:bg-[#2f2f33] hover:shadow-[0_24px_65px_rgba(0,0,0,0.34)] active:scale-[0.98]";
+    "group flex min-h-[96px] flex-col items-center justify-center rounded-xl border border-white/10 bg-[#27272A] px-4 py-3 text-center shadow-[0_14px_38px_rgba(0,0,0,0.2)] transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/35 hover:bg-[#2f2f33] hover:shadow-[0_18px_46px_rgba(0,0,0,0.3)] active:scale-[0.98]";
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+    <div className="grid grid-cols-4 gap-3">
       {/* "Tots" tile */}
       <button
         onClick={onSelectAll}
         className={cardClass}
       >
-        <CategoryGlyph />
-        <span className="mt-4 text-base font-black leading-tight text-white">
+        <span className="line-clamp-2 max-w-full text-base font-black leading-tight text-white">
           Tots els productes
         </span>
-        <span className="mt-1 text-sm font-semibold text-zinc-400">{totalProducts}</span>
+        <span className="mt-1 text-xs font-semibold text-zinc-400">{totalProducts}</span>
       </button>
 
       {categories.map((cat) => (
@@ -188,41 +187,15 @@ function CategoryGrid({
           onClick={() => onSelect(cat)}
           className={cardClass}
         >
-          <CategoryGlyph color={cat.color} />
-          <span className="mt-4 text-base font-black leading-tight text-white">
+          <span className="line-clamp-2 max-w-full text-base font-black leading-tight text-white">
             {cat.name}
           </span>
-          <span className="mt-1 text-sm font-semibold text-zinc-400">
+          <span className="mt-1 text-xs font-semibold text-zinc-400">
             {counts.get(cat.id) || 0} producte{(counts.get(cat.id) || 0) !== 1 ? "s" : ""}
           </span>
         </button>
       ))}
     </div>
-  );
-}
-
-function CategoryGlyph({ color = "#38bdf8" }: { color?: string }) {
-  return (
-    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/8 ring-1 ring-white/10 transition-colors group-hover:bg-white/12">
-      <svg
-        className="h-6 w-6"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M5 8.5C5 6.57 6.57 5 8.5 5h7C17.43 5 19 6.57 19 8.5v7c0 1.93-1.57 3.5-3.5 3.5h-7A3.5 3.5 0 0 1 5 15.5v-7Z"
-          stroke={color}
-          strokeWidth="1.8"
-        />
-        <path
-          d="M9 9h6M9 12h6M9 15h3.5"
-          stroke={color}
-          strokeLinecap="round"
-          strokeWidth="1.8"
-        />
-      </svg>
-    </span>
   );
 }
 
