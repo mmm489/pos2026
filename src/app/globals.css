@@ -2,9 +2,70 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --surface: #27272a;
+  --surface-soft: #18181b;
+  --hairline: rgba(15, 23, 42, 0.1);
+}
+
+html {
+  min-height: 100%;
+  background: var(--background);
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100%;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   user-select: none;
   overscroll-behavior: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.28);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.pos-menu-scroll {
+  scrollbar-width: none;
+}
+
+.pos-menu-scroll::-webkit-scrollbar {
+  display: none;
 }

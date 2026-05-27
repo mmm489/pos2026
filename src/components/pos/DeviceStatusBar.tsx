@@ -110,7 +110,7 @@ export default function DeviceStatusBar({
           <div
             key={key}
             title={s?.detail || stateLabel}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium ${bgClass} ${textClass}`}
+            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold shadow-sm ${bgClass} ${textClass}`}
           >
             <span className={`w-2 h-2 rounded-full ${dotClass}`} />
             <span>{label}</span>

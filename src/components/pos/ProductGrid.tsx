@@ -15,14 +15,6 @@ interface ProductGridProps {
 
 const LONG_PRESS_MS = 500;
 
-function hexToRgba(hex: string, alpha: number) {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function normalize(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 }
@@ -71,13 +63,13 @@ export default function ProductGrid({
   }, [products]);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex h-full flex-col bg-[#0f172a]">
       {/* Top bar — search + breadcrumb */}
-      <div className="flex items-center gap-3 px-5 py-4 bg-white border-b border-gray-200 flex-shrink-0">
+      <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/10 bg-slate-950/60 px-5 py-4 shadow-2xl shadow-black/10 backdrop-blur">
         {showProducts && !isSearching && (
           <button
             onClick={() => setSelectedCategory(null)}
-            className="flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-gray-100 text-gray-700 font-semibold text-sm transition-colors"
+            className="flex items-center gap-1 rounded-xl bg-white/10 px-3 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/15 active:bg-white/20"
             aria-label="Tornar a categories"
           >
             <span className="text-lg leading-none">&#8592;</span>
@@ -87,14 +79,14 @@ export default function ProductGrid({
 
         {selectedCategory && !isSearching && (
           <>
-            <span className="text-gray-300">/</span>
+            <span className="text-slate-600">/</span>
             <div className="flex items-center gap-2">
               <span
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: selectedCategory.color }}
               />
-              <h2 className="text-lg font-bold text-gray-800">{selectedCategory.name}</h2>
-              <span className="text-sm text-gray-400">
+              <h2 className="text-lg font-black text-white">{selectedCategory.name}</h2>
+              <span className="text-sm text-slate-500">
                 ({countByCategory.get(selectedCategory.id) || 0})
               </span>
             </div>
@@ -107,15 +99,15 @@ export default function ProductGrid({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Cercar producte..."
-            className="w-full pl-10 pr-10 py-2.5 bg-gray-100 border border-transparent rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-800 focus:bg-white transition-all"
+            className="w-full rounded-xl border border-white/10 bg-white/10 py-2.5 pl-10 pr-10 text-sm font-medium text-white outline-none transition-all placeholder:text-slate-500 focus:border-sky-300/40 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/10"
           />
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg text-slate-500">
             &#128269;
           </span>
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 w-6 h-6 flex items-center justify-center rounded-full hover:bg-gray-200"
+              className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 hover:bg-white/15 hover:text-slate-200"
               aria-label="Esborrar cerca"
             >
               &#10005;
@@ -173,48 +165,64 @@ function CategoryGrid({
   onSelect: (cat: Category) => void;
   onSelectAll: () => void;
 }) {
+  const cardClass =
+    "group flex min-h-[156px] flex-col items-center justify-center rounded-2xl border border-white/10 bg-[#27272A] px-4 py-5 text-center shadow-[0_18px_50px_rgba(0,0,0,0.22)] transition-all duration-200 hover:-translate-y-1 hover:border-sky-300/35 hover:bg-[#2f2f33] hover:shadow-[0_24px_65px_rgba(0,0,0,0.34)] active:scale-[0.98]";
+
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {/* "Tots" tile */}
       <button
         onClick={onSelectAll}
-        className="group flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all min-h-[140px]"
+        className={cardClass}
       >
-        <div className="h-2 bg-gray-800" />
-        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-          <span className="text-3xl mb-2">&#128722;</span>
-          <span className="text-base font-bold text-gray-800 leading-tight">
-            Tots els productes
-          </span>
-          <span className="text-sm text-gray-400 mt-1">{totalProducts}</span>
-        </div>
+        <CategoryGlyph />
+        <span className="mt-4 text-base font-black leading-tight text-white">
+          Tots els productes
+        </span>
+        <span className="mt-1 text-sm font-semibold text-zinc-400">{totalProducts}</span>
       </button>
 
       {categories.map((cat) => (
         <button
           key={cat.id}
           onClick={() => onSelect(cat)}
-          className="group flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all min-h-[140px]"
-          style={{
-            // Subtle tinted background using the category color.
-            backgroundColor: hexToRgba(cat.color, 0.06),
-          }}
+          className={cardClass}
         >
-          <div className="h-2" style={{ backgroundColor: cat.color }} />
-          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-            <span
-              className="text-base font-bold leading-tight"
-              style={{ color: cat.color }}
-            >
-              {cat.name}
-            </span>
-            <span className="text-sm text-gray-500 mt-1">
-              {counts.get(cat.id) || 0} producte{(counts.get(cat.id) || 0) !== 1 ? "s" : ""}
-            </span>
-          </div>
+          <CategoryGlyph color={cat.color} />
+          <span className="mt-4 text-base font-black leading-tight text-white">
+            {cat.name}
+          </span>
+          <span className="mt-1 text-sm font-semibold text-zinc-400">
+            {counts.get(cat.id) || 0} producte{(counts.get(cat.id) || 0) !== 1 ? "s" : ""}
+          </span>
         </button>
       ))}
     </div>
+  );
+}
+
+function CategoryGlyph({ color = "#38bdf8" }: { color?: string }) {
+  return (
+    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/8 ring-1 ring-white/10 transition-colors group-hover:bg-white/12">
+      <svg
+        className="h-6 w-6"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M5 8.5C5 6.57 6.57 5 8.5 5h7C17.43 5 19 6.57 19 8.5v7c0 1.93-1.57 3.5-3.5 3.5h-7A3.5 3.5 0 0 1 5 15.5v-7Z"
+          stroke={color}
+          strokeWidth="1.8"
+        />
+        <path
+          d="M9 9h6M9 12h6M9 15h3.5"
+          stroke={color}
+          strokeLinecap="round"
+          strokeWidth="1.8"
+        />
+      </svg>
+    </span>
   );
 }
 
@@ -239,12 +247,12 @@ function ProductsGrid({
 }) {
   if (products.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-gray-400">
+      <div className="flex h-full items-center justify-center text-slate-500">
         <div className="text-center">
-          <p className="text-5xl mb-3">&#128269;</p>
-          <p className="text-lg font-semibold">Cap producte</p>
+          <p className="mb-3 text-5xl">&#128269;</p>
+          <p className="text-lg font-bold">Cap producte</p>
           {isSearching && (
-            <p className="text-sm mt-1">Prova amb un altre text</p>
+            <p className="mt-1 text-sm">Prova amb un altre text</p>
           )}
         </div>
       </div>
@@ -252,7 +260,7 @@ function ProductsGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {products.map((product) => (
         <ProductCard
           key={product.id}
@@ -327,38 +335,38 @@ function ProductCard({
         // Suppress the right-click menu on long press for desktop testers.
         if (onLongPress) e.preventDefault();
       }}
-      className={`group flex flex-col bg-white rounded-2xl border overflow-hidden active:scale-[0.97] transition-all min-h-[110px] relative ${
+      className={`group relative flex min-h-[112px] flex-col overflow-hidden rounded-2xl border bg-[#27272A] shadow-[0_14px_40px_rgba(0,0,0,0.2)] transition-all active:scale-[0.97] ${
         isFlashing
-          ? "border-green-500 ring-2 ring-green-200"
+          ? "border-emerald-500 ring-2 ring-emerald-200"
           : pressing
-          ? "border-pink-400 ring-2 ring-pink-200"
-          : "border-gray-200 hover:shadow-md hover:-translate-y-0.5"
+          ? "border-rose-400 ring-2 ring-rose-200"
+          : "border-white/10 hover:-translate-y-0.5 hover:border-sky-300/30 hover:shadow-[0_20px_55px_rgba(0,0,0,0.3)]"
       }`}
     >
       <div
         className="h-1.5"
         style={{ backgroundColor: isFlashing ? "#10B981" : color }}
       />
-      <div className="flex-1 flex flex-col justify-between p-3">
-        <span className="text-sm font-bold text-gray-800 text-left leading-snug line-clamp-2">
+      <div className="flex flex-1 flex-col justify-between p-3">
+        <span className="line-clamp-2 text-left text-sm font-black leading-snug text-white">
           {product.name}
         </span>
-        <div className="flex items-baseline justify-between mt-2">
+        <div className="mt-2 flex items-baseline justify-between">
           <span
             className="text-lg font-black tabular-nums"
-            style={{ color: isFlashing ? "#10B981" : "#111827" }}
+            style={{ color: isFlashing ? "#10B981" : "#F8FAFC" }}
           >
             {Number(product.price).toFixed(2)}
             <span className="text-sm font-bold ml-0.5">€</span>
           </span>
           {isFlashing && (
-            <span className="text-green-600 text-xl leading-none">&#10003;</span>
+            <span className="text-xl leading-none text-emerald-600">&#10003;</span>
           )}
         </div>
       </div>
       {onLongPress && (
         <span
-          className="absolute top-1.5 right-2 text-[10px] text-gray-300 group-hover:text-gray-400 select-none pointer-events-none"
+          className="pointer-events-none absolute right-2 top-1.5 select-none text-[10px] text-slate-500 group-hover:text-slate-300"
           aria-hidden
         >
           +

@@ -77,12 +77,15 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
   const digits = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"];
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-pink-50 to-pink-100 py-6 gap-4">
-      <div className="bg-white rounded-3xl shadow-xl p-10 w-full max-w-sm">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#f5f7fb] px-4 py-6">
+      <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/70">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-pink-500">Hi Cream</h1>
-          <p className="text-gray-500 mt-1">Introduce tu PIN</p>
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-lg bg-slate-950 text-lg font-black text-white shadow-sm">
+            HC
+          </div>
+          <h1 className="text-4xl font-black text-slate-950">Hi Cream</h1>
+          <p className="mt-1 text-sm font-medium text-slate-500">Introduce tu PIN</p>
         </div>
 
         {/* PIN display */}
@@ -90,10 +93,10 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className={`w-14 h-14 rounded-xl border-2 flex items-center justify-center text-2xl font-bold transition-all ${
+              className={`flex h-14 w-14 items-center justify-center rounded-lg border text-2xl font-black transition-all ${
                 pin.length > i
-                  ? "border-pink-400 bg-pink-50 text-pink-600"
-                  : "border-gray-200 bg-gray-50"
+                  ? "border-slate-950 bg-slate-950 text-white"
+                  : "border-slate-200 bg-slate-50"
               }`}
             >
               {pin.length > i ? "\u2022" : ""}
@@ -103,7 +106,7 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
 
         {/* Error */}
         {error && (
-          <p className="text-center text-red-500 text-sm mb-4">{error}</p>
+          <p className="mb-4 text-center text-sm font-semibold text-red-500">{error}</p>
         )}
 
         {/* Numpad */}
@@ -116,7 +119,7 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
                   key={i}
                   onClick={handleDelete}
                   disabled={loading}
-                  className="h-16 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-600 text-lg font-semibold transition-colors"
+                  className="h-16 rounded-lg bg-slate-100 text-lg font-bold text-slate-600 transition-colors hover:bg-slate-200 active:bg-slate-300"
                 >
                   &#9003;
                 </button>
@@ -127,7 +130,7 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
                 key={i}
                 onClick={() => handleDigit(d)}
                 disabled={loading || pin.length >= 4}
-                className="h-16 rounded-xl bg-gray-50 hover:bg-gray-100 active:bg-gray-200 text-gray-800 text-2xl font-semibold transition-colors"
+                className="h-16 rounded-lg bg-slate-50 text-2xl font-bold text-slate-950 ring-1 ring-slate-200 transition-colors hover:bg-slate-100 active:bg-slate-200"
               >
                 {d}
               </button>
@@ -136,7 +139,7 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
         </div>
 
         {loading && (
-          <div className="mt-4 text-center text-gray-500">Verificando...</div>
+          <div className="mt-4 text-center text-sm font-semibold text-slate-500">Verificando...</div>
         )}
       </div>
 

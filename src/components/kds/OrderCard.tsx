@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Order } from "@/types/pos";
+import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
 
 interface OrderCardProps {
   order: Order;
@@ -25,7 +26,11 @@ function getTimerColor(seconds: number) {
   return "bg-red-500";
 }
 
-export default function OrderCard({ order, onStatusChange, onItemReadyChange }: OrderCardProps) {
+export default function OrderCard({
+  order,
+  onStatusChange,
+  onItemReadyChange,
+}: OrderCardProps) {
   const [elapsed, setElapsed] = useState(getElapsedSeconds(order.created_at));
 
   useEffect(() => {
@@ -39,15 +44,26 @@ export default function OrderCard({ order, onStatusChange, onItemReadyChange }: 
   const totalItems = order.items?.length || 0;
   const readyCount = order.items?.filter((item) => item.kds_ready).length || 0;
   const allReady = totalItems > 0 && readyCount === totalItems;
+  const groupedItems = groupItemsWithModifiers(
+    order.items || [],
+    (item) => item.product_name || "",
+    (item) => item.notes
+  );
 
   const toggleItem = (itemId: number) => {
     const item = order.items?.find((candidate) => candidate.id === itemId);
     onItemReadyChange(order.id, itemId, !item?.kds_ready);
   };
 
+  const toggleGroup = (items: NonNullable<Order["items"]>) => {
+    const nextReady = !items.every((item) => item.kds_ready);
+    items.forEach((item) => {
+      onItemReadyChange(order.id, item.id, nextReady);
+    });
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col min-h-0">
-      {/* Timer header */}
       <div
         className={`${timerColor} px-2.5 py-1.5 flex items-center justify-between flex-shrink-0`}
       >
@@ -66,7 +82,6 @@ export default function OrderCard({ order, onStatusChange, onItemReadyChange }: 
         </span>
       </div>
 
-      {/* Progress bar */}
       {totalItems > 0 && readyCount > 0 && (
         <div className="h-1 bg-gray-100 flex-shrink-0">
           <div
@@ -76,58 +91,91 @@ export default function OrderCard({ order, onStatusChange, onItemReadyChange }: 
         </div>
       )}
 
-      {/* Items — tap to mark ready */}
       <div className="flex-1 p-1.5 overflow-y-auto min-h-0">
-        <ul className="space-y-1">
-          {order.items?.map((item) => {
-            const isReady = Boolean(item.kds_ready);
+        <ul className="space-y-1.5">
+          {groupedItems.map(({ base, modifiers, isOrphanModifier }) => {
+            const groupItems = [base, ...modifiers];
+            const groupReady = groupItems.every((item) => item.kds_ready);
+            const groupPartial =
+              !groupReady && groupItems.some((item) => item.kds_ready);
+            const modifierParent = getModifierParent(base.notes);
+            const visibleBaseNote = base.notes && !modifierParent ? base.notes : null;
+
             return (
               <li
-                key={item.id}
-                onClick={() => toggleItem(item.id)}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all active:scale-[0.98] select-none ${
-                  isReady
-                    ? "bg-green-100 border border-green-300"
-                    : "bg-gray-50 border border-transparent"
+                key={`${base.id}-${base.notes || "base"}`}
+                className={`rounded-lg border transition-all select-none ${
+                  groupReady
+                    ? "bg-green-100 border-green-300"
+                    : groupPartial
+                    ? "bg-yellow-50 border-yellow-200"
+                    : "bg-gray-50 border-transparent"
                 }`}
               >
-                {/* Qty badge / check */}
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
-                    isReady
-                      ? "bg-green-500 text-white"
-                      : "bg-gray-200 text-gray-700"
-                  }`}
+                  onClick={() => toggleGroup(groupItems)}
+                  className="flex cursor-pointer items-center gap-2 px-2 py-1.5 active:scale-[0.98]"
                 >
-                  {isReady ? (
-                    <span className="text-base font-black">&#10003;</span>
-                  ) : (
-                    <span className="text-base font-black">{item.qty}</span>
-                  )}
+                  <ReadyBadge ready={groupReady} partial={groupPartial} qty={base.qty} />
+
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className={`block truncate text-base font-bold leading-tight transition-colors ${
+                        groupReady ? "text-green-700 line-through" : "text-gray-900"
+                      }`}
+                    >
+                      {isOrphanModifier ? "+ " : ""}
+                      {base.product_name}
+                    </span>
+                    {visibleBaseNote && (
+                      <p className="truncate text-sm font-semibold leading-tight text-orange-600">
+                        Nota: {visibleBaseNote}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                {/* Product name */}
-                <div className="flex-1 min-w-0">
-                  <span
-                    className={`text-base font-bold transition-colors leading-tight block truncate ${
-                      isReady ? "text-green-700 line-through" : "text-gray-900"
-                    }`}
-                  >
-                    {item.product_name}
-                  </span>
-                  {item.notes && (
-                    <p className="text-sm font-semibold text-orange-600 leading-tight truncate">
-                      ⚠ {item.notes}
+                {modifiers.length > 0 && (
+                  <div className="ml-6 mr-2 mb-2 border-l-4 border-orange-300 pl-3">
+                    <p className="mb-1 text-[10px] font-black uppercase text-orange-500">
+                      Va amb aquest producte
                     </p>
-                  )}
-                </div>
+                    <div className="space-y-1">
+                      {modifiers.map((modifier) => {
+                        const modifierReady = Boolean(modifier.kds_ready);
+                        return (
+                          <div
+                            key={modifier.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleItem(modifier.id);
+                            }}
+                            className={`flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 transition-colors ${
+                              modifierReady ? "bg-green-50" : "bg-white"
+                            }`}
+                          >
+                            <ReadyBadge ready={modifierReady} qty={modifier.qty} small />
+                            <span
+                              className={`min-w-0 flex-1 truncate text-sm font-bold ${
+                                modifierReady
+                                  ? "text-green-700 line-through"
+                                  : "text-gray-700"
+                              }`}
+                            >
+                              + {modifier.product_name}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}
         </ul>
       </div>
 
-      {/* Status + action */}
       <div className="px-2 py-2 border-t border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between mb-1.5">
           <span
@@ -167,6 +215,40 @@ export default function OrderCard({ order, onStatusChange, onItemReadyChange }: 
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function ReadyBadge({
+  ready,
+  partial = false,
+  qty,
+  small = false,
+}: {
+  ready: boolean;
+  partial?: boolean;
+  qty: number;
+  small?: boolean;
+}) {
+  return (
+    <div
+      className={`${small ? "w-6 h-6" : "w-8 h-8"} rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+        ready
+          ? "bg-green-500 text-white"
+          : partial
+          ? "bg-yellow-400 text-white"
+          : "bg-gray-200 text-gray-700"
+      }`}
+    >
+      {ready ? (
+        <span className={`${small ? "text-sm" : "text-base"} font-black`}>
+          &#10003;
+        </span>
+      ) : partial ? (
+        <span className={`${small ? "text-sm" : "text-base"} font-black`}>...</span>
+      ) : (
+        <span className={`${small ? "text-xs" : "text-base"} font-black`}>{qty}</span>
+      )}
     </div>
   );
 }

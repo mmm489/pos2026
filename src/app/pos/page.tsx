@@ -212,6 +212,15 @@ export default function PosPage() {
     };
   }, [employee]);
 
+  // Kiosk/POS mode: long press is used for modifiers, so suppress the browser menu.
+  useEffect(() => {
+    const preventContextMenu = (event: MouseEvent) => event.preventDefault();
+    document.addEventListener("contextmenu", preventContextMenu, { capture: true });
+    return () => {
+      document.removeEventListener("contextmenu", preventContextMenu, { capture: true });
+    };
+  }, []);
+
   const handleLogin = (emp: Employee) => {
     setEmployee(emp);
     localStorage.setItem("pos_employee", JSON.stringify(emp));
@@ -241,27 +250,33 @@ export default function PosPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-xl text-gray-400">Cargando productos...</div>
+      <div className="flex h-screen items-center justify-center bg-[#0f172a]">
+        <div className="rounded-2xl border border-white/10 bg-zinc-800 px-5 py-4 text-base font-semibold text-slate-300 shadow-2xl shadow-black/25">
+          Cargando productos...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex h-screen flex-col bg-[#0f172a] text-slate-100">
       {/* Top header */}
-      <header className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 flex-shrink-0">
-        <h1 className="text-xl font-bold text-pink-500">Hi Cream</h1>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">
-            {employee.name}{" "}
-            <span className="text-xs text-gray-400">
-              ({employee.role === "admin" ? "Admin" : "Empleado"})
-            </span>
-          </span>
+      <header className="flex min-h-[128px] flex-shrink-0 items-center justify-between gap-5 border-b border-slate-700/60 bg-slate-800/95 px-6 py-4 shadow-2xl shadow-black/20 backdrop-blur">
+        <div className="flex min-w-[220px] items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center rounded-none bg-slate-100 text-base font-black text-slate-950 shadow-lg shadow-black/20">
+            HC
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-3xl font-black leading-tight text-white">Hi Cream</h1>
+            <p className="truncate text-base font-semibold text-slate-400">
+              {employee.name} - {employee.role === "admin" ? "Admin" : "Empleado"}
+            </p>
+          </div>
+        </div>
+        <div className="flex min-h-[88px] min-w-0 flex-1 flex-wrap items-center justify-end gap-2 py-1">
           <button
             onClick={() => setShowCashlogy(true)}
-            className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 text-sm font-semibold hover:bg-emerald-100 transition-colors"
+            className="min-h-[46px] whitespace-nowrap rounded-none bg-emerald-300/15 px-4 py-2 text-base font-black text-emerald-100 ring-1 ring-emerald-200/25 transition-colors hover:bg-emerald-300/25 active:bg-emerald-300/30"
           >
             Cashlogy
           </button>
@@ -270,7 +285,7 @@ export default function PosPage() {
               loadRecentOrders();
               setShowRecentOrders(true);
             }}
-            className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-sm font-semibold hover:bg-blue-100 transition-colors"
+            className="min-h-[46px] whitespace-nowrap rounded-none bg-sky-300/15 px-4 py-2 text-base font-black text-sky-100 ring-1 ring-sky-200/25 transition-colors hover:bg-sky-300/25 active:bg-sky-300/30"
           >
             Comandes
           </button>
@@ -278,25 +293,25 @@ export default function PosPage() {
             <>
               <a
                 href="/admin/products"
-                className="px-3 py-1.5 rounded-lg bg-purple-50 text-purple-600 text-sm font-semibold hover:bg-purple-100 transition-colors"
+                className="flex min-h-[46px] items-center whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
               >
                 Productes
               </a>
               <a
                 href="/admin/employees"
-                className="px-3 py-1.5 rounded-lg bg-pink-50 text-pink-600 text-sm font-semibold hover:bg-pink-100 transition-colors"
+                className="flex min-h-[46px] items-center whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
               >
                 Empleats
               </a>
               <a
                 href="/admin/closings"
-                className="px-3 py-1.5 rounded-lg bg-pink-50 text-pink-600 text-sm font-semibold hover:bg-pink-100 transition-colors"
+                className="flex min-h-[46px] items-center whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
               >
                 Tancaments
               </a>
               <button
                 onClick={() => setShowCashClosing(true)}
-                className="px-3 py-1.5 rounded-lg bg-orange-100 text-orange-700 text-sm font-semibold hover:bg-orange-200 transition-colors"
+                className="min-h-[46px] whitespace-nowrap rounded-none bg-amber-300/18 px-4 py-2 text-base font-black text-amber-100 ring-1 ring-amber-200/25 transition-colors hover:bg-amber-300/28 active:bg-amber-300/35"
               >
                 Tancar caixa
               </button>
@@ -304,7 +319,7 @@ export default function PosPage() {
           )}
           <button
             onClick={handleLogout}
-            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-sm hover:bg-gray-200 transition-colors"
+            className="min-h-[46px] whitespace-nowrap rounded-none bg-white/12 px-4 py-2 text-base font-black text-white ring-1 ring-white/15 transition-colors hover:bg-white/18 active:bg-white/20"
           >
             Canviar empleat
           </button>
@@ -312,9 +327,9 @@ export default function PosPage() {
       </header>
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Product catalog — 75% */}
-        <div className="flex-1 min-w-0">
+        <div className="min-h-0 min-w-0 flex-1">
           <ProductGrid
             products={products}
             categories={categories}
@@ -327,7 +342,7 @@ export default function PosPage() {
         </div>
 
         {/* Cart — fixed width */}
-        <div className="w-[340px] flex-shrink-0">
+        <div className="h-[42vh] w-full flex-shrink-0 lg:h-auto lg:w-[340px]">
           <Cart
             items={cart}
             onUpdateQty={(productId, delta) =>
@@ -402,20 +417,20 @@ export default function PosPage() {
 
       {/* Recent orders modal */}
       {showRecentOrders && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-800">Comandes d&apos;avui</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-sm">
+          <div className="mx-4 flex max-h-[80vh] w-full max-w-lg flex-col rounded-lg bg-white shadow-2xl ring-1 ring-slate-900/10">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <h3 className="text-xl font-black text-slate-950">Comandes d&apos;avui</h3>
               <div className="flex gap-2">
                 <a
                   href="/admin/orders"
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600 text-xs font-medium hover:bg-gray-200"
+                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200"
                 >
                   Veure tot
                 </a>
                 <button
                   onClick={() => setShowRecentOrders(false)}
-                  className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 text-lg flex items-center justify-center"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-lg text-slate-500 hover:bg-slate-200"
                 >
                   &#10005;
                 </button>
@@ -429,14 +444,14 @@ export default function PosPage() {
                   {recentOrders.map((order) => (
                     <div
                       key={order.id}
-                      className={`flex items-center justify-between px-4 py-3 rounded-xl border ${
-                        order.status === "cancelled" ? "bg-red-50 border-red-100" : "bg-gray-50 border-gray-100"
+                      className={`flex items-center justify-between rounded-lg border px-4 py-3 ${
+                        order.status === "cancelled" ? "border-red-100 bg-red-50" : "border-slate-200 bg-slate-50"
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-lg font-bold text-gray-800">{order.order_number}</span>
+                        <span className="text-lg font-black text-slate-950">{order.order_number}</span>
                         {order.table_number && (
-                          <span className="px-1.5 py-0.5 bg-pink-100 text-pink-600 rounded text-xs font-semibold">
+                          <span className="rounded bg-rose-100 px-1.5 py-0.5 text-xs font-bold text-rose-700">
                             T{order.table_number}
                           </span>
                         )}
@@ -445,7 +460,7 @@ export default function PosPage() {
                           : order.status === "completed" ? "bg-green-100 text-green-700"
                           : order.status === "ready" ? "bg-blue-100 text-blue-700"
                           : order.status === "preparing" ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-200 text-gray-600"
+                          : "bg-slate-200 text-slate-600"
                         }`}>
                           {order.status === "cancelled" ? "Anul·lat"
                           : order.status === "completed" ? "Completat"
@@ -453,18 +468,18 @@ export default function PosPage() {
                           : order.status === "preparing" ? "Preparant"
                           : "Pendent"}
                         </span>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-slate-400">
                           {new Date(order.created_at).toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`font-bold ${order.status === "cancelled" ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                        <span className={`font-black ${order.status === "cancelled" ? "text-slate-400 line-through" : "text-slate-950"}`}>
                           {Number(order.total).toFixed(2)}€
                         </span>
                         {order.status !== "cancelled" && (
                           <button
                             onClick={() => setCancellingId(order.id)}
-                            className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition-colors"
+                            className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 transition-colors hover:bg-red-100"
                           >
                             Anul·lar
                           </button>
@@ -481,13 +496,13 @@ export default function PosPage() {
 
       {/* Cancel confirmation (POS) */}
       {cancellingId !== null && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl">
-            <h3 className="text-lg font-bold text-gray-800 mb-3">Anul·lar comanda?</h3>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
+            <h3 className="mb-3 text-lg font-black text-slate-950">Anul·lar comanda?</h3>
             <select
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm"
+              className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             >
               {POS_CANCEL_REASONS.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -496,13 +511,13 @@ export default function PosPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => { setCancellingId(null); setCancelReason("client"); }}
-                className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-sm"
+                className="flex-1 rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200"
               >
                 Tornar
               </button>
               <button
                 onClick={handleCancelOrder}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold text-sm"
+                className="flex-1 rounded-lg bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600"
               >
                 Anul·lar
               </button>

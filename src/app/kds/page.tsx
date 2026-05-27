@@ -26,6 +26,20 @@ export default function KdsPage() {
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
   const prevCountRef = useRef(0);
+  const localReadyRef = useRef(new Map<string, boolean>());
+  const lastReadyToggleRef = useRef(new Map<string, number>());
+
+  const applyLocalReady = useCallback((order: Order): Order => {
+    if (!order.items?.length || localReadyRef.current.size === 0) return order;
+    return {
+      ...order,
+      items: order.items.map((item) => {
+        const key = `${order.id}:${item.id}`;
+        if (!localReadyRef.current.has(key)) return item;
+        return { ...item, kds_ready: localReadyRef.current.get(key) };
+      }),
+    };
+  }, []);
 
   // Try to load orders from API, otherwise start empty (demo mode)
   useEffect(() => {
@@ -35,7 +49,7 @@ export default function KdsPage() {
         return r.json();
       })
       .then((data) => {
-        setOrders(data);
+        setOrders((data as Order[]).map(applyLocalReady));
         setLoading(false);
       })
       .catch(() => {
@@ -43,7 +57,7 @@ export default function KdsPage() {
         setOrders([]);
         setLoading(false);
       });
-  }, []);
+  }, [applyLocalReady]);
 
   // Listen for demo events via BroadcastChannel
   useEffect(() => {
@@ -79,8 +93,9 @@ export default function KdsPage() {
           setOrders((prev) => {
             // Merge: keep new orders, update existing, remove completed
             const merged = data.map((o) => {
+              const nextOrder = applyLocalReady(o);
               const existing = prev.find((p) => p.id === o.id);
-              return existing ? { ...existing, ...o } : o;
+              return existing ? { ...existing, ...nextOrder } : nextOrder;
             });
             return merged;
           });
@@ -88,7 +103,7 @@ export default function KdsPage() {
         .catch(() => {});
     }, 1500);
     return () => clearInterval(interval);
-  }, []);
+  }, [applyLocalReady]);
 
   // Clock
   useEffect(() => {
@@ -126,6 +141,14 @@ export default function KdsPage() {
   }, []);
 
   const handleItemReadyChange = useCallback(async (orderId: number, itemId: number, ready: boolean) => {
+    const localKey = `${orderId}:${itemId}`;
+    const now = Date.now();
+    const lastToggleAt = lastReadyToggleRef.current.get(localKey) || 0;
+    if (now - lastToggleAt < 700) return;
+
+    lastReadyToggleRef.current.set(localKey, now);
+    localReadyRef.current.set(localKey, ready);
+
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) return order;
@@ -146,17 +169,8 @@ export default function KdsPage() {
       });
       if (!res.ok) throw new Error("Error updating item");
     } catch {
-      setOrders((prev) =>
-        prev.map((order) => {
-          if (order.id !== orderId) return order;
-          return {
-            ...order,
-            items: order.items?.map((item) =>
-              item.id === itemId ? { ...item, kds_ready: !ready } : item
-            ),
-          };
-        })
-      );
+      // Keep the optimistic state in local/demo mode so the item does not
+      // visibly uncheck itself when the API is unavailable.
     }
   }, []);
 
