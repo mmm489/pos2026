@@ -10,6 +10,7 @@ require("dotenv").config();
 
 const fs = require("node:fs");
 const path = require("node:path");
+const { neon } = require("@neondatabase/serverless");
 const { Client } = require("pg");
 
 const LOCAL_DB_URL =
@@ -24,6 +25,7 @@ const DASHBOARD_DB_URL =
 
 const BATCH_SIZE = Number(process.env.DASHBOARD_SYNC_BATCH_SIZE || 500);
 const SCHEMA_PATH = path.resolve(__dirname, "../scripts/dashboard-cloud-schema.sql");
+const DASHBOARD_DRIVER = process.env.DASHBOARD_SYNC_DRIVER || "";
 
 const TABLES = [
   {
@@ -183,13 +185,56 @@ function updateAssignments(columns, keyColumn = "id") {
 async function connect(url, label) {
   const client = new Client({ connectionString: url });
   await client.connect();
+  client.supportsTransactions = true;
   log(`${label} conectado`);
   return client;
 }
 
+function shouldUseNeonHttp(url) {
+  const requestedDriver = DASHBOARD_DRIVER.toLowerCase();
+  if (requestedDriver === "pg") return false;
+  if (requestedDriver === "neon-http") return true;
+
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname.endsWith(".neon.tech") || hostname.includes(".neon.tech");
+  } catch {
+    return false;
+  }
+}
+
+async function connectDashboard(url) {
+  if (!shouldUseNeonHttp(url)) {
+    return connect(url, "cloud dashboard");
+  }
+
+  const sql = neon(url, { fullResults: true });
+  await sql.query("select 1", []);
+  log("cloud dashboard conectado via Neon HTTPS");
+
+  return {
+    supportsTransactions: false,
+    query(queryText, params = []) {
+      return sql.query(queryText, params);
+    },
+    async end() {
+      // The Neon HTTP client does not keep a local socket open.
+    },
+  };
+}
+
+function splitSqlStatements(sql) {
+  return sql
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+}
+
 async function ensureCloudSchema(cloud) {
   const schemaSql = fs.readFileSync(SCHEMA_PATH, "utf8");
-  await cloud.query(schemaSql);
+  for (const statement of splitSqlStatements(schemaSql)) {
+    await cloud.query(statement);
+  }
 }
 
 async function tableExists(local, tableName) {
@@ -261,20 +306,20 @@ async function runSync() {
 
   try {
     local = await connect(LOCAL_DB_URL, "local POS");
-    cloud = await connect(DASHBOARD_DB_URL, "cloud dashboard");
+    cloud = await connectDashboard(DASHBOARD_DB_URL);
 
     await ensureCloudSchema(cloud);
 
-    await cloud.query("BEGIN");
+    if (cloud.supportsTransactions) await cloud.query("BEGIN");
     for (const table of TABLES) {
       counts[table.name] = await syncTable(local, cloud, table);
     }
-    await cloud.query("COMMIT");
+    if (cloud.supportsTransactions) await cloud.query("COMMIT");
 
     log("Sync completado");
     return { ok: true, counts };
   } catch (error) {
-    if (cloud) {
+    if (cloud?.supportsTransactions) {
       try {
         await cloud.query("ROLLBACK");
       } catch {
