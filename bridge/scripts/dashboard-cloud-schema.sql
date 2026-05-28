@@ -1,0 +1,136 @@
+CREATE SCHEMA IF NOT EXISTS pos;
+
+CREATE TABLE IF NOT EXISTS pos.categories (
+  id INTEGER PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  color VARCHAR(7) NOT NULL DEFAULT '#6B7280'
+);
+
+CREATE TABLE IF NOT EXISTS pos.products (
+  id INTEGER PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  category_id INTEGER REFERENCES pos.categories(id),
+  price NUMERIC(8,2) NOT NULL,
+  vat_rate NUMERIC(4,2) NOT NULL DEFAULT 10.00,
+  image_url TEXT,
+  active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS pos.business (
+  id INTEGER PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  trade_name VARCHAR(200),
+  nif VARCHAR(20) NOT NULL,
+  address TEXT NOT NULL,
+  city VARCHAR(100) NOT NULL,
+  postal_code VARCHAR(10) NOT NULL,
+  province VARCHAR(100) NOT NULL,
+  phone VARCHAR(20),
+  invoice_series VARCHAR(10) NOT NULL DEFAULT 'S',
+  next_invoice_number INTEGER NOT NULL DEFAULT 1,
+  next_z_number INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS pos.employees (
+  id INTEGER PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  pin VARCHAR(4),
+  role VARCHAR(20) NOT NULL DEFAULT 'employee',
+  active BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS pos.orders (
+  id INTEGER PRIMARY KEY,
+  order_number VARCHAR(10) NOT NULL,
+  invoice_number VARCHAR(40),
+  status VARCHAR(20) NOT NULL,
+  total NUMERIC(10,2) NOT NULL,
+  total_base NUMERIC(10,2),
+  total_vat NUMERIC(10,2),
+  payment_method VARCHAR(10) NOT NULL,
+  employee_id INTEGER REFERENCES pos.employees(id),
+  table_number VARCHAR(10),
+  created_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  cancellation_reason TEXT,
+  cancelled_by INTEGER REFERENCES pos.employees(id),
+  card_reference VARCHAR(20),
+  card_authorization VARCHAR(20),
+  card_receipt_text TEXT,
+  refund_reference VARCHAR(20),
+  refund_at TIMESTAMPTZ,
+  synced BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS pos.order_items (
+  id INTEGER PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES pos.orders(id) ON DELETE CASCADE,
+  product_id INTEGER REFERENCES pos.products(id),
+  qty INTEGER NOT NULL DEFAULT 1,
+  unit_price NUMERIC(8,2) NOT NULL,
+  vat_rate NUMERIC(4,2) NOT NULL DEFAULT 10.00,
+  notes TEXT,
+  kds_ready BOOLEAN NOT NULL DEFAULT false,
+  kds_ready_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS pos.kds_events (
+  id INTEGER PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES pos.orders(id) ON DELETE CASCADE,
+  event_type VARCHAR(50) NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pos.cash_closings (
+  id INTEGER PRIMARY KEY,
+  employee_id INTEGER REFERENCES pos.employees(id),
+  opened_at TIMESTAMPTZ NOT NULL,
+  closed_at TIMESTAMPTZ NOT NULL,
+  total_cash NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_card NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_sales NUMERIC(10,2) NOT NULL DEFAULT 0,
+  ticket_count INTEGER NOT NULL DEFAULT 0,
+  notes TEXT,
+  synced BOOLEAN NOT NULL DEFAULT true,
+  z_number INTEGER,
+  z_label VARCHAR(20),
+  total_base NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_vat NUMERIC(10,2) NOT NULL DEFAULT 0,
+  vat_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb,
+  first_invoice VARCHAR(40),
+  last_invoice VARCHAR(40),
+  cancelled_count INTEGER NOT NULL DEFAULT 0,
+  total_refunded NUMERIC(10,2) NOT NULL DEFAULT 0,
+  card_count INTEGER NOT NULL DEFAULT 0,
+  cash_count INTEGER NOT NULL DEFAULT 0,
+  business_snapshot JSONB
+);
+
+CREATE TABLE IF NOT EXISTS pos.card_transactions (
+  id INTEGER PRIMARY KEY,
+  order_id INTEGER REFERENCES pos.orders(id),
+  operation VARCHAR(20) NOT NULL,
+  amount NUMERIC(10,2),
+  reference VARCHAR(40),
+  original_reference VARCHAR(40),
+  success BOOLEAN NOT NULL,
+  response_code VARCHAR(10),
+  authorization_code VARCHAR(40),
+  error_message TEXT,
+  request JSONB,
+  response JSONB,
+  duration_ms INTEGER,
+  created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cloud_orders_created ON pos.orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_orders_status ON pos.orders(status);
+CREATE INDEX IF NOT EXISTS idx_cloud_orders_payment ON pos.orders(payment_method);
+CREATE INDEX IF NOT EXISTS idx_cloud_order_items_order ON pos.order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_cloud_order_items_product ON pos.order_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_cloud_cash_closings_closed ON pos.cash_closings(closed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_reference ON pos.card_transactions(reference);
