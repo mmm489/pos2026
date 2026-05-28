@@ -237,6 +237,176 @@ async function ensureCloudSchema(cloud) {
   }
 }
 
+function asPayload(value) {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  return value;
+}
+
+function cleanText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function cleanNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+async function nextLocalId(local, tableName) {
+  const result = await local.query(`SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM pos.${quoteIdent(tableName)}`);
+  return Number(result.rows[0]?.next_id || 1);
+}
+
+async function applyCategoryChange(local, change) {
+  const payload = asPayload(change.payload);
+  const name = cleanText(payload.name);
+  const sortOrder = cleanNumber(payload.sort_order, 0);
+  const color = cleanText(payload.color, "#64748b");
+
+  if (!name) throw new Error("Categoria sin nombre");
+
+  if (change.action === "create") {
+    const id = await nextLocalId(local, "categories");
+    await local.query(
+      `INSERT INTO pos.categories (id, name, sort_order, color) VALUES ($1, $2, $3, $4)`,
+      [id, name, sortOrder, color],
+    );
+    return id;
+  }
+
+  if (change.action === "update") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Categoria sin id");
+    const result = await local.query(
+      `UPDATE pos.categories SET name = $1, sort_order = $2, color = $3 WHERE id = $4 RETURNING id`,
+      [name, sortOrder, color, id],
+    );
+    if (!result.rowCount) throw new Error(`Categoria ${id} no encontrada`);
+    return id;
+  }
+
+  throw new Error(`Accion de categoria no soportada: ${change.action}`);
+}
+
+async function applyProductChange(local, change) {
+  const payload = asPayload(change.payload);
+
+  if (change.action === "deactivate") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Producto sin id");
+    const result = await local.query(`UPDATE pos.products SET active = FALSE WHERE id = $1 RETURNING id`, [id]);
+    if (!result.rowCount) throw new Error(`Producto ${id} no encontrado`);
+    return id;
+  }
+
+  const name = cleanText(payload.name);
+  const categoryId = cleanNumber(payload.category_id, NaN);
+  const price = cleanNumber(payload.price, NaN);
+  const vatRate = cleanNumber(payload.vat_rate, 10);
+  const imageUrl = payload.image_url ? String(payload.image_url) : null;
+  const active = payload.active == null ? true : Boolean(payload.active);
+  const sortOrder = cleanNumber(payload.sort_order, 0);
+
+  if (!name) throw new Error("Producto sin nombre");
+  if (!Number.isInteger(categoryId) || categoryId <= 0) throw new Error("Producto sin categoria valida");
+  if (!Number.isFinite(price) || price < 0) throw new Error("Producto sin precio valido");
+
+  const category = await local.query(`SELECT id FROM pos.categories WHERE id = $1`, [categoryId]);
+  if (!category.rowCount) throw new Error(`Categoria ${categoryId} no existe en el POS`);
+
+  if (change.action === "create") {
+    const id = await nextLocalId(local, "products");
+    await local.query(
+      `INSERT INTO pos.products (id, name, category_id, price, vat_rate, image_url, active, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, name, categoryId, price, vatRate, imageUrl, active, sortOrder],
+    );
+    return id;
+  }
+
+  if (change.action === "update") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Producto sin id");
+    const result = await local.query(
+      `UPDATE pos.products
+       SET name = $1, category_id = $2, price = $3, vat_rate = $4, image_url = $5, active = $6, sort_order = $7
+       WHERE id = $8
+       RETURNING id`,
+      [name, categoryId, price, vatRate, imageUrl, active, sortOrder, id],
+    );
+    if (!result.rowCount) throw new Error(`Producto ${id} no encontrado`);
+    return id;
+  }
+
+  throw new Error(`Accion de producto no soportada: ${change.action}`);
+}
+
+async function applyCatalogChange(local, change) {
+  if (change.entity_type === "category") return applyCategoryChange(local, change);
+  if (change.entity_type === "product") return applyProductChange(local, change);
+  throw new Error(`Entidad no soportada: ${change.entity_type}`);
+}
+
+async function markCatalogChangeApplied(cloud, changeId, appliedEntityId) {
+  await cloud.query(
+    `UPDATE pos.catalog_change_queue
+     SET status = 'applied', applied_at = NOW(), applied_entity_id = $2, error_message = NULL
+     WHERE id = $1`,
+    [changeId, appliedEntityId],
+  );
+}
+
+async function markCatalogChangeError(cloud, changeId, error) {
+  await cloud.query(
+    `UPDATE pos.catalog_change_queue
+     SET status = 'error', error_message = $2
+     WHERE id = $1`,
+    [changeId, String(error?.message || error).slice(0, 500)],
+  );
+}
+
+async function applyPendingCatalogChanges(local, cloud) {
+  const pending = await cloud.query(
+    `SELECT id, entity_type, action, entity_id, payload
+     FROM pos.catalog_change_queue
+     WHERE status = 'pending'
+     ORDER BY requested_at ASC
+     LIMIT 50`,
+  );
+
+  if (!pending.rows.length) return 0;
+
+  let applied = 0;
+  for (const change of pending.rows) {
+    try {
+      await local.query("BEGIN");
+      const appliedEntityId = await applyCatalogChange(local, change);
+      await local.query("COMMIT");
+      await markCatalogChangeApplied(cloud, change.id, appliedEntityId);
+      applied += 1;
+      log(`catalog_change ${change.id}: aplicado (${change.entity_type} ${appliedEntityId})`);
+    } catch (error) {
+      try {
+        await local.query("ROLLBACK");
+      } catch {
+        // Ignore rollback failures.
+      }
+      await markCatalogChangeError(cloud, change.id, error);
+      log(`catalog_change ${change.id}: error ${String(error?.message || error)}`);
+    }
+  }
+
+  log(`catalog_change_queue: ${applied}/${pending.rows.length} cambios aplicados`);
+  return applied;
+}
+
 async function tableExists(local, tableName) {
   const result = await local.query(
     `SELECT EXISTS (
@@ -309,6 +479,7 @@ async function runSync() {
     cloud = await connectDashboard(DASHBOARD_DB_URL);
 
     await ensureCloudSchema(cloud);
+    await applyPendingCatalogChanges(local, cloud);
 
     if (cloud.supportsTransactions) await cloud.query("BEGIN");
     for (const table of TABLES) {

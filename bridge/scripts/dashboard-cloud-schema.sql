@@ -126,6 +126,20 @@ CREATE TABLE IF NOT EXISTS pos.card_transactions (
   created_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS pos.catalog_change_queue (
+  id TEXT PRIMARY KEY,
+  entity_type VARCHAR(20) NOT NULL CHECK (entity_type IN ('category', 'product')),
+  action VARCHAR(20) NOT NULL CHECK (action IN ('create', 'update', 'deactivate')),
+  entity_id INTEGER,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'error')),
+  requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  requested_by TEXT,
+  applied_at TIMESTAMPTZ,
+  applied_entity_id INTEGER,
+  error_message TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_created ON pos.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_status ON pos.orders(status);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_payment ON pos.orders(payment_method);
@@ -134,3 +148,4 @@ CREATE INDEX IF NOT EXISTS idx_cloud_order_items_product ON pos.order_items(prod
 CREATE INDEX IF NOT EXISTS idx_cloud_cash_closings_closed ON pos.cash_closings(closed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_reference ON pos.card_transactions(reference);
+CREATE INDEX IF NOT EXISTS idx_catalog_change_queue_status ON pos.catalog_change_queue(status, requested_at);
