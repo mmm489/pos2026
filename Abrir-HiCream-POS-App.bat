@@ -34,6 +34,21 @@ if not exist "%NEXT_BIN%" (
   exit /b 1
 )
 
+set "SYNC_BIN=%APP_DIR%\bridge\sync\sync-runner.js"
+if exist "%SYNC_BIN%" (
+  echo Comprobando sync del dashboard...
+  powershell -NoProfile -Command "$needle = 'sync-runner.js'; $running = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like ('*' + $needle + '*') -and $_.CommandLine -like '*pos2026*' }; if ($running) { exit 0 } else { exit 1 }" >nul 2>nul
+  if errorlevel 1 (
+    echo Iniciando sync del dashboard...
+    start "Hi Cream Dashboard Sync" /min /D "%APP_DIR%\bridge" "%NODE_EXE%" "%SYNC_BIN%"
+  ) else (
+    echo Sync del dashboard ya esta iniciado.
+  )
+) else (
+  echo Aviso: no se ha encontrado el sync del dashboard:
+  echo %SYNC_BIN%
+)
+
 set "CHROME_EXE="
 if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
   set "CHROME_EXE=C:\Program Files\Google\Chrome\Application\chrome.exe"
