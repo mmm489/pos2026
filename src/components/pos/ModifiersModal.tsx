@@ -3,41 +3,45 @@
 import { Product, Category } from "@/types/pos";
 import { useMemo, useState } from "react";
 
+interface PricedModifierSelection {
+  product: Product;
+  qty: number;
+  unitPrice: number;
+  included: boolean;
+}
+
 interface ModifiersModalProps {
   baseProduct: Product;
   modifierGroupName?: string | null;
   modifierProducts: Product[];
   modifierCategories: Category[];
-  onConfirm: (selections: { product: Product; qty: number }[], note: string | null) => void;
+  includedCount?: number | null;
+  extraPrice?: number | null;
+  onConfirm: (selections: PricedModifierSelection[], note: string | null) => void;
   onCancel: () => void;
 }
 
-/**
- * Long-press a product → this modal opens. Shows the available modifier
- * products (any product whose category name contains "topping", "extra",
- * "salsa", "complement"... see resolveModifiers in pos/page.tsx) grouped
- * by their category, plus a free-form note for special requests.
- *
- * On confirm, the parent adds the base product plus each selected modifier
- * with qty > 0 to the cart.
- */
 export default function ModifiersModal({
   baseProduct,
   modifierGroupName,
   modifierProducts,
   modifierCategories,
+  includedCount,
+  extraPrice,
   onConfirm,
   onCancel,
 }: ModifiersModalProps) {
   const [selections, setSelections] = useState<Map<number, number>>(new Map());
   const [note, setNote] = useState("");
+  const includedLimit = Math.max(0, Math.floor(Number(includedCount ?? 0)));
+  const extraUnitPrice = Math.max(0, Number(extraPrice ?? 0));
 
   const grouped = useMemo(() => {
     const map = new Map<number, Product[]>();
-    for (const p of modifierProducts) {
-      const list = map.get(p.category_id) || [];
-      list.push(p);
-      map.set(p.category_id, list);
+    for (const product of modifierProducts) {
+      const list = map.get(product.category_id) || [];
+      list.push(product);
+      map.set(product.category_id, list);
     }
     return map;
   }, [modifierProducts]);
@@ -51,107 +55,121 @@ export default function ModifiersModal({
     });
   };
 
-  const totalExtra = useMemo(() => {
-    let sum = 0;
+  const selectedQty = useMemo(
+    () => Array.from(selections.values()).reduce((sum, qty) => sum + qty, 0),
+    [selections]
+  );
+
+  const pricedSelections = useMemo(() => {
+    const groupedSelections = new Map<string, PricedModifierSelection>();
+    let consumedIncluded = 0;
+
     for (const [id, qty] of Array.from(selections.entries())) {
-      const p = modifierProducts.find((mp) => mp.id === id);
-      if (p) sum += Number(p.price) * qty;
+      const product = modifierProducts.find((candidate) => candidate.id === id);
+      if (!product || qty <= 0) continue;
+
+      for (let index = 0; index < qty; index += 1) {
+        const included = consumedIncluded < includedLimit;
+        const unitPrice = included ? 0 : extraUnitPrice;
+        const key = `${product.id}-${unitPrice}-${included ? "included" : "extra"}`;
+        const current = groupedSelections.get(key);
+        if (current) current.qty += 1;
+        else groupedSelections.set(key, { product, qty: 1, unitPrice, included });
+        consumedIncluded += 1;
+      }
     }
-    return sum;
-  }, [selections, modifierProducts]);
+
+    return Array.from(groupedSelections.values());
+  }, [selections, modifierProducts, includedLimit, extraUnitPrice]);
+
+  const totalExtra = useMemo(
+    () => pricedSelections.reduce((sum, item) => sum + item.unitPrice * item.qty, 0),
+    [pricedSelections]
+  );
 
   const handleConfirm = () => {
-    const list: { product: Product; qty: number }[] = [];
-    for (const [id, qty] of Array.from(selections.entries())) {
-      const p = modifierProducts.find((mp) => mp.id === id);
-      if (p && qty > 0) list.push({ product: p, qty });
-    }
-    onConfirm(list, note.trim() || null);
+    onConfirm(pricedSelections, note.trim() || null);
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div>
-            <p className="text-xs text-gray-400 uppercase tracking-wide">Personalitzar</p>
+            <p className="text-xs uppercase tracking-wide text-gray-400">Personalitzar</p>
             <h2 className="text-2xl font-bold text-gray-800">{baseProduct.name}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {modifierGroupName ? `${modifierGroupName} - ` : ""}Base: {Number(baseProduct.price).toFixed(2)}€
+            <p className="mt-0.5 text-sm text-gray-500">
+              {modifierGroupName ? `${modifierGroupName} - ` : ""}Base: {Number(baseProduct.price).toFixed(2)} EUR
+            </p>
+            <p className="mt-1 text-xs font-semibold text-pink-600">
+              Inclou {includedLimit} topping{includedLimit === 1 ? "" : "s"} gratis · Extra {extraUnitPrice.toFixed(2)} EUR
             </p>
           </div>
           <button
             onClick={onCancel}
-            className="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
             aria-label="Tancar"
           >
             <span className="text-xl">&#10005;</span>
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
+        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-4">
           {modifierProducts.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">
+            <p className="py-8 text-center text-gray-400">
               No hi ha extras configurats. Crea una categoria amb &quot;topping&quot;,
               &quot;extra&quot; o &quot;salsa&quot; al nom des de l&apos;admin.
             </p>
           ) : (
-            modifierCategories.map((cat) => {
-              const items = grouped.get(cat.id);
+            modifierCategories.map((category) => {
+              const items = grouped.get(category.id);
               if (!items || items.length === 0) return null;
               return (
-                <div key={cat.id}>
+                <div key={category.id}>
                   <h3
-                    className="text-sm font-bold mb-2 flex items-center gap-2"
-                    style={{ color: cat.color }}
+                    className="mb-2 flex items-center gap-2 text-sm font-bold"
+                    style={{ color: category.color }}
                   >
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }} />
-                    {cat.name}
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: category.color }} />
+                    {category.name}
                   </h3>
                   <div className="grid grid-cols-2 gap-2">
-                    {items.map((p) => {
-                      const qty = selections.get(p.id) || 0;
+                    {items.map((product) => {
+                      const qty = selections.get(product.id) || 0;
                       const isSelected = qty > 0;
                       return (
                         <div
-                          key={p.id}
-                          className={`flex items-center justify-between px-3 py-2.5 rounded-xl border-2 transition-colors ${
-                            isSelected
-                              ? "border-pink-400 bg-pink-50"
-                              : "border-gray-200 bg-white"
+                          key={product.id}
+                          className={`flex items-center justify-between rounded-xl border-2 px-3 py-2.5 transition-colors ${
+                            isSelected ? "border-pink-400 bg-pink-50" : "border-gray-200 bg-white"
                           }`}
                         >
-                          <button
-                            onClick={() => setQty(p.id, qty + 1)}
-                            className="flex-1 text-left"
-                          >
-                            <p className="text-sm font-bold text-gray-800 leading-tight">{p.name}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              +{Number(p.price).toFixed(2)}€
+                          <button onClick={() => setQty(product.id, qty + 1)} className="flex-1 text-left">
+                            <p className="text-sm font-bold leading-tight text-gray-800">{product.name}</p>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              {selectedQty < includedLimit ? "Inclòs si el selecciones ara" : `+${extraUnitPrice.toFixed(2)} EUR`}
                             </p>
                           </button>
                           {isSelected ? (
-                            <div className="flex items-center gap-1 ml-2">
+                            <div className="ml-2 flex items-center gap-1">
                               <button
-                                onClick={() => setQty(p.id, qty - 1)}
-                                className="w-8 h-8 rounded-full bg-pink-200 hover:bg-pink-300 text-pink-800 font-bold flex items-center justify-center"
+                                onClick={() => setQty(product.id, qty - 1)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-200 font-bold text-pink-800 hover:bg-pink-300"
                               >
                                 &#8722;
                               </button>
                               <span className="w-6 text-center font-bold text-pink-800">{qty}</span>
                               <button
-                                onClick={() => setQty(p.id, qty + 1)}
-                                className="w-8 h-8 rounded-full bg-pink-200 hover:bg-pink-300 text-pink-800 font-bold flex items-center justify-center"
+                                onClick={() => setQty(product.id, qty + 1)}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-200 font-bold text-pink-800 hover:bg-pink-300"
                               >
                                 +
                               </button>
                             </div>
                           ) : (
                             <button
-                              onClick={() => setQty(p.id, 1)}
-                              className="ml-2 w-8 h-8 rounded-full bg-gray-100 hover:bg-pink-100 text-gray-600 hover:text-pink-700 font-bold flex items-center justify-center"
+                              onClick={() => setQty(product.id, 1)}
+                              className="ml-2 flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 font-bold text-gray-600 hover:bg-pink-100 hover:text-pink-700"
                               aria-label="Afegir"
                             >
                               +
@@ -166,38 +184,36 @@ export default function ModifiersModal({
             })
           )}
 
-          {/* Note */}
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">
+            <label className="mb-2 block text-sm font-bold text-gray-700">
               Nota especial (opcional)
             </label>
             <textarea
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(event) => setNote(event.target.value)}
               placeholder="Sense lactosa, sense sucre, etc."
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none h-16 focus:outline-none focus:ring-2 focus:ring-pink-400"
+              className="h-16 w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
             />
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 border-t border-gray-200 px-6 py-4">
           <div>
             <p className="text-xs text-gray-400">Total amb extras</p>
             <p className="text-xl font-black text-gray-800">
-              {(Number(baseProduct.price) + totalExtra).toFixed(2)}€
+              {(Number(baseProduct.price) + totalExtra).toFixed(2)} EUR
             </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={onCancel}
-              className="px-5 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition-colors"
+              className="rounded-xl bg-gray-100 px-5 py-3 font-bold text-gray-700 transition-colors hover:bg-gray-200"
             >
-              Cancel·lar
+              Cancel.lar
             </button>
             <button
               onClick={handleConfirm}
-              className="px-6 py-3 rounded-xl bg-pink-500 hover:bg-pink-600 text-white font-bold transition-colors"
+              className="rounded-xl bg-pink-500 px-6 py-3 font-bold text-white transition-colors hover:bg-pink-600"
             >
               Afegir al carro
             </button>

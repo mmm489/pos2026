@@ -76,7 +76,7 @@ const TABLES = [
   },
   {
     name: "product_modifier_groups",
-    columns: ["product_id", "group_id"],
+    columns: ["product_id", "group_id", "included_count", "extra_price"],
     orderBy: "product_id",
     keyColumns: ["product_id"],
     optional: true,
@@ -279,8 +279,18 @@ async function ensureLocalModifierSchema(local) {
   await local.query(`
     CREATE TABLE IF NOT EXISTS pos.product_modifier_groups (
       product_id INTEGER PRIMARY KEY REFERENCES pos.products(id) ON DELETE CASCADE,
-      group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL
+      group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL,
+      included_count INTEGER NOT NULL DEFAULT 0,
+      extra_price NUMERIC(8,2) NOT NULL DEFAULT 0
     )
+  `);
+  await local.query(`
+    ALTER TABLE pos.product_modifier_groups
+    ADD COLUMN IF NOT EXISTS included_count INTEGER NOT NULL DEFAULT 0
+  `);
+  await local.query(`
+    ALTER TABLE pos.product_modifier_groups
+    ADD COLUMN IF NOT EXISTS extra_price NUMERIC(8,2) NOT NULL DEFAULT 0
   `);
   await local.query(`
     CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group
@@ -308,6 +318,16 @@ function cleanText(value, fallback = "") {
 function cleanNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
+}
+
+function cleanInteger(value, fallback = 0) {
+  const number = Math.floor(Number(value));
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function cleanMoney(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number * 100) / 100 : fallback;
 }
 
 async function nextLocalId(local, tableName) {
@@ -363,6 +383,8 @@ async function applyProductChange(local, change) {
   const vatRate = cleanNumber(payload.vat_rate, 10);
   const imageUrl = payload.image_url ? String(payload.image_url) : null;
   const modifierGroupId = cleanNumber(payload.modifier_group_id, NaN);
+  const modifierIncludedCount = cleanInteger(payload.modifier_included_count, 0);
+  const modifierExtraPrice = cleanMoney(payload.modifier_extra_price, 0);
   const active = payload.active == null ? true : Boolean(payload.active);
   const sortOrder = cleanNumber(payload.sort_order, 0);
 
@@ -384,7 +406,7 @@ async function applyProductChange(local, change) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [id, name, categoryId, price, vatRate, imageUrl, active, sortOrder],
     );
-    await setProductModifierGroup(local, id, modifierGroupId);
+    await setProductModifierGroup(local, id, modifierGroupId, modifierIncludedCount, modifierExtraPrice);
     return id;
   }
 
@@ -399,7 +421,7 @@ async function applyProductChange(local, change) {
       [name, categoryId, price, vatRate, imageUrl, active, sortOrder, id],
     );
     if (!result.rowCount) throw new Error(`Producto ${id} no encontrado`);
-    await setProductModifierGroup(local, id, modifierGroupId);
+    await setProductModifierGroup(local, id, modifierGroupId, modifierIncludedCount, modifierExtraPrice);
     return id;
   }
 
@@ -424,16 +446,19 @@ async function replaceModifierGroupCategories(local, groupId, categoryIds) {
   }
 }
 
-async function setProductModifierGroup(local, productId, groupId) {
+async function setProductModifierGroup(local, productId, groupId, includedCount = 0, extraPrice = 0) {
   if (!Number.isInteger(groupId) || groupId <= 0) {
     await local.query(`DELETE FROM pos.product_modifier_groups WHERE product_id = $1`, [productId]);
     return;
   }
   await local.query(
-    `INSERT INTO pos.product_modifier_groups (product_id, group_id)
-     VALUES ($1, $2)
-     ON CONFLICT (product_id) DO UPDATE SET group_id = EXCLUDED.group_id`,
-    [productId, groupId],
+    `INSERT INTO pos.product_modifier_groups (product_id, group_id, included_count, extra_price)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (product_id) DO UPDATE SET
+       group_id = EXCLUDED.group_id,
+       included_count = EXCLUDED.included_count,
+       extra_price = EXCLUDED.extra_price`,
+    [productId, groupId, cleanInteger(includedCount, 0), cleanMoney(extraPrice, 0)],
   );
 }
 

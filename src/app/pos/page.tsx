@@ -12,10 +12,10 @@ import CashlogyModal from "@/components/pos/CashlogyModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 
 type CartAction =
-  | { type: "ADD"; product: Product }
-  | { type: "UPDATE_QTY"; productId: number; delta: number }
-  | { type: "REMOVE"; productId: number }
-  | { type: "SET_NOTE"; productId: number; note: string | null }
+  | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
+  | { type: "UPDATE_QTY"; lineId: string; delta: number }
+  | { type: "REMOVE"; lineId: string }
+  | { type: "SET_NOTE"; lineId: string; note: string | null }
   | { type: "CLEAR" };
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
@@ -40,12 +40,19 @@ const POS_CANCEL_REASONS = [
 function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
   switch (action.type) {
     case "ADD": {
-      const existing = state.find(
-        (i) => i.product_id === action.product.id
-      );
+      const price = Number(action.price ?? action.product.price);
+      const notes = action.note ?? null;
+      const existing = action.merge === false
+        ? null
+        : state.find(
+            (i) =>
+              i.product_id === action.product.id &&
+              i.price === price &&
+              i.notes === notes
+          );
       if (existing) {
         return state.map((i) =>
-          i.product_id === action.product.id
+          i.line_id === existing.line_id
             ? { ...i, qty: i.qty + 1 }
             : i
         );
@@ -53,32 +60,40 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
       return [
         ...state,
         {
+          line_id: action.lineId ?? makeCartLineId(action.product.id),
           product_id: action.product.id,
           name: action.product.name,
-          price: Number(action.product.price),
+          price,
           qty: 1,
-          notes: null,
+          notes,
         },
       ];
     }
     case "UPDATE_QTY": {
       return state
         .map((i) =>
-          i.product_id === action.productId
+          i.line_id === action.lineId
             ? { ...i, qty: i.qty + action.delta }
             : i
         )
         .filter((i) => i.qty > 0);
     }
     case "REMOVE":
-      return state.filter((i) => i.product_id !== action.productId);
+      return state.filter((i) => i.line_id !== action.lineId);
     case "SET_NOTE":
       return state.map((i) =>
-        i.product_id === action.productId ? { ...i, notes: action.note } : i
+        i.line_id === action.lineId ? { ...i, notes: action.note } : i
       );
     case "CLEAR":
       return [];
   }
+}
+
+function makeCartLineId(productId: number) {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${productId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 interface Employee {
@@ -409,14 +424,14 @@ export default function PosPage() {
         <div className="h-[42vh] w-full flex-shrink-0 lg:h-auto lg:w-[400px]">
           <Cart
             items={cart}
-            onUpdateQty={(productId, delta) =>
-              dispatch({ type: "UPDATE_QTY", productId, delta })
+            onUpdateQty={(lineId, delta) =>
+              dispatch({ type: "UPDATE_QTY", lineId, delta })
             }
-            onRemove={(productId) =>
-              dispatch({ type: "REMOVE", productId })
+            onRemove={(lineId) =>
+              dispatch({ type: "REMOVE", lineId })
             }
-            onSetNote={(productId, note) =>
-              dispatch({ type: "SET_NOTE", productId, note })
+            onSetNote={(lineId, note) =>
+              dispatch({ type: "SET_NOTE", lineId, note })
             }
             onCheckout={() => setShowCheckout(true)}
           />
@@ -441,25 +456,20 @@ export default function PosPage() {
           modifierGroupName={selectedModifierGroup?.name ?? null}
           modifierProducts={availableModifierProducts}
           modifierCategories={availableModifierCategories}
+          includedCount={modifiersFor.modifier_included_count ?? 0}
+          extraPrice={modifiersFor.modifier_extra_price ?? 0}
           onCancel={() => setModifiersFor(null)}
           onConfirm={(extras, note) => {
-            // Add the base product first (with the optional note)
-            dispatch({ type: "ADD", product: modifiersFor });
-            if (note) {
-              dispatch({ type: "SET_NOTE", productId: modifiersFor.id, note });
-            }
-            // Then add each selected modifier with the requested qty
-            for (const { product, qty } of extras) {
+            dispatch({ type: "ADD", product: modifiersFor, note, merge: !note });
+            for (const { product, qty, unitPrice } of extras) {
               for (let i = 0; i < qty; i++) {
-                dispatch({ type: "ADD", product });
+                dispatch({
+                  type: "ADD",
+                  product,
+                  price: unitPrice,
+                  note: `Per ${modifiersFor.name}`,
+                });
               }
-              // Tag the modifier line with the base it belongs to so the
-              // kitchen and the receipt know they go together.
-              dispatch({
-                type: "SET_NOTE",
-                productId: product.id,
-                note: `Per ${modifiersFor.name}`,
-              });
             }
             setModifiersFor(null);
           }}

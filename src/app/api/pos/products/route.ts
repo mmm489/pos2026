@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
       ? await sql`
           SELECT p.id, p.name, p.category_id, p.price, p.vat_rate, p.image_url, p.active, p.sort_order,
                  c.name AS category_name, c.color AS category_color,
-                 pmg.group_id AS modifier_group_id
+                 pmg.group_id AS modifier_group_id,
+                 pmg.included_count AS modifier_included_count,
+                 pmg.extra_price AS modifier_extra_price
           FROM pos.products p
           JOIN pos.categories c ON c.id = p.category_id
           LEFT JOIN pos.product_modifier_groups pmg ON pmg.product_id = p.id
@@ -24,7 +26,9 @@ export async function GET(request: NextRequest) {
       : await sql`
           SELECT p.id, p.name, p.category_id, p.price, p.vat_rate, p.image_url, p.active, p.sort_order,
                  c.name AS category_name, c.color AS category_color,
-                 pmg.group_id AS modifier_group_id
+                 pmg.group_id AS modifier_group_id,
+                 pmg.included_count AS modifier_included_count,
+                 pmg.extra_price AS modifier_extra_price
           FROM pos.products p
           JOIN pos.categories c ON c.id = p.category_id
           LEFT JOIN pos.product_modifier_groups pmg ON pmg.product_id = p.id
@@ -47,6 +51,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, category_id, price, vat_rate, image_url, sort_order, active } = body;
     const modifierGroupId = normalizeModifierGroupId(body.modifier_group_id);
+    const modifierIncludedCount = cleanInteger(body.modifier_included_count, 0);
+    const modifierExtraPrice = cleanMoney(body.modifier_extra_price, 0);
 
     if (!name || !category_id || price == null) {
       return NextResponse.json(
@@ -62,8 +68,21 @@ export async function POST(request: NextRequest) {
       VALUES (${name}, ${category_id}, ${price}, ${vat_rate ?? 10}, ${image_url || null}, ${active !== false}, ${sort_order || 0})
       RETURNING id, name, category_id, price, vat_rate, image_url, active, sort_order
     `;
-    await setProductModifierGroup(Number(product.id), modifierGroupId);
-    return NextResponse.json({ ...product, modifier_group_id: modifierGroupId }, { status: 201 });
+    await setProductModifierGroup(
+      Number(product.id),
+      modifierGroupId,
+      modifierIncludedCount,
+      modifierExtraPrice
+    );
+    return NextResponse.json(
+      {
+        ...product,
+        modifier_group_id: modifierGroupId,
+        modifier_included_count: modifierGroupId ? modifierIncludedCount : null,
+        modifier_extra_price: modifierGroupId ? modifierExtraPrice : null,
+      },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error creating product:", error);
     return NextResponse.json(
@@ -71,4 +90,14 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function cleanInteger(value: unknown, fallback: number) {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function cleanMoney(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : fallback;
 }

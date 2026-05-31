@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS pos.modifier_group_categories (
 
 CREATE TABLE IF NOT EXISTS pos.product_modifier_groups (
   product_id INTEGER PRIMARY KEY REFERENCES pos.products(id) ON DELETE CASCADE,
-  group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL
+  group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL,
+  included_count INTEGER NOT NULL DEFAULT 0,
+  extra_price NUMERIC(8,2) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS pos.business (
@@ -177,3 +179,9 @@ CREATE INDEX IF NOT EXISTS idx_cloud_cash_closings_closed ON pos.cash_closings(c
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_reference ON pos.card_transactions(reference);
 CREATE INDEX IF NOT EXISTS idx_catalog_change_queue_status ON pos.catalog_change_queue(status, requested_at);
+
+ALTER TABLE pos.product_modifier_groups
+ADD COLUMN IF NOT EXISTS included_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.product_modifier_groups
+ADD COLUMN IF NOT EXISTS extra_price NUMERIC(8,2) NOT NULL DEFAULT 0;

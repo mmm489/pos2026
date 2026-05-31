@@ -41,8 +41,18 @@ export async function ensureModifierSchema() {
       await rawQuery(`
         CREATE TABLE IF NOT EXISTS pos.product_modifier_groups (
           product_id INTEGER PRIMARY KEY REFERENCES pos.products(id) ON DELETE CASCADE,
-          group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL
+          group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL,
+          included_count INTEGER NOT NULL DEFAULT 0,
+          extra_price NUMERIC(8,2) NOT NULL DEFAULT 0
         )
+      `);
+      await rawQuery(`
+        ALTER TABLE pos.product_modifier_groups
+        ADD COLUMN IF NOT EXISTS included_count INTEGER NOT NULL DEFAULT 0
+      `);
+      await rawQuery(`
+        ALTER TABLE pos.product_modifier_groups
+        ADD COLUMN IF NOT EXISTS extra_price NUMERIC(8,2) NOT NULL DEFAULT 0
       `);
       await rawQuery(`
         CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group
@@ -155,7 +165,12 @@ export async function updateModifierGroup(
   });
 }
 
-export async function setProductModifierGroup(productId: number, groupId: number | null) {
+export async function setProductModifierGroup(
+  productId: number,
+  groupId: number | null,
+  includedCount = 0,
+  extraPrice = 0
+) {
   await ensureModifierSchema();
   if (groupId == null) {
     await rawQuery("DELETE FROM pos.product_modifier_groups WHERE product_id = $1", [productId]);
@@ -163,11 +178,14 @@ export async function setProductModifierGroup(productId: number, groupId: number
   }
   await rawQuery(
     `
-      INSERT INTO pos.product_modifier_groups (product_id, group_id)
-      VALUES ($1, $2)
-      ON CONFLICT (product_id) DO UPDATE SET group_id = EXCLUDED.group_id
+      INSERT INTO pos.product_modifier_groups (product_id, group_id, included_count, extra_price)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (product_id) DO UPDATE SET
+        group_id = EXCLUDED.group_id,
+        included_count = EXCLUDED.included_count,
+        extra_price = EXCLUDED.extra_price
     `,
-    [productId, groupId]
+    [productId, groupId, cleanInteger(includedCount, 0), cleanMoney(extraPrice, 0)]
   );
 }
 
@@ -246,4 +264,14 @@ function cleanOptionalText(value: unknown) {
 function cleanNumber(value: unknown, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function cleanInteger(value: unknown, fallback: number) {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function cleanMoney(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : fallback;
 }

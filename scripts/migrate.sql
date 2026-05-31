@@ -127,11 +127,19 @@ CREATE TABLE IF NOT EXISTS pos.modifier_group_categories (
 
 CREATE TABLE IF NOT EXISTS pos.product_modifier_groups (
   product_id INTEGER PRIMARY KEY REFERENCES pos.products(id) ON DELETE CASCADE,
-  group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL
+  group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL,
+  included_count INTEGER NOT NULL DEFAULT 0,
+  extra_price NUMERIC(8,2) NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group
 ON pos.product_modifier_groups(group_id);
+
+ALTER TABLE pos.product_modifier_groups
+ADD COLUMN IF NOT EXISTS included_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.product_modifier_groups
+ADD COLUMN IF NOT EXISTS extra_price NUMERIC(8,2) NOT NULL DEFAULT 0;
 
 -- =====================
 -- SEED DATA

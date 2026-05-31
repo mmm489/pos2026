@@ -6,9 +6,9 @@ import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping"
 
 interface CartProps {
   items: CartItem[];
-  onUpdateQty: (productId: number, delta: number) => void;
-  onRemove: (productId: number) => void;
-  onSetNote: (productId: number, note: string | null) => void;
+  onUpdateQty: (lineId: string, delta: number) => void;
+  onRemove: (lineId: string) => void;
+  onSetNote: (lineId: string, note: string | null) => void;
   onCheckout: () => void;
 }
 
@@ -20,7 +20,7 @@ export default function Cart({
   onCheckout,
 }: CartProps) {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const [editingNoteFor, setEditingNoteFor] = useState<number | null>(null);
+  const [editingNoteFor, setEditingNoteFor] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const groupedItems = groupItemsWithModifiers(
     items,
@@ -50,7 +50,7 @@ export default function Cart({
           <div className="space-y-2">
             {groupedItems.map(({ base, modifiers, isOrphanModifier }) => (
               <div
-                key={`${base.product_id}-${base.notes || "base"}`}
+                key={base.line_id}
                 className="rounded-lg border border-[#434654]/70 bg-[#282a31] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.16)]"
               >
                 <CartLine
@@ -59,7 +59,7 @@ export default function Cart({
                   onUpdateQty={onUpdateQty}
                   onRemove={onRemove}
                   onEditNote={(item) => {
-                    setEditingNoteFor(item.product_id);
+                    setEditingNoteFor(item.line_id);
                     setNoteDraft(item.notes || "");
                   }}
                 />
@@ -72,13 +72,13 @@ export default function Cart({
                     <div className="space-y-2">
                       {modifiers.map((modifier) => (
                         <CartLine
-                          key={`${modifier.product_id}-${modifier.notes || "modifier"}`}
+                          key={modifier.line_id}
                           item={modifier}
                           isModifier
                           onUpdateQty={onUpdateQty}
                           onRemove={onRemove}
                           onEditNote={(item) => {
-                            setEditingNoteFor(item.product_id);
+                            setEditingNoteFor(item.line_id);
                             setNoteDraft(item.notes || "");
                           }}
                         />
@@ -156,8 +156,8 @@ function CartLine({
 }: {
   item: CartItem;
   isModifier?: boolean;
-  onUpdateQty: (productId: number, delta: number) => void;
-  onRemove: (productId: number) => void;
+  onUpdateQty: (lineId: string, delta: number) => void;
+  onRemove: (lineId: string) => void;
   onEditNote: (item: CartItem) => void;
 }) {
   const modifierParent = getModifierParent(item.notes);
@@ -186,14 +186,14 @@ function CartLine({
 
       <div className="flex items-center gap-1">
         <button
-          onClick={() => onUpdateQty(item.product_id, -1)}
+          onClick={() => onUpdateQty(item.line_id, -1)}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-[#32343c] text-lg font-bold text-[#e1e2ec] transition-colors hover:bg-[#3a3d46] active:bg-[#282a31]"
         >
           -
         </button>
         <span className="w-7 text-center font-bold text-[#e1e2ec]">{item.qty}</span>
         <button
-          onClick={() => onUpdateQty(item.product_id, 1)}
+          onClick={() => onUpdateQty(item.line_id, 1)}
           className="flex h-9 w-9 items-center justify-center rounded-full bg-[#32343c] text-lg font-bold text-[#e1e2ec] transition-colors hover:bg-[#3a3d46] active:bg-[#282a31]"
         >
           +
@@ -214,7 +214,7 @@ function CartLine({
             </button>
           )}
           <button
-            onClick={() => onRemove(item.product_id)}
+            onClick={() => onRemove(item.line_id)}
             className="text-xs font-bold text-[#ffb4ab] transition-colors hover:text-[#ffd5d0]"
           >
             Eliminar

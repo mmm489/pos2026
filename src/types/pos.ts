@@ -17,6 +17,8 @@ export interface Product {
   category_name?: string;
   category_color?: string;
   modifier_group_id?: number | null;
+  modifier_included_count?: number | null;
+  modifier_extra_price?: number | null;
 }
 
 export interface ModifierGroup {
@@ -142,6 +144,7 @@ export interface CashClosing {
 }
 
 export interface CartItem {
+  line_id: string;
   product_id: number;
   name: string;
   price: number;

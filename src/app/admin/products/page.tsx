@@ -10,6 +10,8 @@ interface ProductForm {
   price: string;
   vat_rate: string;
   modifier_group_id: string;
+  modifier_included_count: string;
+  modifier_extra_price: string;
   active: boolean;
 }
 
@@ -25,6 +27,8 @@ const EMPTY_FORM: ProductForm = {
   price: "",
   vat_rate: "10",
   modifier_group_id: "",
+  modifier_included_count: "0",
+  modifier_extra_price: "0",
   active: true,
 };
 
@@ -102,6 +106,8 @@ export default function AdminProductsPage() {
         price: parseFloat(form.price),
         vat_rate: parseFloat(form.vat_rate),
         modifier_group_id: form.modifier_group_id ? parseInt(form.modifier_group_id) : null,
+        modifier_included_count: form.modifier_group_id ? parseInt(form.modifier_included_count || "0") : 0,
+        modifier_extra_price: form.modifier_group_id ? parseFloat(form.modifier_extra_price || "0") : 0,
         active: form.active,
       };
 
@@ -143,6 +149,8 @@ export default function AdminProductsPage() {
       price: String(product.price),
       vat_rate: String(product.vat_rate || 10),
       modifier_group_id: product.modifier_group_id ? String(product.modifier_group_id) : "",
+      modifier_included_count: String(product.modifier_included_count ?? 0),
+      modifier_extra_price: String(product.modifier_extra_price ?? 0),
       active: product.active,
     });
     setEditingId(product.id);
@@ -537,6 +545,39 @@ export default function AdminProductsPage() {
                   Si asignas una pagina, al mantener pulsado el producto se abre solo esa seleccion.
                 </p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Toppings incluidos gratis
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={form.modifier_included_count}
+                  onChange={(e) => setForm({ ...form, modifier_included_count: e.target.value })}
+                  disabled={!form.modifier_group_id}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:bg-gray-100 disabled:text-gray-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Precio topping extra
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.modifier_extra_price}
+                    onChange={(e) => setForm({ ...form, modifier_extra_price: e.target.value })}
+                    disabled={!form.modifier_group_id}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300 disabled:bg-gray-100 disabled:text-gray-400"
+                  />
+                  <span className="absolute right-3 top-2 text-gray-400 text-sm">&euro;</span>
+                </div>
+              </div>
             </div>
 
             {/* Price breakdown */}
@@ -632,7 +673,7 @@ export default function AdminProductsPage() {
                       )}
                       {product.modifier_group_id && (
                         <span className="ml-2 text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
-                          {modifierGroupNames.get(product.modifier_group_id) || "Toppings"}
+                          {modifierGroupNames.get(product.modifier_group_id) || "Toppings"} · {product.modifier_included_count ?? 0} gratis · extra {Number(product.modifier_extra_price ?? 0).toFixed(2)} &euro;
                         </span>
                       )}
                     </div>
