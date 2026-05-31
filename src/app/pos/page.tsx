@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useState, useCallback, useMemo } from "react";
-import { Product, Category, CartItem, Order } from "@/types/pos";
+import { Product, Category, CartItem, Order, ModifierGroup } from "@/types/pos";
 import ProductGrid from "@/components/pos/ProductGrid";
 import ModifiersModal from "@/components/pos/ModifiersModal";
 import Cart from "@/components/pos/Cart";
@@ -23,7 +23,7 @@ const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
 // Categories whose name contains any of these keywords are treated as
 // "modifier" categories — their products appear in the long-press popup
 // instead of being eligible to trigger their own modifier popup.
-const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "complemento"];
+const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "complemento", "sabor"];
 
 function isModifierCategory(name: string): boolean {
   const lower = name.toLowerCase();
@@ -91,6 +91,7 @@ export default function PosPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [cart, dispatch] = useReducer(cartReducer, []);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCashClosing, setShowCashClosing] = useState(false);
@@ -105,9 +106,29 @@ export default function PosPage() {
   // Split products by whether they belong to a modifier category. Modifier
   // products show up in the modifiers picker; everything else is a base product
   // that can OPEN the modifiers picker via long-press.
+  const modifierGroupCategoryIds = useMemo(() => {
+    const ids = new Set<number>();
+    modifierGroups.forEach((group) => {
+      group.category_ids.forEach((id) => ids.add(id));
+    });
+    return ids;
+  }, [modifierGroups]);
   const modifierCategoryIds = useMemo(
-    () => new Set(categories.filter((c) => isModifierCategory(c.name)).map((c) => c.id)),
-    [categories]
+    () =>
+      new Set(
+        categories
+          .filter((c) => isModifierCategory(c.name) || modifierGroupCategoryIds.has(c.id))
+          .map((c) => c.id)
+      ),
+    [categories, modifierGroupCategoryIds]
+  );
+  const baseProducts = useMemo(
+    () => products.filter((p) => !modifierCategoryIds.has(p.category_id)),
+    [products, modifierCategoryIds]
+  );
+  const baseCategories = useMemo(
+    () => categories.filter((c) => !modifierCategoryIds.has(c.id)),
+    [categories, modifierCategoryIds]
   );
   const modifierProducts = useMemo(
     () => products.filter((p) => modifierCategoryIds.has(p.category_id) && p.active !== false),
@@ -121,6 +142,43 @@ export default function PosPage() {
     () => new Set(modifierProducts.map((p) => p.id)),
     [modifierProducts]
   );
+  const modifierGroupById = useMemo(
+    () => new Map(modifierGroups.map((group) => [group.id, group])),
+    [modifierGroups]
+  );
+  const activeModifierGroupIds = useMemo(
+    () => new Set(modifierGroups.map((group) => group.id)),
+    [modifierGroups]
+  );
+  const selectedModifierGroup = modifiersFor?.modifier_group_id
+    ? modifierGroupById.get(modifiersFor.modifier_group_id) ?? null
+    : null;
+  const selectedModifierCategoryIds = useMemo(() => {
+    if (selectedModifierGroup) return new Set(selectedModifierGroup.category_ids);
+    return modifierCategoryIds;
+  }, [selectedModifierGroup, modifierCategoryIds]);
+  const availableModifierProducts = useMemo(
+    () => modifierProducts.filter((p) => selectedModifierCategoryIds.has(p.category_id)),
+    [modifierProducts, selectedModifierCategoryIds]
+  );
+  const availableModifierCategories = useMemo(
+    () => modifierCategories.filter((c) => selectedModifierCategoryIds.has(c.id)),
+    [modifierCategories, selectedModifierCategoryIds]
+  );
+  const noLongPressIds = useMemo(() => {
+    const ids = new Set(modifierProductIds);
+    if (modifierGroups.length > 0) {
+      for (const product of baseProducts) {
+        if (
+          !modifierProductIds.has(product.id) &&
+          (!product.modifier_group_id || !activeModifierGroupIds.has(product.modifier_group_id))
+        ) {
+          ids.add(product.id);
+        }
+      }
+    }
+    return ids;
+  }, [activeModifierGroupIds, baseProducts, modifierProductIds, modifierGroups.length]);
 
   const loadRecentOrders = useCallback(async () => {
     try {
@@ -177,16 +235,22 @@ export default function PosPage() {
         if (!r.ok) throw new Error();
         return r.json();
       }),
+      fetch("/api/pos/modifier-groups").then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      }),
     ])
-      .then(([prods, cats]) => {
+      .then(([prods, cats, groups]) => {
         setProducts(prods);
         setCategories(cats);
+        setModifierGroups(groups);
         setLoading(false);
       })
       .catch(() => {
         // Fallback to mock data
         setProducts(MOCK_PRODUCTS);
         setCategories(MOCK_CATEGORIES);
+        setModifierGroups([]);
         setLoading(false);
       });
   }, [employee]);
@@ -331,13 +395,13 @@ export default function PosPage() {
         {/* Product catalog — 75% */}
         <div className="min-h-0 min-w-0 flex-1">
           <ProductGrid
-            products={products}
-            categories={categories}
+            products={baseProducts}
+            categories={baseCategories}
             onAddToCart={(p) => dispatch({ type: "ADD", product: p })}
             onLongPress={
               modifierProducts.length > 0 ? (p) => setModifiersFor(p) : undefined
             }
-            noLongPressIds={modifierProductIds}
+            noLongPressIds={noLongPressIds}
           />
         </div>
 
@@ -374,8 +438,9 @@ export default function PosPage() {
       {modifiersFor && (
         <ModifiersModal
           baseProduct={modifiersFor}
-          modifierProducts={modifierProducts}
-          modifierCategories={modifierCategories}
+          modifierGroupName={selectedModifierGroup?.name ?? null}
+          modifierProducts={availableModifierProducts}
+          modifierCategories={availableModifierCategories}
           onCancel={() => setModifiersFor(null)}
           onConfirm={(extras, note) => {
             // Add the base product first (with the optional note)

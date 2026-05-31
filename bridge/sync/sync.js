@@ -62,6 +62,26 @@ const TABLES = [
     orderBy: "id",
   },
   {
+    name: "modifier_groups",
+    columns: ["id", "name", "description", "sort_order", "active"],
+    orderBy: "id",
+    optional: true,
+  },
+  {
+    name: "modifier_group_categories",
+    columns: ["group_id", "category_id", "sort_order"],
+    orderBy: "group_id",
+    keyColumns: ["group_id", "category_id"],
+    optional: true,
+  },
+  {
+    name: "product_modifier_groups",
+    columns: ["product_id", "group_id"],
+    orderBy: "product_id",
+    keyColumns: ["product_id"],
+    optional: true,
+  },
+  {
     name: "orders",
     columns: [
       "id",
@@ -175,9 +195,10 @@ function placeholders(columns, offset = 0) {
   return columns.map((_, index) => `$${offset + index + 1}`).join(", ");
 }
 
-function updateAssignments(columns, keyColumn = "id") {
+function updateAssignments(columns, keyColumns = ["id"]) {
+  const keys = new Set(Array.isArray(keyColumns) ? keyColumns : [keyColumns]);
   return columns
-    .filter((column) => column !== keyColumn)
+    .filter((column) => !keys.has(column))
     .map((column) => `${quoteIdent(column)} = EXCLUDED.${quoteIdent(column)}`)
     .join(", ");
 }
@@ -235,6 +256,36 @@ async function ensureCloudSchema(cloud) {
   for (const statement of splitSqlStatements(schemaSql)) {
     await cloud.query(statement);
   }
+}
+
+async function ensureLocalModifierSchema(local) {
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.modifier_groups (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(120) NOT NULL UNIQUE,
+      description TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT true
+    )
+  `);
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.modifier_group_categories (
+      group_id INTEGER NOT NULL REFERENCES pos.modifier_groups(id) ON DELETE CASCADE,
+      category_id INTEGER NOT NULL REFERENCES pos.categories(id) ON DELETE CASCADE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (group_id, category_id)
+    )
+  `);
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.product_modifier_groups (
+      product_id INTEGER PRIMARY KEY REFERENCES pos.products(id) ON DELETE CASCADE,
+      group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL
+    )
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group
+    ON pos.product_modifier_groups(group_id)
+  `);
 }
 
 function asPayload(value) {
@@ -311,6 +362,7 @@ async function applyProductChange(local, change) {
   const price = cleanNumber(payload.price, NaN);
   const vatRate = cleanNumber(payload.vat_rate, 10);
   const imageUrl = payload.image_url ? String(payload.image_url) : null;
+  const modifierGroupId = cleanNumber(payload.modifier_group_id, NaN);
   const active = payload.active == null ? true : Boolean(payload.active);
   const sortOrder = cleanNumber(payload.sort_order, 0);
 
@@ -320,6 +372,10 @@ async function applyProductChange(local, change) {
 
   const category = await local.query(`SELECT id FROM pos.categories WHERE id = $1`, [categoryId]);
   if (!category.rowCount) throw new Error(`Categoria ${categoryId} no existe en el POS`);
+  if (Number.isInteger(modifierGroupId) && modifierGroupId > 0) {
+    const group = await local.query(`SELECT id FROM pos.modifier_groups WHERE id = $1 AND active = TRUE`, [modifierGroupId]);
+    if (!group.rowCount) throw new Error(`Pagina de toppings ${modifierGroupId} no existe en el POS`);
+  }
 
   if (change.action === "create") {
     const id = await nextLocalId(local, "products");
@@ -328,6 +384,7 @@ async function applyProductChange(local, change) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [id, name, categoryId, price, vatRate, imageUrl, active, sortOrder],
     );
+    await setProductModifierGroup(local, id, modifierGroupId);
     return id;
   }
 
@@ -342,15 +399,95 @@ async function applyProductChange(local, change) {
       [name, categoryId, price, vatRate, imageUrl, active, sortOrder, id],
     );
     if (!result.rowCount) throw new Error(`Producto ${id} no encontrado`);
+    await setProductModifierGroup(local, id, modifierGroupId);
     return id;
   }
 
   throw new Error(`Accion de producto no soportada: ${change.action}`);
 }
 
+async function replaceModifierGroupCategories(local, groupId, categoryIds) {
+  await local.query(`DELETE FROM pos.modifier_group_categories WHERE group_id = $1`, [groupId]);
+  const uniqueIds = Array.from(
+    new Set((Array.isArray(categoryIds) ? categoryIds : []).map(Number).filter((id) => Number.isInteger(id) && id > 0)),
+  );
+  for (let index = 0; index < uniqueIds.length; index += 1) {
+    const categoryId = uniqueIds[index];
+    const category = await local.query(`SELECT id FROM pos.categories WHERE id = $1`, [categoryId]);
+    if (!category.rowCount) throw new Error(`Categoria ${categoryId} no existe en el POS`);
+    await local.query(
+      `INSERT INTO pos.modifier_group_categories (group_id, category_id, sort_order)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (group_id, category_id) DO UPDATE SET sort_order = EXCLUDED.sort_order`,
+      [groupId, categoryId, index],
+    );
+  }
+}
+
+async function setProductModifierGroup(local, productId, groupId) {
+  if (!Number.isInteger(groupId) || groupId <= 0) {
+    await local.query(`DELETE FROM pos.product_modifier_groups WHERE product_id = $1`, [productId]);
+    return;
+  }
+  await local.query(
+    `INSERT INTO pos.product_modifier_groups (product_id, group_id)
+     VALUES ($1, $2)
+     ON CONFLICT (product_id) DO UPDATE SET group_id = EXCLUDED.group_id`,
+    [productId, groupId],
+  );
+}
+
+async function applyModifierGroupChange(local, change) {
+  const payload = asPayload(change.payload);
+
+  if (change.action === "deactivate") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Pagina de toppings sin id");
+    const result = await local.query(`UPDATE pos.modifier_groups SET active = FALSE WHERE id = $1 RETURNING id`, [id]);
+    if (!result.rowCount) throw new Error(`Pagina de toppings ${id} no encontrada`);
+    return id;
+  }
+
+  const name = cleanText(payload.name);
+  const description = payload.description ? String(payload.description) : null;
+  const sortOrder = cleanNumber(payload.sort_order, 0);
+  const active = payload.active == null ? true : Boolean(payload.active);
+
+  if (!name) throw new Error("Pagina de toppings sin nombre");
+
+  if (change.action === "create") {
+    const id = await nextLocalId(local, "modifier_groups");
+    await local.query(
+      `INSERT INTO pos.modifier_groups (id, name, description, sort_order, active)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, name, description, sortOrder, active],
+    );
+    await replaceModifierGroupCategories(local, id, payload.category_ids);
+    return id;
+  }
+
+  if (change.action === "update") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Pagina de toppings sin id");
+    const result = await local.query(
+      `UPDATE pos.modifier_groups
+       SET name = $1, description = $2, sort_order = $3, active = $4
+       WHERE id = $5
+       RETURNING id`,
+      [name, description, sortOrder, active, id],
+    );
+    if (!result.rowCount) throw new Error(`Pagina de toppings ${id} no encontrada`);
+    await replaceModifierGroupCategories(local, id, payload.category_ids);
+    return id;
+  }
+
+  throw new Error(`Accion de pagina de toppings no soportada: ${change.action}`);
+}
+
 async function applyCatalogChange(local, change) {
   if (change.entity_type === "category") return applyCategoryChange(local, change);
   if (change.entity_type === "product") return applyProductChange(local, change);
+  if (change.entity_type === "modifier_group") return applyModifierGroupChange(local, change);
   throw new Error(`Entidad no soportada: ${change.entity_type}`);
 }
 
@@ -433,6 +570,7 @@ async function upsertBatch(cloud, table, rows) {
   if (!rows.length) return 0;
 
   const columns = table.columns;
+  const keyColumns = table.keyColumns || ["id"];
   const values = [];
   const rowPlaceholders = rows.map((row, rowIndex) => {
     const offset = rowIndex * columns.length;
@@ -440,11 +578,11 @@ async function upsertBatch(cloud, table, rows) {
     return `(${placeholders(columns, offset)})`;
   });
 
-  const updates = updateAssignments(columns);
+  const updates = updateAssignments(columns, keyColumns);
   const sql = `
     INSERT INTO pos.${quoteIdent(table.name)} (${columnList(columns)})
     VALUES ${rowPlaceholders.join(", ")}
-    ON CONFLICT (id) DO UPDATE SET ${updates}
+    ON CONFLICT (${columnList(keyColumns)}) DO UPDATE SET ${updates}
   `;
   await cloud.query(sql, values);
   return rows.length;
@@ -478,6 +616,7 @@ async function runSync() {
     local = await connect(LOCAL_DB_URL, "local POS");
     cloud = await connectDashboard(DASHBOARD_DB_URL);
 
+    await ensureLocalModifierSchema(local);
     await ensureCloudSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
 

@@ -16,6 +16,17 @@ export interface Product {
   sort_order: number;
   category_name?: string;
   category_color?: string;
+  modifier_group_id?: number | null;
+}
+
+export interface ModifierGroup {
+  id: number;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  active: boolean;
+  category_ids: number[];
+  category_names: string[];
 }
 
 export interface Order {

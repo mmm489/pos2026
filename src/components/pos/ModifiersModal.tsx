@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 interface ModifiersModalProps {
   baseProduct: Product;
+  modifierGroupName?: string | null;
   modifierProducts: Product[];
   modifierCategories: Category[];
   onConfirm: (selections: { product: Product; qty: number }[], note: string | null) => void;
@@ -22,6 +23,7 @@ interface ModifiersModalProps {
  */
 export default function ModifiersModal({
   baseProduct,
+  modifierGroupName,
   modifierProducts,
   modifierCategories,
   onConfirm,
@@ -76,7 +78,7 @@ export default function ModifiersModal({
             <p className="text-xs text-gray-400 uppercase tracking-wide">Personalitzar</p>
             <h2 className="text-2xl font-bold text-gray-800">{baseProduct.name}</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Base: {Number(baseProduct.price).toFixed(2)}€
+              {modifierGroupName ? `${modifierGroupName} - ` : ""}Base: {Number(baseProduct.price).toFixed(2)}€
             </p>
           </div>
           <button

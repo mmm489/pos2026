@@ -18,6 +18,26 @@ CREATE TABLE IF NOT EXISTS pos.products (
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS pos.modifier_groups (
+  id INTEGER PRIMARY KEY,
+  name VARCHAR(120) NOT NULL UNIQUE,
+  description TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS pos.modifier_group_categories (
+  group_id INTEGER NOT NULL REFERENCES pos.modifier_groups(id) ON DELETE CASCADE,
+  category_id INTEGER NOT NULL REFERENCES pos.categories(id) ON DELETE CASCADE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (group_id, category_id)
+);
+
+CREATE TABLE IF NOT EXISTS pos.product_modifier_groups (
+  product_id INTEGER PRIMARY KEY REFERENCES pos.products(id) ON DELETE CASCADE,
+  group_id INTEGER REFERENCES pos.modifier_groups(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS pos.business (
   id INTEGER PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
@@ -128,7 +148,7 @@ CREATE TABLE IF NOT EXISTS pos.card_transactions (
 
 CREATE TABLE IF NOT EXISTS pos.catalog_change_queue (
   id TEXT PRIMARY KEY,
-  entity_type VARCHAR(20) NOT NULL CHECK (entity_type IN ('category', 'product')),
+  entity_type VARCHAR(20) NOT NULL,
   action VARCHAR(20) NOT NULL CHECK (action IN ('create', 'update', 'deactivate')),
   entity_id INTEGER,
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -140,11 +160,19 @@ CREATE TABLE IF NOT EXISTS pos.catalog_change_queue (
   error_message TEXT
 );
 
+ALTER TABLE pos.catalog_change_queue
+DROP CONSTRAINT IF EXISTS catalog_change_queue_entity_type_check;
+
+ALTER TABLE pos.catalog_change_queue
+ADD CONSTRAINT catalog_change_queue_entity_type_check
+CHECK (entity_type IN ('category', 'product', 'modifier_group'));
+
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_created ON pos.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_status ON pos.orders(status);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_payment ON pos.orders(payment_method);
 CREATE INDEX IF NOT EXISTS idx_cloud_order_items_order ON pos.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_cloud_order_items_product ON pos.order_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group ON pos.product_modifier_groups(group_id);
 CREATE INDEX IF NOT EXISTS idx_cloud_cash_closings_closed ON pos.cash_closings(closed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_reference ON pos.card_transactions(reference);
