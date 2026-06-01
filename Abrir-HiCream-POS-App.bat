@@ -35,12 +35,21 @@ if not exist "%NEXT_BIN%" (
 )
 
 set "SYNC_BIN=%APP_DIR%\bridge\sync\sync-runner.js"
+set "SYNC_TASK=HiCream Dashboard Sync"
 if exist "%SYNC_BIN%" (
   echo Comprobando sync del dashboard...
   powershell -NoProfile -Command "$needle = 'sync-runner.js'; $running = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like ('*' + $needle + '*') -and $_.CommandLine -like '*pos2026*' }; if ($running) { exit 0 } else { exit 1 }" >nul 2>nul
   if errorlevel 1 (
     echo Iniciando sync del dashboard...
-    start "Hi Cream Dashboard Sync" /min /D "%APP_DIR%\bridge" "%NODE_EXE%" "%SYNC_BIN%"
+    schtasks /Query /TN "%SYNC_TASK%" >nul 2>nul
+    if not errorlevel 1 (
+      schtasks /Run /TN "%SYNC_TASK%" >nul 2>nul
+      timeout /t 3 /nobreak >nul
+    )
+    powershell -NoProfile -Command "$needle = 'sync-runner.js'; $running = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like ('*' + $needle + '*') -and $_.CommandLine -like '*pos2026*' }; if ($running) { exit 0 } else { exit 1 }" >nul 2>nul
+    if errorlevel 1 (
+      start "Hi Cream Dashboard Sync" /min /D "%APP_DIR%\bridge" "%NODE_EXE%" "%SYNC_BIN%"
+    )
   ) else (
     echo Sync del dashboard ya esta iniciado.
   )
