@@ -36,6 +36,11 @@ function isFlavorCategory(name: string): boolean {
   return name.toLowerCase().includes("sabor");
 }
 
+function isGelatsCategory(name?: string | null): boolean {
+  const lower = (name || "").trim().toLowerCase();
+  return lower === "gelat" || lower === "gelats";
+}
+
 function isIceCreamBallName(name: string): boolean {
   const lower = name.toLowerCase();
   return lower.includes("bola gelat") || lower.includes("bola helado");
@@ -272,13 +277,16 @@ export default function PosPage() {
     [categoriesById, modifierGroups]
   );
   const shouldOpenModifiersOnTap = useCallback(
-    (product: Product) =>
-      Boolean(
+    (product: Product) => {
+      const categoryName = product.category_name ?? categoriesById.get(product.category_id)?.name;
+      if (isGelatsCategory(categoryName)) return false;
+      return Boolean(
         product.modifier_group_id &&
           flavorModifierGroupIds.has(product.modifier_group_id) &&
           modifierProducts.length > 0
-      ),
-    [flavorModifierGroupIds, modifierProducts.length]
+      );
+    },
+    [categoriesById, flavorModifierGroupIds, modifierProducts.length]
   );
   const selectedModifierGroup = modifiersFor?.modifier_group_id
     ? modifierGroupById.get(modifiersFor.modifier_group_id) ?? null
@@ -444,8 +452,8 @@ export default function PosPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#11131a]">
-        <div className="rounded-lg border border-[#434654] bg-[#282a31] px-5 py-4 text-base font-semibold text-[#c3c6d6] shadow-2xl shadow-black/25">
+      <div className="flex h-screen items-center justify-center bg-[#f5f4ef]">
+        <div className="rounded-xl border border-[#ddd4c4] bg-[#faf9f6] px-5 py-4 text-base font-medium text-[#6f665c]">
           Cargando productos...
         </div>
       </div>
@@ -453,16 +461,16 @@ export default function PosPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-[#11131a] text-[#e1e2ec]">
+    <div className="flex h-screen flex-col bg-[#f5f4ef] text-[#241f1c]">
       {/* Top header */}
-      <header className="flex h-[78px] flex-shrink-0 items-center justify-between gap-4 border-b border-[#434654] bg-[#11131a] px-4 py-1 shadow-none">
+      <header className="flex h-[78px] flex-shrink-0 items-center justify-between gap-4 border-b border-[#ded6c8] bg-[#faf9f6] px-4 py-1">
         <div className="flex min-w-[180px] items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded bg-[#e1e2ec] text-sm font-black text-[#11131a] shadow-none">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d4cbbb] bg-white text-sm font-medium text-[#241f1c]">
             HC
           </div>
           <div className="min-w-0">
-            <h1 className="text-[32px] font-black leading-[36px] tracking-[-0.01em] text-[#e1e2ec]">Hi Cream</h1>
-            <p className="truncate text-[11px] font-semibold leading-[14px] text-[#c3c6d6]">
+            <h1 className="text-[32px] font-medium leading-[36px] tracking-[-0.01em] text-[#241f1c]">Hi Cream</h1>
+            <p className="truncate text-[11px] font-normal leading-[14px] text-[#6f665c]">
               {employee.name} - {employee.role === "admin" ? "Admin" : "Empleado"}
             </p>
           </div>
@@ -470,7 +478,7 @@ export default function PosPage() {
         <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-hidden py-1">
           <button
             onClick={() => setShowCashlogy(true)}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded px-4 py-2 text-[16px] font-medium text-[#c3c6d6] transition-colors hover:bg-[#32343c] active:bg-[#373941]"
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-[16px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Cashlogy
           </button>
@@ -479,7 +487,7 @@ export default function PosPage() {
               loadRecentOrders();
               setShowRecentOrders(true);
             }}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded bg-[#0052cc] px-4 py-2 text-[16px] font-semibold text-[#c4d2ff] shadow-none transition-colors hover:bg-[#0c56d0] active:bg-[#0040a2]"
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl bg-[#2e9e5b] px-4 py-2 text-[16px] font-medium text-white active:bg-[#27874e]"
           >
             Comandes
           </button>
@@ -487,25 +495,25 @@ export default function PosPage() {
             <>
               <a
                 href="/admin/products"
-                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded px-4 py-2 text-[16px] font-medium text-[#c3c6d6] transition-colors hover:bg-[#32343c] active:bg-[#373941]"
+                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-4 py-2 text-[16px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Productes
               </a>
               <a
                 href="/admin/employees"
-                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded px-4 py-2 text-[16px] font-medium text-[#c3c6d6] transition-colors hover:bg-[#32343c] active:bg-[#373941]"
+                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-4 py-2 text-[16px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Empleats
               </a>
               <a
                 href="/admin/closings"
-                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded px-4 py-2 text-[16px] font-medium text-[#c3c6d6] transition-colors hover:bg-[#32343c] active:bg-[#373941]"
+                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-4 py-2 text-[16px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Tancaments
               </a>
               <button
                 onClick={() => setShowCashClosing(true)}
-                className="min-h-[42px] shrink-0 whitespace-nowrap rounded px-4 py-2 text-[16px] font-medium text-[#c3c6d6] transition-colors hover:bg-[#32343c] active:bg-[#373941]"
+                className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-[16px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Tancar caixa
               </button>
@@ -513,7 +521,7 @@ export default function PosPage() {
           )}
           <button
             onClick={handleLogout}
-            className="ml-2 min-h-[52px] shrink-0 whitespace-nowrap rounded border border-[#434654] bg-transparent px-5 py-2 text-[16px] font-semibold text-[#e1e2ec] transition-colors hover:bg-[#32343c] active:bg-[#373941]"
+            className="ml-2 min-h-[52px] shrink-0 whitespace-nowrap rounded-xl border border-[#d4cbbb] bg-white px-5 py-2 text-[16px] font-medium text-[#241f1c] active:bg-[#f1eee7]"
           >
             Canviar empleat
           </button>
@@ -615,20 +623,20 @@ export default function PosPage() {
 
       {/* Recent orders modal */}
       {showRecentOrders && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-sm">
-          <div className="mx-4 flex max-h-[80vh] w-full max-w-lg flex-col rounded-lg bg-white shadow-2xl ring-1 ring-slate-900/10">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-              <h3 className="text-xl font-black text-slate-950">Comandes d&apos;avui</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-3">
+          <div className="mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] text-[#241f1c]">
+            <div className="flex items-center justify-between border-b border-[#ddd4c4] px-6 py-4">
+              <h3 className="text-2xl font-medium text-[#241f1c]">Comandes d&apos;avui</h3>
               <div className="flex gap-2">
                 <a
                   href="/admin/orders"
-                  className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200"
+                  className="rounded-xl border border-[#d4cbbb] bg-white px-3 py-1.5 text-xs font-medium text-[#5f6878] active:bg-[#f1eee7]"
                 >
                   Veure tot
                 </a>
                 <button
                   onClick={() => setShowRecentOrders(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-lg text-slate-500 hover:bg-slate-200"
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#d4cbbb] bg-white text-lg text-[#6f665c] active:bg-[#f1eee7]"
                 >
                   &#10005;
                 </button>
@@ -636,29 +644,29 @@ export default function PosPage() {
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-3">
               {recentOrders.length === 0 ? (
-                <p className="text-center text-gray-400 py-8">Cap comanda avui</p>
+                <p className="py-8 text-center font-medium text-[#7b7469]">Cap comanda avui</p>
               ) : (
                 <div className="space-y-2">
                   {recentOrders.map((order) => (
                     <div
                       key={order.id}
-                      className={`flex items-center justify-between rounded-lg border px-4 py-3 ${
-                        order.status === "cancelled" ? "border-red-100 bg-red-50" : "border-slate-200 bg-slate-50"
+                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${
+                        order.status === "cancelled" ? "border-[#f0bdb4] bg-[#fdeceb]" : "border-[#ddd4c4] bg-white"
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-lg font-black text-slate-950">{order.order_number}</span>
+                        <span className="text-lg font-semibold text-[#241f1c]">{order.order_number}</span>
                         {order.table_number && (
-                          <span className="rounded bg-rose-100 px-1.5 py-0.5 text-xs font-bold text-rose-700">
+                          <span className="rounded-full bg-[#fbf0cc] px-2 py-0.5 text-xs font-medium text-[#87620d]">
                             T{order.table_number}
                           </span>
                         )}
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          order.status === "cancelled" ? "bg-red-100 text-red-700"
-                          : order.status === "completed" ? "bg-green-100 text-green-700"
-                          : order.status === "ready" ? "bg-blue-100 text-blue-700"
-                          : order.status === "preparing" ? "bg-yellow-100 text-yellow-700"
-                          : "bg-slate-200 text-slate-600"
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          order.status === "cancelled" ? "bg-[#fdeceb] text-[#c4423a]"
+                          : order.status === "completed" ? "bg-[#dff5e6] text-[#1e6b3a]"
+                          : order.status === "ready" ? "bg-[#e4f0fb] text-[#275a8f]"
+                          : order.status === "preparing" ? "bg-[#fbf0cc] text-[#87620d]"
+                          : "bg-[#f1eee7] text-[#6f665c]"
                         }`}>
                           {order.status === "cancelled" ? "Anul·lat"
                           : order.status === "completed" ? "Completat"
@@ -666,18 +674,18 @@ export default function PosPage() {
                           : order.status === "preparing" ? "Preparant"
                           : "Pendent"}
                         </span>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-[#8a8276]">
                           {new Date(order.created_at).toLocaleTimeString("ca-ES", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`font-black ${order.status === "cancelled" ? "text-slate-400 line-through" : "text-slate-950"}`}>
+                        <span className={`font-semibold ${order.status === "cancelled" ? "text-[#8a8276] line-through" : "text-[#241f1c]"}`}>
                           {Number(order.total).toFixed(2)}€
                         </span>
                         {order.status !== "cancelled" && (
                           <button
                             onClick={() => setCancellingId(order.id)}
-                            className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 transition-colors hover:bg-red-100"
+                            className="rounded-xl bg-[#fdeceb] px-2.5 py-1 text-xs font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
                           >
                             Anul·lar
                           </button>
@@ -694,13 +702,13 @@ export default function PosPage() {
 
       {/* Cancel confirmation (POS) */}
       {cancellingId !== null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
-            <h3 className="mb-3 text-lg font-black text-slate-950">Anul·lar comanda?</h3>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#10131b]/72 p-3">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-6 text-[#241f1c]">
+            <h3 className="mb-3 text-xl font-medium text-[#241f1c]">Anul·lar comanda?</h3>
             <select
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
-              className="mb-4 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
+              className="mb-4 w-full rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
             >
               {POS_CANCEL_REASONS.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -709,13 +717,13 @@ export default function PosPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => { setCancellingId(null); setCancelReason("client"); }}
-                className="flex-1 rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200"
+                className="flex-1 rounded-xl border border-[#d4cbbb] bg-white py-2.5 text-sm font-medium text-[#6f665c] active:bg-[#f1eee7]"
               >
                 Tornar
               </button>
               <button
                 onClick={handleCancelOrder}
-                className="flex-1 rounded-lg bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600"
+                className="flex-1 rounded-xl bg-[#c4423a] py-2.5 text-sm font-semibold text-white active:bg-[#a93630]"
               >
                 Anul·lar
               </button>

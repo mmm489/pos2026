@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CartItem } from "@/types/pos";
 import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
+import { titleCase } from "@/lib/palette";
 
 interface CartProps {
   items: CartItem[];
@@ -36,17 +37,17 @@ export default function Cart({
   );
 
   return (
-    <div className="flex h-full flex-col border-t border-[#434654] bg-[#191b23] lg:border-l lg:border-t-0">
-      <div className="border-b border-[#434654]/70 p-4">
-        <h2 className="text-[22px] font-bold leading-7 text-[#e1e2ec]">Comanda actual</h2>
-        <p className="text-[13px] font-medium text-[#c3c6d6]">
+    <div className="flex h-full flex-col border-t border-[#ded6c8] bg-[#faf9f6] lg:border-l lg:border-t-0">
+      <div className="border-b border-[#ded6c8] p-4">
+        <h2 className="text-[22px] font-medium leading-7 text-[#241f1c]">Comanda actual</h2>
+        <p className="text-[13px] font-normal text-[#6f665c]">
           {items.length} {items.length === 1 ? "producte" : "productes"}
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
         {items.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[#8d90a0]">
+          <div className="flex h-full items-center justify-center text-[#7b746a]">
             <p className="text-center text-sm font-medium leading-6">
               Toca un producte per
               <br />
@@ -58,7 +59,7 @@ export default function Cart({
             {groupedItems.map(({ base, modifiers, isOrphanModifier }) => (
               <div
                 key={base.line_id}
-                className="rounded-lg border border-[#434654]/70 bg-[#282a31] p-3 shadow-[0_8px_24px_rgba(0,0,0,0.16)]"
+                className="rounded-xl border border-[#ddd4c4] bg-white p-3"
               >
                 <CartLine
                   item={base}
@@ -73,7 +74,7 @@ export default function Cart({
 
                 {modifiers.length > 0 && (
                   <div className="mt-3 border-l-2 border-[#0052cc]/65 pl-3">
-                    <p className="mb-2 text-[11px] font-bold uppercase text-[#c4d2ff]">
+                    <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.05em] text-[#6f665c]">
                       Complements d&apos;aquest producte
                     </p>
                     <div className="space-y-2">
@@ -99,26 +100,26 @@ export default function Cart({
         )}
       </div>
 
-      <div className="space-y-4 border-t border-[#434654] bg-[#11131a] p-4">
+      <div className="space-y-4 border-t border-[#ded6c8] bg-[#faf9f6] p-4">
         <div className="flex items-center justify-between">
-          <span className="text-[20px] font-bold text-[#e1e2ec]">Total</span>
-          <span className="text-[48px] font-black leading-[56px] tracking-[-0.02em] tabular-nums text-[#e1e2ec]">
+          <span className="text-[20px] font-medium text-[#241f1c]">Total</span>
+          <span className="text-[48px] font-medium leading-[56px] tracking-[-0.02em] tabular-nums text-[#241f1c]">
             {total.toFixed(2)} &euro;
           </span>
         </div>
         <button
           onClick={onCheckout}
           disabled={items.length === 0}
-          className="w-full rounded-lg bg-[#41dfa5] py-4 text-[20px] font-bold uppercase tracking-[0.04em] text-[#003825] transition-colors hover:bg-[#50f0b2] active:bg-[#33c892] disabled:cursor-not-allowed disabled:bg-[#32343c] disabled:text-[#8d90a0]"
+          className="w-full rounded-xl bg-[#2e9e5b] py-4 text-[20px] font-medium text-white active:bg-[#27874e] disabled:cursor-not-allowed disabled:bg-[#d8d4cc] disabled:text-[#8f887c]"
         >
-          COBRAR
+          Cobrar
         </button>
       </div>
 
       {editingNoteFor !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-sm rounded-lg bg-white p-6 shadow-2xl ring-1 ring-slate-900/10">
-            <h3 className="mb-3 text-lg font-black text-slate-950">Nota per a cuina</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45">
+          <div className="mx-4 w-full max-w-sm rounded-xl border border-[#ddd4c4] bg-white p-6">
+            <h3 className="mb-3 text-lg font-medium text-[#241f1c]">Nota per a cuina</h3>
             <textarea
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
@@ -132,7 +133,7 @@ export default function Cart({
                   setEditingNoteFor(null);
                   setNoteDraft("");
                 }}
-                className="flex-1 rounded-lg bg-slate-100 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200"
+                className="flex-1 rounded-xl border border-[#ddd4c4] bg-white py-2.5 text-sm font-medium text-[#241f1c] active:bg-[#f1eee7]"
               >
                 Cancel.lar
               </button>
@@ -142,7 +143,7 @@ export default function Cart({
                   setEditingNoteFor(null);
                   setNoteDraft("");
                 }}
-                className="flex-1 rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
+                className="flex-1 rounded-xl bg-[#2e9e5b] py-2.5 text-sm font-medium text-white active:bg-[#27874e]"
               >
                 Desar nota
               </button>
@@ -175,18 +176,18 @@ function CartLine({
     <div className={`flex items-center gap-3 ${isModifier ? "py-1" : ""}`}>
       <div className="min-w-0 flex-1">
         <p
-          className={`line-clamp-2 font-bold leading-5 ${
-            isModifier ? "text-sm text-[#c3c6d6]" : "text-[#e1e2ec]"
+          className={`line-clamp-2 font-medium leading-5 ${
+            isModifier ? "text-sm text-[#6f665c]" : "text-[#241f1c]"
           }`}
         >
           {isModifier ? "+ " : ""}
-          {item.name}
+          {titleCase(item.name)}
         </p>
-        <p className="text-sm font-medium text-[#c3c6d6]">
+        <p className="text-sm font-normal text-[#6f665c]">
           {Number(item.price).toFixed(2)} &euro; c/u
         </p>
         {visibleNote && (
-          <p className="mt-0.5 truncate text-xs font-semibold italic text-[#f6c453]">
+          <p className="mt-0.5 truncate text-xs font-normal text-[#ba7517]">
             Nota: {visibleNote}
           </p>
         )}
@@ -195,15 +196,15 @@ function CartLine({
       <div className="flex items-center gap-1">
         <button
           onClick={() => onUpdateQty(item.line_id, -1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#32343c] text-lg font-bold text-[#e1e2ec] transition-colors hover:bg-[#3a3d46] active:bg-[#282a31]"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-[#ddd4c4] bg-[#f1eee7] text-lg font-medium text-[#241f1c] active:bg-[#e6dfd2]"
         >
           -
         </button>
-        <span className="w-7 text-center font-bold text-[#e1e2ec]">{item.qty}</span>
+        <span className="w-7 text-center font-medium text-[#241f1c]">{item.qty}</span>
         {!hideIncreaseButton && (
           <button
             onClick={() => onUpdateQty(item.line_id, 1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#32343c] text-lg font-bold text-[#e1e2ec] transition-colors hover:bg-[#3a3d46] active:bg-[#282a31]"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#ddd4c4] bg-[#f1eee7] text-lg font-medium text-[#241f1c] active:bg-[#e6dfd2]"
           >
             +
           </button>
@@ -211,21 +212,21 @@ function CartLine({
       </div>
 
       <div className="flex min-w-[58px] flex-col items-end gap-1">
-        <span className="font-bold text-[#e1e2ec]">
+        <span className="font-medium tabular-nums text-[#241f1c]">
           {(item.price * item.qty).toFixed(2)} &euro;
         </span>
         <div className="flex gap-2">
           {!modifierParent && (
             <button
               onClick={() => onEditNote(item)}
-              className="text-xs font-bold text-[#f6c453] transition-colors hover:text-[#ffe08a]"
+              className="text-xs font-medium text-[#ba7517]"
             >
               Nota
             </button>
           )}
           <button
             onClick={() => onRemove(item.line_id)}
-            className="text-xs font-bold text-[#ffb4ab] transition-colors hover:text-[#ffd5d0]"
+            className="text-xs font-medium text-[#b84335]"
           >
             Eliminar
           </button>

@@ -115,8 +115,8 @@ export default function AdminEmployeesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <p className="text-gray-400 text-xl">Carregant empleats...</p>
+      <div className="flex h-screen items-center justify-center bg-[#f5f4ef]">
+        <p className="text-xl font-medium text-[#7b7469]">Carregant empleats...</p>
       </div>
     );
   }
@@ -124,43 +124,43 @@ export default function AdminEmployeesPage() {
   const activeCount = employees.filter((e) => e.active).length;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f5f4ef] text-[#241f1c]">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <header className="flex items-center justify-between border-b border-[#ddd4c4] bg-[#faf9f6] px-6 py-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Empleats</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-3xl font-medium text-[#241f1c]">Empleats</h1>
+          <p className="text-sm font-medium text-[#7b7469]">
             {activeCount} actius &middot; {employees.length} total
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-end gap-2">
           <a
             href="/pos"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Tornar al POS
           </a>
           <a
             href="/admin/orders"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Comandes
           </a>
           <a
             href="/admin/products"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Productes
           </a>
           <a
             href="/admin/closings"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Tancaments
           </a>
           <button
             onClick={handleNew}
-            className="px-4 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 text-sm font-semibold"
+            className="rounded-xl bg-[#2e9e5b] px-4 py-2 text-sm font-semibold text-white active:bg-[#27874e]"
           >
             + Nou empleat
           </button>
@@ -171,10 +171,10 @@ export default function AdminEmployeesPage() {
         {/* Message */}
         {message && (
           <div
-            className={`mb-4 px-4 py-3 rounded-lg text-sm font-medium ${
+            className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium ${
               message.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-200"
-                : "bg-red-50 text-red-700 border border-red-200"
+                ? "border-[#b8dec2] bg-[#dff5e6] text-[#1e6b3a]"
+                : "border-[#f0bdb4] bg-[#fdeceb] text-[#c4423a]"
             }`}
           >
             {message.text}
@@ -185,29 +185,29 @@ export default function AdminEmployeesPage() {
         {showForm && (
           <form
             onSubmit={handleSubmit}
-            className="mb-6 bg-white rounded-xl border border-gray-200 p-5"
+            className="mb-6 rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-5"
           >
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
+            <h3 className="mb-4 text-xl font-medium text-[#241f1c]">
               {editingId ? "Editar empleat" : "Nou empleat"}
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-sm font-medium text-[#6f665c]">
                   Nom *
                 </label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  className="w-full rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
                   placeholder="Ex. Maria Garcia"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-sm font-medium text-[#6f665c]">
                   PIN (4 dígits) *
                 </label>
                 <input
@@ -219,14 +219,14 @@ export default function AdminEmployeesPage() {
                   onChange={(e) =>
                     setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  className="w-full rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm tracking-widest text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
                   placeholder="1234"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-sm font-medium text-[#6f665c]">
                   Rol *
                 </label>
                 <select
@@ -234,7 +234,7 @@ export default function AdminEmployeesPage() {
                   onChange={(e) =>
                     setForm({ ...form, role: e.target.value as "admin" | "employee" })
                   }
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-400"
+                  className="w-full rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
                 >
                   <option value="employee">Empleat</option>
                   <option value="admin">Administrador</option>
@@ -246,13 +246,13 @@ export default function AdminEmployeesPage() {
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-medium"
+                className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#6f665c] active:bg-[#f1eee7]"
               >
                 Cancel·lar
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 rounded-lg bg-pink-500 text-white hover:bg-pink-600 text-sm font-semibold"
+                className="rounded-xl bg-[#2e9e5b] px-5 py-2 text-sm font-semibold text-white active:bg-[#27874e]"
               >
                 {editingId ? "Desar canvis" : "Crear"}
               </button>
@@ -262,38 +262,38 @@ export default function AdminEmployeesPage() {
 
         {/* List */}
         {employees.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <p className="text-xl">Cap empleat</p>
-            <p className="text-sm mt-1">Crea el primer empleat per començar</p>
+          <div className="py-12 text-center text-[#7b7469]">
+            <p className="text-xl font-medium">Cap empleat</p>
+            <p className="mt-1 text-sm">Crea el primer empleat per començar</p>
           </div>
         ) : (
           <div className="space-y-2">
             {employees.map((emp) => (
               <div
                 key={emp.id}
-                className={`bg-white rounded-xl border border-gray-200 px-5 py-3 flex items-center justify-between ${
+                className={`flex items-center justify-between rounded-2xl border border-[#ddd4c4] bg-white px-5 py-3 ${
                   !emp.active ? "opacity-50" : ""
                 }`}
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-pink-100 flex items-center justify-center text-pink-600 font-bold">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#dff5e6] font-semibold text-[#1e6b3a]">
                     {emp.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-800">{emp.name}</p>
-                    <p className="text-xs text-gray-400">PIN: {emp.pin}</p>
+                    <p className="font-medium text-[#241f1c]">{emp.name}</p>
+                    <p className="text-xs text-[#8a8276]">PIN: {emp.pin}</p>
                   </div>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                       emp.role === "admin"
-                        ? "bg-purple-100 text-purple-700"
-                        : "bg-gray-100 text-gray-600"
+                        ? "bg-[#efe5ff] text-[#6e4ca5]"
+                        : "bg-[#f1eee7] text-[#6f665c]"
                     }`}
                   >
                     {emp.role === "admin" ? "Admin" : "Empleat"}
                   </span>
                   {!emp.active && (
-                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                    <span className="rounded-full bg-[#fdeceb] px-2 py-0.5 text-xs font-medium text-[#c4423a]">
                       Inactiu
                     </span>
                   )}
@@ -302,16 +302,16 @@ export default function AdminEmployeesPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleEdit(emp)}
-                    className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-sm font-medium"
+                    className="rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] px-3 py-1.5 text-sm font-medium text-[#275a8f] active:bg-[#d4e7f8]"
                   >
                     Editar
                   </button>
                   <button
                     onClick={() => handleToggleActive(emp)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    className={`rounded-xl px-3 py-1.5 text-sm font-medium ${
                       emp.active
-                        ? "bg-red-50 text-red-600 hover:bg-red-100"
-                        : "bg-green-50 text-green-600 hover:bg-green-100"
+                        ? "bg-[#fdeceb] text-[#c4423a] active:bg-[#fad6d3]"
+                        : "bg-[#dff5e6] text-[#1e6b3a] active:bg-[#cfecd8]"
                     }`}
                   >
                     {emp.active ? "Desactivar" : "Activar"}

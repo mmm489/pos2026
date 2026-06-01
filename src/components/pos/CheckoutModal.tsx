@@ -330,15 +330,15 @@ export default function CheckoutModal({
       : "Mantingues aquesta pantalla oberta fins que acabi.";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 backdrop-blur-sm">
-      <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-7 shadow-2xl ring-1 ring-slate-900/10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-3">
+      <div className="mx-4 w-full max-w-lg rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-7 text-[#241f1c]">
         {/* SELECT PAYMENT METHOD */}
         {step === "select" && (
           <>
-            <h2 className="mb-2 text-center text-2xl font-black text-slate-950">
+            <h2 className="mb-2 text-center text-2xl font-medium text-[#241f1c]">
               Cobrar
             </h2>
-            <p className="mb-6 text-center text-4xl font-black tabular-nums text-emerald-600">
+            <p className="mb-6 text-center text-5xl font-semibold tabular-nums text-[#2e9e5b]">
               {total.toFixed(2)} &euro;
             </p>
 
@@ -347,20 +347,20 @@ export default function CheckoutModal({
               {!showTableInput ? (
                 <button
                   onClick={() => setShowTableInput(true)}
-                  className="w-full rounded-lg border border-dashed border-slate-300 py-3 text-sm font-bold text-slate-500 transition-colors hover:border-slate-400 hover:bg-slate-50 hover:text-slate-700"
+                  className="w-full rounded-xl border border-dashed border-[#cfc5b5] bg-white py-3 text-sm font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7]"
                 >
                   + Afegir numero de taula
                 </button>
               ) : (
                 <div>
                   <div className="flex gap-2 items-center mb-2">
-                    <span className="whitespace-nowrap text-sm font-bold text-slate-600">Taula:</span>
-                    <div className="min-h-[44px] flex-1 rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5 text-center text-xl font-black text-slate-950">
-                      {tableNumber || <span className="text-slate-300">-</span>}
+                    <span className="whitespace-nowrap text-sm font-medium text-[#6f665c]">Taula:</span>
+                    <div className="min-h-[44px] flex-1 rounded-xl border border-[#d4cbbb] bg-white px-4 py-2.5 text-center text-xl font-semibold text-[#241f1c]">
+                      {tableNumber || <span className="text-[#b7aa98]">-</span>}
                     </div>
                     <button
                       onClick={() => { setShowTableInput(false); setTableNumber(""); }}
-                      className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-lg text-slate-500 hover:bg-slate-200"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d4cbbb] bg-white text-lg text-[#6f665c] active:bg-[#f1eee7]"
                     >
                       &#10005;
                     </button>
@@ -370,26 +370,26 @@ export default function CheckoutModal({
                       <button
                         key={n}
                         onClick={() => setTableNumber(tableNumber + n)}
-                        className="h-12 rounded-lg bg-slate-100 text-lg font-black text-slate-950 transition-colors hover:bg-slate-200 active:bg-slate-300"
+                        className="h-12 rounded-xl border border-[#ddd4c4] bg-white text-lg font-medium text-[#241f1c] transition-colors active:bg-[#f1eee7]"
                       >
                         {n}
                       </button>
                     ))}
                     <button
                       onClick={() => setTableNumber("")}
-                      className="h-12 rounded-lg bg-red-50 text-sm font-bold text-red-500 transition-colors hover:bg-red-100"
+                      className="h-12 rounded-xl bg-[#fdeceb] text-sm font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
                     >
                       Esborrar
                     </button>
                     <button
                       onClick={() => setTableNumber(tableNumber + "0")}
-                      className="h-12 rounded-lg bg-slate-100 text-lg font-black text-slate-950 transition-colors hover:bg-slate-200 active:bg-slate-300"
+                      className="h-12 rounded-xl border border-[#ddd4c4] bg-white text-lg font-medium text-[#241f1c] transition-colors active:bg-[#f1eee7]"
                     >
                       0
                     </button>
                     <button
                       onClick={() => setTableNumber(tableNumber.slice(0, -1))}
-                      className="h-12 rounded-lg bg-slate-100 text-lg text-slate-600 transition-colors hover:bg-slate-200"
+                      className="h-12 rounded-xl border border-[#ddd4c4] bg-white text-lg text-[#6f665c] transition-colors active:bg-[#f1eee7]"
                     >
                       &#9003;
                     </button>
@@ -397,7 +397,7 @@ export default function CheckoutModal({
                 </div>
               )}
               {tableNumber && (
-                <p className="mt-2 text-center text-sm font-bold text-rose-600">
+                <p className="mt-2 text-center text-sm font-medium text-[#c65a42]">
                   Taula {tableNumber}
                 </p>
               )}
@@ -406,11 +406,11 @@ export default function CheckoutModal({
             <div className="mb-6 grid grid-cols-3 gap-4">
               <button
                 onClick={() => processPayment("cash")}
-                className="flex flex-col items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 p-6 transition-all hover:border-emerald-400 hover:bg-emerald-100 active:bg-emerald-200"
+                className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-[#b8dec2] bg-[#dff5e6] p-6 transition-transform active:scale-[0.98]"
               >
                 <span className="text-4xl mb-2">&#128176;</span>
-                <span className="text-lg font-black text-emerald-700">
-                  EFECTIU
+                <span className="text-lg font-semibold text-[#1e6b3a]">
+                  Efectiu
                 </span>
               </button>
 
@@ -422,11 +422,11 @@ export default function CheckoutModal({
                     ? `Datàfon desconnectat${datafono.error ? `: ${datafono.error}` : ""}`
                     : datafono.pinpadInfo || ""
                 }
-                className="relative flex flex-col items-center justify-center rounded-lg border border-sky-200 bg-sky-50 p-6 transition-all hover:border-sky-400 hover:bg-sky-100 active:bg-sky-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-sky-200 disabled:hover:bg-sky-50"
+                className="relative flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-[#bfd5ee] bg-[#e4f0fb] p-6 transition-transform active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span className="text-4xl mb-2">&#128179;</span>
-                <span className="text-lg font-black text-sky-700">
-                  TARGETA
+                <span className="text-lg font-semibold text-[#275a8f]">
+                  Targeta
                 </span>
                 <span
                   className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ${
@@ -448,18 +448,18 @@ export default function CheckoutModal({
 
               <button
                 onClick={() => processManualPayment()}
-                className="flex flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50 p-6 transition-all hover:border-amber-400 hover:bg-amber-100 active:bg-amber-200"
+                className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-[#ead39b] bg-[#fbf0cc] p-6 transition-transform active:scale-[0.98]"
               >
                 <span className="text-4xl mb-2">&#9997;</span>
-                <span className="text-lg font-black text-amber-700">
-                  MANUAL
+                <span className="text-lg font-semibold text-[#87620d]">
+                  Manual
                 </span>
               </button>
             </div>
 
             <button
               onClick={onClose}
-              className="w-full rounded-lg py-3 font-bold text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              className="w-full rounded-xl py-3 font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7]"
             >
               Cancel·lar
             </button>
@@ -469,57 +469,57 @@ export default function CheckoutModal({
         {/* PROCESSING — CASH (real-time Cashlogy display) */}
         {step === "processing" && method === "cash" && (
           <div className="py-4">
-            <h2 className="mb-6 text-center text-xl font-black text-slate-950">
+            <h2 className="mb-6 text-center text-xl font-medium text-[#241f1c]">
               Processant pagament en efectiu
             </h2>
 
-            <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 text-center">
-              <p className="text-2xl font-black text-emerald-700">{cashStatusText}</p>
-              <p className="mt-1 text-sm font-medium text-emerald-800">{cashStatusHelp}</p>
+            <div className="mb-5 rounded-2xl border border-[#b8dec2] bg-[#dff5e6] px-5 py-4 text-center">
+              <p className="text-2xl font-semibold text-[#1e6b3a]">{cashStatusText}</p>
+              <p className="mt-1 text-sm font-medium text-[#2f7346]">{cashStatusHelp}</p>
             </div>
 
             {/* Spinner while depositing */}
             {cashStatus === "depositing" && (
               <div className="flex justify-center mb-4">
-                <div className="animate-spin w-10 h-10 border-4 border-gray-200 border-t-emerald-500 rounded-full" />
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-[#e4ddcf] border-t-[#2e9e5b]" />
               </div>
             )}
 
             <div className="space-y-4 mb-6">
               {/* A COBRAR */}
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-6 py-4">
-                <span className="text-lg font-bold text-slate-600">A COBRAR</span>
-                <span className="text-3xl font-black tabular-nums text-slate-950">{total.toFixed(2)} &euro;</span>
+              <div className="flex items-center justify-between rounded-2xl border border-[#ddd4c4] bg-white px-6 py-4">
+                <span className="text-lg font-medium text-[#6f665c]">A cobrar</span>
+                <span className="text-3xl font-semibold tabular-nums text-[#241f1c]">{total.toFixed(2)} &euro;</span>
               </div>
 
               {/* COBRAT */}
-              <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-6 py-4">
-                <span className="text-lg font-bold text-emerald-700">COBRAT</span>
-                <span className="text-3xl font-black tabular-nums text-emerald-600">{depositedEur.toFixed(2)} &euro;</span>
+              <div className="flex items-center justify-between rounded-2xl border border-[#b8dec2] bg-[#dff5e6] px-6 py-4">
+                <span className="text-lg font-medium text-[#1e6b3a]">Cobrat</span>
+                <span className="text-3xl font-semibold tabular-nums text-[#2e9e5b]">{depositedEur.toFixed(2)} &euro;</span>
               </div>
 
               {/* MANCA (only show if still pending) */}
               {remaining > 0 && cashStatus === "depositing" && (
-                <div className="flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-6 py-4">
-                  <span className="text-lg font-bold text-rose-700">MANCA</span>
-                  <span className="text-3xl font-black tabular-nums text-rose-600">{remaining.toFixed(2)} &euro;</span>
+                <div className="flex items-center justify-between rounded-2xl border border-[#f0bdb4] bg-[#fff0ed] px-6 py-4">
+                  <span className="text-lg font-medium text-[#b54838]">Manca</span>
+                  <span className="text-3xl font-semibold tabular-nums text-[#c4423a]">{remaining.toFixed(2)} &euro;</span>
                 </div>
               )}
 
               {/* CANVI (when dispensing or done) */}
               {(cashStatus === "dispensing" || cashStatus === "closing") && depositedEur > total && (
-                <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-6 py-4">
-                  <span className="text-lg font-bold text-amber-700">CANVI</span>
-                  <span className="text-3xl font-black tabular-nums text-amber-600">{(depositedEur - total).toFixed(2)} &euro;</span>
+                <div className="flex items-center justify-between rounded-2xl border border-[#ead39b] bg-[#fbf0cc] px-6 py-4">
+                  <span className="text-lg font-medium text-[#87620d]">Canvi</span>
+                  <span className="text-3xl font-semibold tabular-nums text-[#a87912]">{(depositedEur - total).toFixed(2)} &euro;</span>
                 </div>
               )}
             </div>
 
             {tableNumber && (
-              <p className="mb-4 text-center font-bold text-rose-500">Taula {tableNumber}</p>
+              <p className="mb-4 text-center font-medium text-[#c65a42]">Taula {tableNumber}</p>
             )}
 
-            <p className="mb-4 text-center text-sm font-medium text-slate-400">
+            <p className="mb-4 text-center text-sm font-medium text-[#7b7469]">
               {cashStatus === "depositing" && "Introdueixi els diners a la Cashlogy..."}
               {cashStatus === "closing" && "Tancant dipòsit..."}
               {cashStatus === "dispensing" && "Dispensant canvi..."}
@@ -527,7 +527,7 @@ export default function CheckoutModal({
 
             <button
               onClick={handleCancel}
-              className="w-full rounded-lg bg-red-100 py-3 font-bold text-red-700 transition-colors hover:bg-red-200"
+              className="w-full rounded-xl bg-[#fdeceb] py-3 font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
             >
               Cancel·lar
             </button>
@@ -537,13 +537,13 @@ export default function CheckoutModal({
         {/* PROCESSING — MANUAL */}
         {step === "processing" && method === "manual" && (
           <div className="text-center py-8">
-            <div className="animate-spin w-16 h-16 border-4 border-gray-200 border-t-amber-500 rounded-full mx-auto mb-6" />
-            <p className="text-xl font-black text-slate-950">
+            <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-[#e4ddcf] border-t-[#d09a2d]" />
+            <p className="text-xl font-medium text-[#241f1c]">
               Processant cobrament manual...
             </p>
-            <p className="mt-2 font-semibold text-slate-500">{total.toFixed(2)} &euro;</p>
+            <p className="mt-2 font-medium text-[#6f665c]">{total.toFixed(2)} &euro;</p>
             {tableNumber && (
-              <p className="mt-1 font-bold text-rose-500">Taula {tableNumber}</p>
+              <p className="mt-1 font-medium text-[#c65a42]">Taula {tableNumber}</p>
             )}
           </div>
         )}
@@ -551,13 +551,13 @@ export default function CheckoutModal({
         {/* PROCESSING — CARD */}
         {step === "processing" && method === "card" && (
           <div className="text-center py-8">
-            <div className="animate-spin w-16 h-16 border-4 border-gray-200 border-t-blue-500 rounded-full mx-auto mb-6" />
-            <p className="text-xl font-black text-slate-950">
+            <div className="mx-auto mb-6 h-16 w-16 animate-spin rounded-full border-4 border-[#e4ddcf] border-t-[#4b8fd6]" />
+            <p className="text-xl font-medium text-[#241f1c]">
               {aborting ? "Cancel·lant operació..." : "Passi la targeta al datàfon..."}
             </p>
-            <p className="mt-2 font-semibold text-slate-500">{total.toFixed(2)} &euro;</p>
+            <p className="mt-2 font-medium text-[#6f665c]">{total.toFixed(2)} &euro;</p>
             {tableNumber && (
-              <p className="mt-1 font-bold text-rose-500">Taula {tableNumber}</p>
+              <p className="mt-1 font-medium text-[#c65a42]">Taula {tableNumber}</p>
             )}
             <button
               onClick={async () => {
@@ -572,7 +572,7 @@ export default function CheckoutModal({
                 // state and the component will close/re-open from there.
               }}
               disabled={aborting}
-              className="mt-6 rounded-lg bg-red-100 px-6 py-3 font-bold text-red-700 transition-colors hover:bg-red-200 disabled:opacity-50"
+              className="mt-6 rounded-xl bg-[#fdeceb] px-6 py-3 font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3] disabled:opacity-50"
             >
               {aborting ? "Cancel·lant..." : "Cancel·lar pagament"}
             </button>
@@ -582,35 +582,35 @@ export default function CheckoutModal({
         {/* SUCCESS */}
         {step === "success" && (
           <div className="text-center py-8">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
-              <span className="text-4xl text-emerald-600">&#10004;</span>
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#dff5e6]">
+              <span className="text-4xl text-[#2e9e5b]">&#10004;</span>
             </div>
-            <h2 className="mb-2 text-2xl font-black text-emerald-700">
+            <h2 className="mb-2 text-2xl font-medium text-[#1e6b3a]">
               Pagament completat
             </h2>
-            <p className="mb-2 text-4xl font-black text-slate-950">
+            <p className="mb-2 text-5xl font-semibold text-[#241f1c]">
               {orderNumber}
             </p>
             {tableNumber && (
-              <p className="text-lg font-bold text-rose-600">
+              <p className="text-lg font-medium text-[#c65a42]">
                 Taula {tableNumber}
               </p>
             )}
             {change !== null && change > 0 && (
-              <p className="text-lg font-bold text-amber-600">
+              <p className="text-lg font-medium text-[#a87912]">
                 Canvi: {change.toFixed(2)} &euro;
               </p>
             )}
 
             {pendingTicket && (
-              <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <p className="mb-3 text-base font-bold text-amber-900">
+              <div className="mt-6 rounded-2xl border border-[#ead39b] bg-[#fbf0cc] p-4">
+                <p className="mb-3 text-base font-medium text-[#5d4210]">
                   Ticket del pedido
                 </p>
                 <button
                   onClick={handlePrintOrderTicket}
                   disabled={printingTicket}
-                  className="w-full rounded-lg bg-amber-500 px-6 py-3 font-bold text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
+                  className="w-full rounded-xl bg-[#d09a2d] px-6 py-3 font-semibold text-white transition-colors active:bg-[#b98421] disabled:opacity-50"
                 >
                   {printingTicket
                     ? "Imprimint..."
@@ -619,12 +619,12 @@ export default function CheckoutModal({
                       : "Imprimir ticket"}
                 </button>
                 {ticketPrinted && (
-                  <p className="mt-2 text-sm font-bold text-emerald-700">
+                  <p className="mt-2 text-sm font-medium text-[#1e6b3a]">
                     Ticket imprès
                   </p>
                 )}
                 {ticketError && (
-                  <p className="mt-2 text-sm font-bold text-red-700">
+                  <p className="mt-2 text-sm font-medium text-[#c4423a]">
                     {ticketError}
                   </p>
                 )}
@@ -632,8 +632,8 @@ export default function CheckoutModal({
             )}
 
             {pendingCustomerReceipt ? (
-              <div className="mt-6 rounded-lg border border-sky-200 bg-sky-50 p-4">
-                <p className="mb-3 text-base font-bold text-sky-900">
+              <div className="mt-6 rounded-2xl border border-[#bfd5ee] bg-[#e4f0fb] p-4">
+                <p className="mb-3 text-base font-medium text-[#275a8f]">
                   Vol còpia del rebut bancari?
                 </p>
                 <div className="flex gap-3">
@@ -643,7 +643,7 @@ export default function CheckoutModal({
                       onComplete();
                     }}
                     disabled={printingCustomerCopy}
-                    className="flex-1 rounded-lg bg-slate-200 px-6 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-300 disabled:opacity-50"
+                    className="flex-1 rounded-xl border border-[#d4cbbb] bg-white px-6 py-3 font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7] disabled:opacity-50"
                   >
                     No, gràcies
                   </button>
@@ -660,7 +660,7 @@ export default function CheckoutModal({
                       onComplete();
                     }}
                     disabled={printingCustomerCopy}
-                    className="flex-1 rounded-lg bg-sky-500 px-6 py-3 font-bold text-white transition-colors hover:bg-sky-600 disabled:opacity-50"
+                    className="flex-1 rounded-xl bg-[#4b8fd6] px-6 py-3 font-semibold text-white transition-colors active:bg-[#3475bb] disabled:opacity-50"
                   >
                     {printingCustomerCopy ? "Imprimint..." : "Sí, imprimir"}
                   </button>
@@ -669,7 +669,7 @@ export default function CheckoutModal({
             ) : (
               <button
                 onClick={onComplete}
-                className="mt-6 rounded-lg bg-emerald-500 px-8 py-4 text-lg font-black text-white transition-colors hover:bg-emerald-600"
+                className="mt-6 rounded-xl bg-[#2e9e5b] px-8 py-4 text-lg font-semibold text-white transition-colors active:bg-[#27874e]"
               >
                 Nova comanda
               </button>
@@ -680,23 +680,23 @@ export default function CheckoutModal({
         {/* ERROR */}
         {step === "error" && (
           <div className="py-8 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-red-100">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#fdeceb]">
               <span className="text-4xl">&#10060;</span>
             </div>
-            <h2 className="mb-2 text-2xl font-black text-red-700">
+            <h2 className="mb-2 text-2xl font-medium text-[#c4423a]">
               Error en el cobrament
             </h2>
-            <p className="mb-6 font-medium text-slate-600">{errorMsg}</p>
+            <p className="mb-6 font-medium text-[#6f665c]">{errorMsg}</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setStep("select")}
-                className="flex-1 rounded-lg bg-slate-100 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-200"
+                className="flex-1 rounded-xl border border-[#d4cbbb] bg-white py-3 font-medium text-[#241f1c] transition-colors active:bg-[#f1eee7]"
               >
                 Reintentar
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 rounded-lg bg-red-100 py-3 font-bold text-red-700 transition-colors hover:bg-red-200"
+                className="flex-1 rounded-xl bg-[#fdeceb] py-3 font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
               >
                 Cancel·lar
               </button>

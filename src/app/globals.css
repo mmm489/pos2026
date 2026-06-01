@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --surface: #27272a;
-  --surface-soft: #18181b;
+  --background: #f5f4ef;
+  --foreground: #241f1c;
+  --surface: #faf9f6;
+  --surface-soft: #f1eee7;
   --hairline: rgba(15, 23, 42, 0.1);
 }
 
@@ -19,8 +19,9 @@ body {
   min-height: 100%;
   color: var(--foreground);
   background: var(--background);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-geist-sans, Inter), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

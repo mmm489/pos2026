@@ -1,6 +1,7 @@
 "use client";
 
 import { Category, Product } from "@/types/pos";
+import { resolveColor, sentenceCase, textColorOn, titleCase } from "@/lib/palette";
 import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
 
@@ -23,7 +24,7 @@ interface ModifiersModalProps {
 }
 
 function formatPrice(value: number) {
-  return `${value.toFixed(2)} EUR`;
+  return `${value.toFixed(2).replace(".", ",")} €`;
 }
 
 function isFlavorCategoryName(name: string) {
@@ -39,39 +40,20 @@ function isIceCreamBallProductName(name: string) {
   return lower.includes("bola") && (lower.includes("gelat") || lower.includes("helado"));
 }
 
-function hexToRgb(hex: string | null | undefined) {
-  const clean = String(hex || "").replace("#", "").trim();
-  if (!/^[0-9a-fA-F]{6}$/.test(clean)) {
-    return { r: 65, g: 223, b: 165 };
-  }
-  return {
-    r: parseInt(clean.slice(0, 2), 16),
-    g: parseInt(clean.slice(2, 4), 16),
-    b: parseInt(clean.slice(4, 6), 16),
-  };
-}
-
-function rgba(hex: string | null | undefined, alpha: number) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
 function toppingCardStyle(color: string, selected: boolean): CSSProperties {
   return {
-    background: selected
-      ? `linear-gradient(135deg, ${rgba(color, 0.34)}, ${rgba(color, 0.18)} 42%, rgba(40, 42, 49, 0.96))`
-      : `linear-gradient(135deg, ${rgba(color, 0.2)}, ${rgba(color, 0.08)} 42%, rgba(40, 42, 49, 0.94))`,
-    borderColor: selected ? rgba(color, 0.92) : rgba(color, 0.44),
-    boxShadow: selected
-      ? `0 0 0 1px ${rgba(color, 0.22)}, 0 8px 24px rgba(0, 0, 0, 0.22)`
-      : `0 6px 18px rgba(0, 0, 0, 0.16), inset 0 1px 0 ${rgba(color, 0.12)}`,
+    backgroundColor: color,
+    borderColor: selected ? "#20242a" : "rgba(0, 0, 0, 0.14)",
+    borderWidth: selected ? 3 : 1,
+    color: textColorOn(color),
   };
 }
 
 function toppingActionStyle(color: string, selected: boolean): CSSProperties {
   return {
-    backgroundColor: selected ? rgba(color, 0.28) : rgba(color, 0.16),
-    borderColor: rgba(color, selected ? 0.46 : 0.24),
+    backgroundColor: selected ? "#ffffff" : "rgba(255, 255, 255, 0.64)",
+    borderColor: color,
+    color: "#241f1c",
   };
 }
 
@@ -351,26 +333,26 @@ export default function ModifiersModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
-      <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-[#434654] bg-[#11131a] shadow-2xl shadow-black/40">
-        <div className="flex items-start justify-between border-b border-[#434654] bg-[#171922] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-3">
+      <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[#ddd4c4] bg-[#faf9f6]">
+        <div className="flex items-start justify-between border-b border-[#ddd4c4] bg-[#faf9f6] px-5 py-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#8d90a0]">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7b746a]">
               Personalitzar
             </p>
-            <h2 className="mt-1 truncate text-[26px] font-black uppercase leading-8 text-[#e1e2ec]">
-              {baseProduct.name}
+            <h2 className="mt-1 truncate text-[26px] font-medium leading-8 text-[#241f1c]">
+              {sentenceCase(baseProduct.name)}
             </h2>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold text-[#c3c6d6]">
-              {modifierGroupName && <span>{modifierGroupName}</span>}
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-normal text-[#5f6878]">
+              {modifierGroupName && <span>{sentenceCase(modifierGroupName)}</span>}
               <span>Base {formatPrice(Number(baseProduct.price))}</span>
               {hasFlavorSection ? (
-                <span className="font-black text-[#41dfa5]">
+                <span className="font-black text-[#169b68]">
                   Max {includedLimit} sabor{includedLimit === 1 ? "" : "s"} gratis
                   {hasPaidSection ? `, extres +${formatPrice(extraUnitPrice)}` : ""}
                 </span>
               ) : (
-                <span className="font-black text-[#41dfa5]">
+                <span className="font-black text-[#169b68]">
                   {includedLimit} gratis, extres +{formatPrice(extraUnitPrice)}
                 </span>
               )}
@@ -378,16 +360,16 @@ export default function ModifiersModal({
           </div>
           <button
             onClick={onCancel}
-            className="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#282a31] text-[#c3c6d6] transition-colors hover:bg-[#32343c]"
+            className="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#d4cbbb] bg-white text-[#241f1c] active:bg-[#f1eee7]"
             aria-label="Tancar"
           >
             <span className="text-lg">&#10005;</span>
           </button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
           {modifierProducts.length === 0 ? (
-            <p className="py-8 text-center text-[#8d90a0]">
+            <p className="py-8 text-center font-bold text-[#6f7787]">
               No hi ha extres configurats per aquest producte.
             </p>
           ) : (
@@ -397,18 +379,22 @@ export default function ModifiersModal({
 
               return (
                 <section key={category.id}>
-                  <h3 className="mb-2 flex items-center gap-2 text-[13px] font-black uppercase tracking-[0.05em] text-[#e1e2ec]">
+                  <h3 className="mb-2 flex items-center gap-2 text-[15px] font-medium text-[#241f1c]">
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: category.color }}
                     />
-                    {category.name}
+                    {sentenceCase(category.name)}
                   </h3>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                     {items.map((product) => {
                       const qty = selections.get(product.id) || 0;
                       const isSelected = qty > 0;
                       const isFlavor = flavorCategoryIds.has(product.category_id);
+                      const cardColor = resolveColor({
+                        flavor: product.name,
+                        category: category.name,
+                      });
                       const isIceCreamBall = isIceCreamBallProductName(product.name);
                       const isSingleChoiceExtra = singleChoiceExtraCategoryIds.has(
                         product.category_id
@@ -421,7 +407,7 @@ export default function ModifiersModal({
                           : extraUnitPrice * 2;
                       const iceCreamBallStatus = isSelected
                         ? selectedIceCreamBallFlavor
-                          ? `${selectedIceCreamBallFlavor} +${formatPrice(nextIceCreamBallPrice)}`
+                          ? `${titleCase(selectedIceCreamBallFlavor)} +${formatPrice(nextIceCreamBallPrice)}`
                           : `Escull sabor +${formatPrice(nextIceCreamBallPrice)}`
                         : `+${formatPrice(selectedQty < includedLimit ? extraUnitPrice : extraUnitPrice * 2)} sabor`;
                       const regularSelectedStatus = [
@@ -432,15 +418,14 @@ export default function ModifiersModal({
                         .join(" + ");
                       const maxFlavorReached =
                         hasFlavorSection && isFlavor && !isSelected && selectedFlavorQty >= includedLimit;
-                      const status =
-                        isIceCreamBall
-                          ? iceCreamBallStatus
-                          : hasFlavorSection && isFlavor
+                      const status = isIceCreamBall
+                        ? iceCreamBallStatus
+                        : hasFlavorSection && isFlavor
                           ? isSelected
                             ? "Sabor escollit"
                             : maxFlavorReached
                               ? "Max sabors"
-                              : "Sabor gratis"
+                              : ""
                           : hasFlavorSection
                             ? isSingleChoiceExtra && isSelected
                               ? "Afegit"
@@ -450,20 +435,17 @@ export default function ModifiersModal({
                               : selectedQty < includedLimit
                                 ? "Gratis ara"
                                 : `+${formatPrice(extraUnitPrice)}`;
-                      const statusColor =
-                        isIceCreamBall || (hasFlavorSection && !isFlavor)
-                          ? "text-[#ffb86b]"
-                          : isSelected || (isFlavor ? !maxFlavorReached : selectedQty < includedLimit)
-                            ? "text-[#c7f9df]"
-                            : "text-[#ffb86b]";
+                      const statusColor = maxFlavorReached
+                        ? "text-current opacity-55"
+                        : "text-current opacity-80";
 
                       return (
                         <div
                           key={product.id}
-                          className={`flex min-h-[68px] items-center justify-between rounded border px-3 py-2 transition-transform duration-150 hover:-translate-y-0.5 ${
+                          className={`flex min-h-[76px] items-center justify-between rounded-xl border px-3 py-2 active:brightness-95 ${
                             maxFlavorReached ? "opacity-50" : ""
                           }`}
-                          style={toppingCardStyle(category.color, isSelected)}
+                          style={toppingCardStyle(cardColor, isSelected)}
                         >
                           <button
                             onClick={() => {
@@ -477,58 +459,32 @@ export default function ModifiersModal({
                             }}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <p className="line-clamp-2 pr-2 text-[13px] font-black uppercase leading-[15px] text-[#e1e2ec]">
-                              {product.name}
+                            <p className="line-clamp-2 pr-2 text-[17px] font-medium leading-[19px]">
+                              {titleCase(product.name)}
                             </p>
-                            <p
-                              className={`mt-1 text-[11px] font-bold leading-3 ${statusColor}`}
-                            >
-                              {status}
-                            </p>
+                            {status && (
+                              <p className={`mt-1 text-[11px] font-medium leading-3 ${statusColor}`}>
+                                {status}
+                              </p>
+                            )}
                           </button>
 
                           {isSelected ? (
                             <div className="ml-2 flex shrink-0 items-center gap-1">
                               <button
                                 onClick={() => removeSelection(product.id, qty - 1)}
-                                className="flex h-7 w-7 items-center justify-center rounded border text-base font-black text-[#e1e2ec] transition-colors hover:bg-white/10"
-                                style={toppingActionStyle(category.color, true)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border text-base font-medium active:bg-[#f1eee7]"
+                                style={toppingActionStyle(cardColor, true)}
                                 aria-label="Restar"
                               >
                                 &#8722;
                               </button>
-                              <span className="w-5 text-center text-sm font-black text-[#41dfa5]">
+                              <span className="w-5 text-center text-sm font-medium text-current">
                                 {qty}
                               </span>
-                              {!isSingleChoiceExtra && (
-                                <button
-                                  onClick={() => setQty(product.id, qty + 1)}
-                                  className="flex h-7 w-7 items-center justify-center rounded border text-base font-black text-[#e1e2ec] transition-colors hover:bg-white/10"
-                                  style={toppingActionStyle(category.color, true)}
-                                  aria-label="Sumar"
-                                >
-                                  +
-                                </button>
-                              )}
                             </div>
                           ) : (
-                            <button
-                              onClick={() => {
-                                if (maxFlavorReached) return;
-                                if (isIceCreamBall) {
-                                  setQty(product.id, 1);
-                                  setFlavorPickerFor(product);
-                                  return;
-                                }
-                                setQty(product.id, 1);
-                              }}
-                              disabled={maxFlavorReached}
-                              className="ml-2 flex h-7 w-7 shrink-0 items-center justify-center rounded border text-base font-black text-[#e1e2ec] transition-colors hover:bg-white/10"
-                              style={toppingActionStyle(category.color, false)}
-                              aria-label="Afegir"
-                            >
-                              +
-                            </button>
+                            <span className="ml-2 h-8 w-8 shrink-0" aria-hidden />
                           )}
                         </div>
                       );
@@ -540,47 +496,48 @@ export default function ModifiersModal({
           )}
 
           <div>
-            <label className="mb-2 block text-sm font-bold text-[#c3c6d6]">
+            <label className="mb-2 block text-sm font-medium text-[#241f1c]">
               Nota especial
             </label>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Sense lactosa, sense sucre, etc."
-              className="h-16 w-full resize-none rounded border border-[#434654] bg-[#282a31] px-3 py-2 text-sm font-semibold text-[#e1e2ec] outline-none placeholder:text-[#8d90a0] focus:border-[#0052cc] focus:ring-2 focus:ring-[#0052cc]/30"
+              className="h-16 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm font-normal text-[#241f1c] outline-none placeholder:text-[#8f887c] focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/20"
             />
           </div>
         </div>
 
         {flavorPickerFor && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-            <div className="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-[#434654] bg-[#11131a] shadow-2xl shadow-black/50">
-              <div className="flex items-center justify-between border-b border-[#434654] bg-[#171922] px-5 py-4">
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[#10131b]/68 p-4">
+            <div className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#ddd4c4] bg-[#faf9f6]">
+              <div className="flex items-center justify-between border-b border-[#ddd4c4] bg-[#faf9f6] px-5 py-4">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#8d90a0]">
+                  <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7b746a]">
                     Sabor bola gelat
                   </p>
-                  <h3 className="text-[24px] font-black uppercase leading-7 text-[#e1e2ec]">
-                    {flavorPickerFor.name}
+                  <h3 className="text-[24px] font-medium leading-7 text-[#241f1c]">
+                    {titleCase(flavorPickerFor.name)}
                   </h3>
                 </div>
                 <button
                   onClick={() => setFlavorPickerFor(null)}
-                  className="flex h-10 w-10 items-center justify-center rounded bg-[#282a31] text-[#c3c6d6] transition-colors hover:bg-[#32343c]"
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#d4cbbb] bg-white text-[#241f1c] active:bg-[#f1eee7]"
                   aria-label="Tancar sabors"
                 >
                   <span className="text-lg">&#10005;</span>
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2 overflow-y-auto p-5 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid grid-cols-3 gap-3 overflow-y-auto p-5 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                 {nestedFlavorProducts.map((flavor) => (
                   <button
                     key={flavor.id}
                     onClick={() => chooseIceCreamBallFlavor(flavor.name)}
-                    className="min-h-[64px] rounded border border-[#f59e0b]/50 bg-[#f59e0b]/15 px-3 py-2 text-left transition-colors hover:bg-[#f59e0b]/24"
+                    className="min-h-[74px] rounded-xl border px-3 py-2 text-left active:brightness-95"
+                    style={toppingCardStyle(resolveColor({ flavor: flavor.name }), false)}
                   >
-                    <span className="line-clamp-2 text-[14px] font-black uppercase leading-4 text-[#e1e2ec]">
-                      {flavor.name}
+                    <span className="line-clamp-2 text-[17px] font-medium leading-[19px]">
+                      {titleCase(flavor.name)}
                     </span>
                   </button>
                 ))}
@@ -589,25 +546,25 @@ export default function ModifiersModal({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 border-t border-[#434654] bg-[#171922] px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-t border-[#ddd4c4] bg-[#faf9f6] px-5 py-4">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#8d90a0]">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7b746a]">
               Total amb extres
             </p>
-            <p className="text-[30px] font-black leading-8 text-[#e1e2ec]">
+            <p className="text-[30px] font-medium leading-8 tabular-nums text-[#241f1c]">
               {formatPrice(Number(baseProduct.price) + totalExtra)}
             </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={onCancel}
-              className="rounded bg-[#282a31] px-5 py-3 font-bold text-[#c3c6d6] transition-colors hover:bg-[#32343c]"
+              className="rounded-xl border border-[#d4cbbb] bg-white px-5 py-3 font-medium text-[#241f1c] active:bg-[#f1eee7]"
             >
               Cancelar
             </button>
             <button
               onClick={handleConfirm}
-              className="rounded bg-[#41dfa5] px-7 py-3 font-black uppercase tracking-[0.04em] text-[#003825] transition-colors hover:bg-[#50f0b2]"
+              className="rounded-xl bg-[#2e9e5b] px-7 py-3 font-medium text-white active:bg-[#27874e]"
             >
               Afegir al carro
             </button>

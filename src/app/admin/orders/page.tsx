@@ -180,72 +180,72 @@ export default function AdminOrdersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <p className="text-gray-400 text-xl">Carregant comandes...</p>
+      <div className="flex h-screen items-center justify-center bg-[#f5f4ef]">
+        <p className="text-xl font-medium text-[#7b7469]">Carregant comandes...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f5f4ef] text-[#241f1c]">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <header className="flex items-center justify-between border-b border-[#ddd4c4] bg-[#faf9f6] px-6 py-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Comandes</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-3xl font-medium text-[#241f1c]">Comandes</h1>
+          <p className="text-sm font-medium text-[#7b7469]">
             {activeOrders.length} comandes &middot; {totalAll.toFixed(2)}€ total
             {cancelledCount > 0 && (
-              <span className="text-red-500 ml-2">({cancelledCount} anul·lades)</span>
+              <span className="ml-2 text-[#c4423a]">({cancelledCount} anul·lades)</span>
             )}
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-end gap-2">
           <a
             href="/pos"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Tornar al POS
           </a>
           <a
             href="/admin/products"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Productes
           </a>
           <a
             href="/admin/employees"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Empleats
           </a>
           <a
             href="/admin/closings"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Tancaments
           </a>
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto p-6">
+      <div className="mx-auto max-w-6xl p-6">
         {/* Filters */}
-        <div className="flex flex-wrap gap-3 mb-6 items-center">
+        <div className="mb-6 flex flex-wrap items-center gap-3">
           <input
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
           />
 
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex gap-1 rounded-xl border border-[#ddd4c4] bg-[#f1eee7] p-1">
             {(["all", "cash", "card"] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
                   filter === f
-                    ? "bg-white text-gray-800 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
+                    ? "bg-white text-[#241f1c]"
+                    : "text-[#6f665c] active:text-[#241f1c]"
                 }`}
               >
                 {f === "all" ? "Tot" : f === "cash" ? "Efectiu" : "Targeta"}
@@ -255,29 +255,29 @@ export default function AdminOrdersPage() {
 
           <button
             onClick={loadOrders}
-            className="px-4 py-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 text-sm font-medium"
+            className="rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] px-4 py-2 text-sm font-medium text-[#275a8f] active:bg-[#d4e7f8]"
           >
             Actualitzar
           </button>
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-sm text-gray-500">Total</p>
-            <p className="text-2xl font-bold text-gray-800">{totalAll.toFixed(2)}€</p>
+        <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="rounded-2xl border border-[#ddd4c4] bg-white p-4">
+            <p className="text-sm font-medium text-[#6f665c]">Total</p>
+            <p className="text-3xl font-semibold text-[#241f1c]">{totalAll.toFixed(2)}€</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-sm text-green-600">Efectiu</p>
-            <p className="text-2xl font-bold text-green-700">{totalCash.toFixed(2)}€</p>
+          <div className="rounded-2xl border border-[#b8dec2] bg-[#dff5e6] p-4">
+            <p className="text-sm font-medium text-[#1e6b3a]">Efectiu</p>
+            <p className="text-3xl font-semibold text-[#1e6b3a]">{totalCash.toFixed(2)}€</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-sm text-blue-600">Targeta</p>
-            <p className="text-2xl font-bold text-blue-700">{totalCard.toFixed(2)}€</p>
+          <div className="rounded-2xl border border-[#bfd5ee] bg-[#e4f0fb] p-4">
+            <p className="text-sm font-medium text-[#275a8f]">Targeta</p>
+            <p className="text-3xl font-semibold text-[#275a8f]">{totalCard.toFixed(2)}€</p>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-sm text-gray-500">Ticket mig</p>
-            <p className="text-2xl font-bold text-gray-800">
+          <div className="rounded-2xl border border-[#ddd4c4] bg-white p-4">
+            <p className="text-sm font-medium text-[#6f665c]">Ticket mig</p>
+            <p className="text-3xl font-semibold text-[#241f1c]">
               {activeOrders.length > 0 ? (totalAll / activeOrders.length).toFixed(2) : "0.00"}€
             </p>
           </div>
@@ -285,25 +285,25 @@ export default function AdminOrdersPage() {
 
         {/* Hourly breakdown */}
         {byHour.size > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-            <h3 className="text-sm font-semibold text-gray-600 mb-3">Vendes per hora</h3>
-            <div className="flex gap-1 items-end h-24">
+          <div className="mb-6 rounded-2xl border border-[#ddd4c4] bg-white p-4">
+            <h3 className="mb-3 text-sm font-medium text-[#6f665c]">Vendes per hora</h3>
+            <div className="flex h-24 items-end gap-1">
               {Array.from({ length: 24 }, (_, h) => {
                 const data = byHour.get(h);
                 const maxTotal = Math.max(...Array.from(byHour.values()).map((v) => v.total), 1);
                 const height = data ? (data.total / maxTotal) * 100 : 0;
                 return (
-                  <div key={h} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                  <div key={h} className="flex flex-1 flex-col items-center gap-1">
+                    <div className="flex w-full items-end justify-center" style={{ height: "80px" }}>
                       {height > 0 && (
                         <div
-                          className="w-full max-w-[24px] bg-pink-400 rounded-t transition-all"
+                          className="w-full max-w-[24px] rounded-t bg-[#2e9e5b] transition-all"
                           style={{ height: `${height}%` }}
                           title={`${h}:00 — ${data?.count} comandes, ${data?.total.toFixed(2)}€`}
                         />
                       )}
                     </div>
-                    <span className="text-[10px] text-gray-400">{h}</span>
+                    <span className="text-[10px] text-[#8a8276]">{h}</span>
                   </div>
                 );
               })}
@@ -313,16 +313,16 @@ export default function AdminOrdersPage() {
 
         {/* Orders list */}
         {filtered.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <p className="text-xl">Cap comanda</p>
-            <p className="text-sm mt-1">No hi ha comandes per aquest dia/filtre</p>
+          <div className="py-12 text-center text-[#7b7469]">
+            <p className="text-xl font-medium">Cap comanda</p>
+            <p className="mt-1 text-sm">No hi ha comandes per aquest dia/filtre</p>
           </div>
         ) : (
           <div className="space-y-2">
             {filtered.map((order) => (
               <div
                 key={order.id}
-                className="bg-white rounded-xl border border-gray-200 overflow-hidden"
+                className="overflow-hidden rounded-2xl border border-[#ddd4c4] bg-white"
               >
                 {/* Order header — tap to expand */}
                 <div
@@ -337,34 +337,34 @@ export default function AdminOrdersPage() {
                       setExpandedId(expandedId === order.id ? null : order.id);
                     }
                   }}
-                  className="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors text-left cursor-pointer"
+                  className="flex w-full cursor-pointer items-center justify-between px-5 py-3 text-left transition-colors active:bg-[#f1eee7]"
                 >
                   <div className="flex items-center gap-4">
-                    <span className="text-lg font-bold text-gray-800">
+                    <span className="text-lg font-semibold text-[#241f1c]">
                       {order.order_number}
                     </span>
                     {order.table_number && (
-                      <span className="px-2 py-0.5 bg-pink-100 text-pink-600 rounded-lg text-sm font-semibold">
+                      <span className="rounded-full bg-[#fbf0cc] px-2 py-0.5 text-sm font-medium text-[#87620d]">
                         Taula {order.table_number}
                       </span>
                     )}
-                    <span className="text-sm text-gray-400">
+                    <span className="text-sm text-[#8a8276]">
                       {new Date(order.created_at).toLocaleTimeString("ca-ES", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
                     </span>
                     <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         order.status === "cancelled"
-                          ? "bg-red-100 text-red-700"
-                          : order.status === "completed"
-                          ? "bg-green-100 text-green-700"
-                          : order.status === "ready"
-                          ? "bg-blue-100 text-blue-700"
-                          : order.status === "preparing"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-100 text-gray-600"
+                          ? "bg-[#fdeceb] text-[#c4423a]"
+                        : order.status === "completed"
+                        ? "bg-[#dff5e6] text-[#1e6b3a]"
+                        : order.status === "ready"
+                        ? "bg-[#e4f0fb] text-[#275a8f]"
+                        : order.status === "preparing"
+                        ? "bg-[#fbf0cc] text-[#87620d]"
+                        : "bg-[#f1eee7] text-[#6f665c]"
                       }`}
                     >
                       {order.status === "cancelled"
@@ -383,15 +383,15 @@ export default function AdminOrdersPage() {
                     <span
                       className={`text-sm font-medium ${
                         order.payment_method === "cash"
-                          ? "text-green-600"
+                          ? "text-[#1e6b3a]"
                           : order.payment_method === "card"
-                          ? "text-blue-600"
-                          : "text-amber-600"
+                          ? "text-[#275a8f]"
+                          : "text-[#87620d]"
                       }`}
                     >
                       {order.payment_method === "cash" ? "Efectiu" : order.payment_method === "card" ? "Targeta" : "Manual"}
                     </span>
-                    <span className={`text-lg font-bold ${order.status === "cancelled" ? "text-gray-400 line-through" : "text-gray-800"}`}>
+                    <span className={`text-lg font-semibold ${order.status === "cancelled" ? "text-[#8a8276] line-through" : "text-[#241f1c]"}`}>
                       {Number(order.total).toFixed(2)}€
                     </span>
                     {order.status !== "cancelled" && (
@@ -400,12 +400,12 @@ export default function AdminOrdersPage() {
                           e.stopPropagation();
                           setCancellingId(order.id);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100 transition-colors"
+                        className="rounded-xl bg-[#fdeceb] px-2.5 py-1 text-xs font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
                       >
                         Anul·lar
                       </button>
                     )}
-                    <span className="text-gray-300">
+                    <span className="text-[#8a8276]">
                       {expandedId === order.id ? "▲" : "▼"}
                     </span>
                   </div>
@@ -413,19 +413,19 @@ export default function AdminOrdersPage() {
 
                 {/* Expanded detail */}
                 {expandedId === order.id && (
-                  <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
+                  <div className="border-t border-[#eee4d6] bg-[#faf9f6] px-5 py-3">
                     {order.status === "cancelled" && order.cancellation_reason && (
-                      <div className="mb-3 px-3 py-2 bg-red-50 rounded-lg border border-red-100">
-                        <p className="text-sm text-red-700">
+                      <div className="mb-3 rounded-xl border border-[#f0bdb4] bg-[#fdeceb] px-3 py-2">
+                        <p className="text-sm text-[#c4423a]">
                           <span className="font-semibold">Motiu:</span> {order.cancellation_reason}
                         </p>
                         {order.cancelled_at && (
-                          <p className="text-xs text-red-500 mt-0.5">
+                          <p className="mt-0.5 text-xs text-[#b54838]">
                             Anul·lat el {new Date(order.cancelled_at).toLocaleString("ca-ES")}
                           </p>
                         )}
                         {order.refund_reference && (
-                          <p className="text-xs text-red-600 mt-1">
+                          <p className="mt-1 text-xs text-[#b54838]">
                             <span className="font-semibold">↩ Tornat al datàfon:</span> ref {order.refund_reference}
                             {order.refund_at && ` el ${new Date(order.refund_at).toLocaleString("ca-ES")}`}
                           </p>
@@ -433,12 +433,12 @@ export default function AdminOrdersPage() {
                       </div>
                     )}
                     {order.invoice_number && (
-                      <p className="text-xs text-gray-500 mb-2">Factura: {order.invoice_number}</p>
+                      <p className="mb-2 text-xs text-[#7b7469]">Factura: {order.invoice_number}</p>
                     )}
                     {order.payment_method === "card" && order.card_reference && (
                       <div className="mb-3">
                         <div className="flex items-center justify-between gap-3 flex-wrap">
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-[#8a8276]">
                             Targeta — ref {order.card_reference}
                             {order.card_authorization && ` · auth ${order.card_authorization}`}
                           </p>
@@ -454,7 +454,7 @@ export default function AdminOrdersPage() {
                                     reprintingReceipt?.id === order.id &&
                                     reprintingReceipt?.copy === "merchant"
                                   }
-                                  className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                                  className="rounded-xl border border-[#d4cbbb] bg-white px-2.5 py-1 text-xs font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7] disabled:opacity-50"
                                 >
                                   {reprintingReceipt?.id === order.id && reprintingReceipt?.copy === "merchant"
                                     ? "Imprimint..."
@@ -469,7 +469,7 @@ export default function AdminOrdersPage() {
                                     reprintingReceipt?.id === order.id &&
                                     reprintingReceipt?.copy === "customer"
                                   }
-                                  className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                                  className="rounded-xl border border-[#d4cbbb] bg-white px-2.5 py-1 text-xs font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7] disabled:opacity-50"
                                 >
                                   {reprintingReceipt?.id === order.id && reprintingReceipt?.copy === "customer"
                                     ? "Imprimint..."
@@ -483,7 +483,7 @@ export default function AdminOrdersPage() {
                                 handleQuery(order);
                               }}
                               disabled={queryingId === order.id}
-                              className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                              className="rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] px-2.5 py-1 text-xs font-medium text-[#275a8f] transition-colors active:bg-[#d4e7f8] disabled:opacity-50"
                             >
                               {queryingId === order.id ? "Consultant..." : "Consultar al datàfon"}
                             </button>
@@ -537,7 +537,7 @@ export default function AdminOrdersPage() {
                             handleReprintTicket(order);
                           }}
                           disabled={reprintingTicketId === order.id}
-                          className="px-3 py-1.5 rounded-lg bg-pink-50 text-pink-600 text-xs font-semibold hover:bg-pink-100 disabled:opacity-50 transition-colors"
+                          className="rounded-xl bg-[#fbf0cc] px-3 py-1.5 text-xs font-medium text-[#87620d] transition-colors active:bg-[#eadfbc] disabled:opacity-50"
                         >
                           {reprintingTicketId === order.id ? "Imprimint..." : "Re-imprimir ticket"}
                         </button>
@@ -592,57 +592,57 @@ export default function AdminOrdersPage() {
         const isCard = cancellingOrder?.payment_method === "card";
         const hasCardRef = !!cancellingOrder?.card_reference;
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl">
-              <h3 className="text-xl font-bold text-gray-800 mb-1">Anul·lar comanda</h3>
-              <p className="text-sm text-gray-500 mb-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/72 p-3">
+            <div className="mx-4 w-full max-w-md rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-6 text-[#241f1c]">
+              <h3 className="mb-1 text-xl font-medium text-[#241f1c]">Anul·lar comanda</h3>
+              <p className="mb-4 text-sm text-[#7b7469]">
                 Comanda {cancellingOrder?.order_number}
                 {cancellingOrder?.invoice_number && (
-                  <span className="block text-xs text-gray-400">
+                  <span className="block text-xs text-[#8a8276]">
                     Factura: {cancellingOrder?.invoice_number}
                   </span>
                 )}
                 {isCard && hasCardRef && (
-                  <span className="block text-xs text-gray-400">
+                  <span className="block text-xs text-[#8a8276]">
                     Targeta — ref {cancellingOrder?.card_reference}
                   </span>
                 )}
               </p>
 
               {cancellingOrder?.status === "completed" && (
-                <div className="mb-4 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                <div className="mb-4 rounded-xl border border-[#ead39b] bg-[#fbf0cc] px-3 py-2.5 text-sm text-[#87620d]">
                   <strong>⚠ Atenció:</strong> Aquesta comanda ja està completada i té factura emesa. L&apos;anul·lació quedarà registrada però no s&apos;esborra la factura.
                 </div>
               )}
 
               {isCard && !hasCardRef && (
-                <div className="mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+                <div className="mb-4 rounded-xl border border-[#ddd4c4] bg-white px-3 py-2.5 text-xs text-[#6f665c]">
                   Aquesta comanda no té referència de targeta guardada (es va cobrar abans d&apos;activar el seguiment), per això no es pot tornar diners automàticament al datàfon.
                 </div>
               )}
 
-              <label className="block text-sm font-medium text-gray-700 mb-1">Motiu</label>
+              <label className="mb-1 block text-sm font-medium text-[#6f665c]">Motiu</label>
               <select
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm"
+                className="mb-3 w-full rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
               >
                 {CANCEL_REASONS.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
               </select>
 
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (opcional)</label>
+              <label className="mb-1 block text-sm font-medium text-[#6f665c]">Notes (opcional)</label>
               <textarea
                 value={cancelNotes}
                 onChange={(e) => setCancelNotes(e.target.value)}
                 placeholder="Detalls addicionals..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4 text-sm h-20 resize-none"
+                className="mb-4 h-20 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
               />
 
               {isCard && hasCardRef && (
-                <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <label className="flex items-start gap-2 cursor-pointer">
+                <div className="mb-4 rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] p-3">
+                  <label className="flex cursor-pointer items-start gap-2">
                     <input
                       type="checkbox"
                       checked={refundCard}
@@ -650,23 +650,23 @@ export default function AdminOrdersPage() {
                       className="mt-0.5"
                     />
                     <div className="flex-1">
-                      <span className="text-sm font-semibold text-blue-900">
+                      <span className="text-sm font-medium text-[#275a8f]">
                         Tornar diners al datàfon
                       </span>
-                      <p className="text-xs text-blue-700 mt-0.5">
+                      <p className="mt-0.5 text-xs text-[#275a8f]">
                         El client haurà de tornar a passar la targeta. S&apos;intentarà
                         primer una anul·lació (gratuïta, mateix dia) i si no, una devolució.
                       </p>
                     </div>
                   </label>
                   {refundCard && (
-                    <label className="flex items-center gap-2 mt-2 ml-6 cursor-pointer">
+                    <label className="ml-6 mt-2 flex cursor-pointer items-center gap-2">
                       <input
                         type="checkbox"
                         checked={preferRefund}
                         onChange={(e) => setPreferRefund(e.target.checked)}
                       />
-                      <span className="text-xs text-blue-700">
+                      <span className="text-xs text-[#275a8f]">
                         Forçar devolució (la venda ja està liquidada / no és del mateix dia)
                       </span>
                     </label>
@@ -675,7 +675,7 @@ export default function AdminOrdersPage() {
               )}
 
               {cancelError && (
-                <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                <div className="mb-4 rounded-xl border border-[#f0bdb4] bg-[#fdeceb] px-3 py-2 text-sm text-[#c4423a]">
                   {cancelError}
                 </div>
               )}
@@ -690,14 +690,14 @@ export default function AdminOrdersPage() {
                     setPreferRefund(false);
                     setCancelError(null);
                   }}
-                  className="flex-1 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold transition-colors text-sm"
+                  className="flex-1 rounded-xl border border-[#d4cbbb] bg-white py-2.5 text-sm font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7]"
                 >
                   Tornar
                 </button>
                 <button
                   onClick={handleCancel}
                   disabled={cancelLoading}
-                  className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white font-semibold transition-colors text-sm disabled:opacity-50"
+                  className="flex-1 rounded-xl bg-[#c4423a] py-2.5 text-sm font-semibold text-white transition-colors active:bg-[#a93630] disabled:opacity-50"
                 >
                   {cancelLoading
                     ? (isCard && refundCard && hasCardRef ? "Tornant al datàfon..." : "Anul·lant...")
