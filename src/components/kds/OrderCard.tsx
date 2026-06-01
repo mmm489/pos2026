@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Order } from "@/types/pos";
-import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
+import { getModifierDisplayName, getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
 
 interface OrderCardProps {
   order: Order;
@@ -125,7 +125,7 @@ export default function OrderCard({
                       }`}
                     >
                       {isOrphanModifier ? "+ " : ""}
-                      {base.product_name}
+                      {getModifierDisplayName(base.product_name || "", base.notes)}
                     </span>
                     {visibleBaseNote && (
                       <p className="truncate text-sm font-semibold leading-tight text-orange-600">
@@ -162,7 +162,7 @@ export default function OrderCard({
                                   : "text-gray-700"
                               }`}
                             >
-                              + {modifier.product_name}
+                              + {getModifierDisplayName(modifier.product_name || "", modifier.notes)}
                             </span>
                           </div>
                         );

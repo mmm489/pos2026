@@ -7,8 +7,29 @@ export interface GroupedItem<T> {
 export function getModifierParent(notes?: string | null): string | null {
   const trimmed = notes?.trim();
   if (!trimmed) return null;
-  if (!trimmed.toLowerCase().startsWith("per ")) return null;
-  return trimmed.slice(4).trim() || null;
+  const firstLine = trimmed.split(/\r?\n/, 1)[0]?.trim() || "";
+  if (!firstLine.toLowerCase().startsWith("per ")) return null;
+  return firstLine.slice(4).trim() || null;
+}
+
+export function buildModifierNote(parentName: string, displayName?: string | null): string {
+  const cleanParent = parentName.trim();
+  const cleanDisplay = displayName?.trim();
+  if (!cleanDisplay) return `Per ${cleanParent}`;
+  return `Per ${cleanParent}\nNom: ${cleanDisplay}`;
+}
+
+export function getModifierDisplayName(defaultName: string, notes?: string | null): string {
+  const parent = getModifierParent(notes);
+  if (!parent) return defaultName;
+
+  const lines = notes?.split(/\r?\n/) ?? [];
+  const displayLine = lines
+    .slice(1)
+    .map((line) => line.trim())
+    .find((line) => line.toLowerCase().startsWith("nom:"));
+
+  return displayLine?.slice(4).trim() || defaultName;
 }
 
 function normalizeName(name: string): string {

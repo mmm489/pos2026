@@ -10,7 +10,7 @@ import PinLogin from "@/components/pos/PinLogin";
 import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
-import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
+import { buildModifierNote, getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
 
 type CartAction =
   | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
@@ -590,7 +590,7 @@ export default function PosPage() {
                   type: "ADD",
                   product,
                   price: unitPrice,
-                  note: `Per ${modifiersFor.name}`,
+                  note: buildModifierNote(modifiersFor.name, product.name),
                 });
               }
             }
