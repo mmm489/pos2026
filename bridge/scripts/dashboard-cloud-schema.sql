@@ -162,6 +162,14 @@ CREATE TABLE IF NOT EXISTS pos.catalog_change_queue (
   error_message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS pos.dashboard_sync_status (
+  id TEXT PRIMARY KEY,
+  synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ok BOOLEAN NOT NULL DEFAULT true,
+  message TEXT,
+  counts JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
 ALTER TABLE pos.catalog_change_queue
 DROP CONSTRAINT IF EXISTS catalog_change_queue_entity_type_check;
 

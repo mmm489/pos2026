@@ -12,6 +12,13 @@ interface CartProps {
   onCheckout: () => void;
 }
 
+function isSingleChoiceCartModifier(name: string, parent: string | null): boolean {
+  if (!parent) return false;
+  const lowerName = name.toLowerCase();
+  if (lowerName.includes("bola gelat") || lowerName.includes("bola helado")) return true;
+  return lowerName.trim() === "nata" && parent.trim().toLowerCase() === "batut";
+}
+
 export default function Cart({
   items,
   onUpdateQty,
@@ -162,6 +169,7 @@ function CartLine({
 }) {
   const modifierParent = getModifierParent(item.notes);
   const visibleNote = item.notes && !modifierParent ? item.notes : null;
+  const hideIncreaseButton = isSingleChoiceCartModifier(item.name, modifierParent);
 
   return (
     <div className={`flex items-center gap-3 ${isModifier ? "py-1" : ""}`}>
@@ -192,12 +200,14 @@ function CartLine({
           -
         </button>
         <span className="w-7 text-center font-bold text-[#e1e2ec]">{item.qty}</span>
-        <button
-          onClick={() => onUpdateQty(item.line_id, 1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#32343c] text-lg font-bold text-[#e1e2ec] transition-colors hover:bg-[#3a3d46] active:bg-[#282a31]"
-        >
-          +
-        </button>
+        {!hideIncreaseButton && (
+          <button
+            onClick={() => onUpdateQty(item.line_id, 1)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#32343c] text-lg font-bold text-[#e1e2ec] transition-colors hover:bg-[#3a3d46] active:bg-[#282a31]"
+          >
+            +
+          </button>
+        )}
       </div>
 
       <div className="flex min-w-[58px] flex-col items-end gap-1">

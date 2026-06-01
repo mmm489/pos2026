@@ -274,16 +274,16 @@ function ProductCard({
         style={{ backgroundColor: isFlashing ? "#41dfa5" : color }}
       />
       <div className="flex flex-1 flex-col justify-between p-3">
-        <span className="line-clamp-2 pr-6 text-left text-[12px] font-bold uppercase leading-[16px] text-[#e1e2ec]">
+        <span className="line-clamp-3 pr-7 text-left text-[17px] font-black uppercase leading-[20px] text-[#e1e2ec]">
           {product.name}
         </span>
         <div className="mt-2 flex items-baseline justify-between">
           <span
-            className="text-[26px] font-black leading-8 tabular-nums"
+            className="text-[16px] font-bold leading-5 tabular-nums"
             style={{ color: isFlashing ? "#41dfa5" : "#e1e2ec" }}
           >
             {Number(product.price).toFixed(2)}
-            <span className="ml-1 text-[14px] font-bold">&euro;</span>
+            <span className="ml-1 text-[12px] font-bold">&euro;</span>
           </span>
           {isFlashing && (
             <span className="text-xl leading-none text-[#41dfa5]">&#10003;</span>

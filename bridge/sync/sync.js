@@ -627,6 +627,19 @@ async function syncTable(local, cloud, table) {
   return rows.length;
 }
 
+async function writeSyncStatus(cloud, ok, message, counts = {}) {
+  await cloud.query(
+    `INSERT INTO pos.dashboard_sync_status (id, synced_at, ok, message, counts)
+     VALUES ('main', NOW(), $1, $2, $3::jsonb)
+     ON CONFLICT (id) DO UPDATE SET
+       synced_at = EXCLUDED.synced_at,
+       ok = EXCLUDED.ok,
+       message = EXCLUDED.message,
+       counts = EXCLUDED.counts`,
+    [ok, message, JSON.stringify(counts)],
+  );
+}
+
 async function runSync() {
   if (!DASHBOARD_DB_URL) {
     log("DASHBOARD_DATABASE_URL no configurada - sync desactivado");
@@ -649,6 +662,7 @@ async function runSync() {
     for (const table of TABLES) {
       counts[table.name] = await syncTable(local, cloud, table);
     }
+    await writeSyncStatus(cloud, true, "Sync completado", counts);
     if (cloud.supportsTransactions) await cloud.query("COMMIT");
 
     log("Sync completado");

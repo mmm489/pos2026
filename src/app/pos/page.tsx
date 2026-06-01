@@ -10,12 +10,14 @@ import PinLogin from "@/components/pos/PinLogin";
 import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
+import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
 
 type CartAction =
   | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
   | { type: "UPDATE_QTY"; lineId: string; delta: number }
   | { type: "REMOVE"; lineId: string }
   | { type: "SET_NOTE"; lineId: string; note: string | null }
+  | { type: "NORMALIZE" }
   | { type: "CLEAR" };
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
@@ -28,6 +30,82 @@ const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "
 function isModifierCategory(name: string): boolean {
   const lower = name.toLowerCase();
   return MODIFIER_CATEGORY_KEYWORDS.some((k) => lower.includes(k));
+}
+
+function isFlavorCategory(name: string): boolean {
+  return name.toLowerCase().includes("sabor");
+}
+
+function isIceCreamBallName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.includes("bola gelat") || lower.includes("bola helado");
+}
+
+function isSingleChoiceCartModifier(item: CartItem): boolean {
+  const parent = getModifierParent(item.notes);
+  if (!parent) return false;
+  if (isIceCreamBallName(item.name)) return true;
+  return item.name.trim().toLowerCase() === "nata" && parent.trim().toLowerCase() === "batut";
+}
+
+function normalizeCartModifierPrices(items: CartItem[]): CartItem[] {
+  let changed = false;
+  const normalizedQtyItems = items.map((item) => {
+    if (isSingleChoiceCartModifier(item) && item.qty > 1) {
+      changed = true;
+      return { ...item, qty: 1 };
+    }
+    return item;
+  });
+
+  const groups = new Map<string, { balls: CartItem[]; others: CartItem[] }>();
+  for (const item of normalizedQtyItems) {
+    const parent = getModifierParent(item.notes);
+    if (!parent) continue;
+    const group = groups.get(parent) ?? { balls: [], others: [] };
+    if (isIceCreamBallName(item.name)) group.balls.push(item);
+    else group.others.push(item);
+    groups.set(parent, group);
+  }
+
+  const ballPriceByLineId = new Map<string, number>();
+  for (const group of Array.from(groups.values())) {
+    if (group.balls.length === 0) continue;
+    const hasOtherTopping = group.others.some((item) => item.qty > 0);
+    const price = hasOtherTopping ? 2 : 1;
+    for (const ball of group.balls) {
+      ballPriceByLineId.set(ball.line_id, price);
+    }
+  }
+
+  const pricedItems = normalizedQtyItems.map((item) => {
+    const ballPrice = ballPriceByLineId.get(item.line_id);
+    if (ballPrice == null || item.price === ballPrice) return item;
+    changed = true;
+    return { ...item, price: ballPrice };
+  });
+
+  return changed ? pricedItems : items;
+}
+
+function removeCartItemWithModifiers(items: CartItem[], lineId: string): CartItem[] {
+  const groupedItems = groupItemsWithModifiers(
+    items,
+    (item) => item.name,
+    (item) => item.notes
+  );
+  const targetGroup = groupedItems.find((group) => group.base.line_id === lineId);
+
+  if (!targetGroup) {
+    return items.filter((item) => item.line_id !== lineId);
+  }
+
+  const lineIdsToRemove = new Set([
+    targetGroup.base.line_id,
+    ...targetGroup.modifiers.map((modifier) => modifier.line_id),
+  ]);
+
+  return items.filter((item) => !lineIdsToRemove.has(item.line_id));
 }
 
 const POS_CANCEL_REASONS = [
@@ -51,13 +129,13 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
               i.notes === notes
           );
       if (existing) {
-        return state.map((i) =>
+        return normalizeCartModifierPrices(state.map((i) =>
           i.line_id === existing.line_id
             ? { ...i, qty: i.qty + 1 }
             : i
-        );
+        ));
       }
-      return [
+      return normalizeCartModifierPrices([
         ...state,
         {
           line_id: action.lineId ?? makeCartLineId(action.product.id),
@@ -67,23 +145,29 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
           qty: 1,
           notes,
         },
-      ];
+      ]);
     }
     case "UPDATE_QTY": {
-      return state
+      const target = state.find((item) => item.line_id === action.lineId);
+      if (target && target.qty + action.delta <= 0) {
+        return normalizeCartModifierPrices(removeCartItemWithModifiers(state, action.lineId));
+      }
+      return normalizeCartModifierPrices(state
         .map((i) =>
           i.line_id === action.lineId
             ? { ...i, qty: i.qty + action.delta }
             : i
         )
-        .filter((i) => i.qty > 0);
+        .filter((i) => i.qty > 0));
     }
     case "REMOVE":
-      return state.filter((i) => i.line_id !== action.lineId);
+      return normalizeCartModifierPrices(removeCartItemWithModifiers(state, action.lineId));
     case "SET_NOTE":
-      return state.map((i) =>
+      return normalizeCartModifierPrices(state.map((i) =>
         i.line_id === action.lineId ? { ...i, notes: action.note } : i
-      );
+      ));
+    case "NORMALIZE":
+      return normalizeCartModifierPrices(state);
     case "CLEAR":
       return [];
   }
@@ -117,6 +201,10 @@ export default function PosPage() {
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
   const [modifiersFor, setModifiersFor] = useState<Product | null>(null);
+
+  useEffect(() => {
+    dispatch({ type: "NORMALIZE" });
+  }, [cart]);
 
   // Split products by whether they belong to a modifier category. Modifier
   // products show up in the modifiers picker; everything else is a base product
@@ -164,6 +252,33 @@ export default function PosPage() {
   const activeModifierGroupIds = useMemo(
     () => new Set(modifierGroups.map((group) => group.id)),
     [modifierGroups]
+  );
+  const categoriesById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories]
+  );
+  const flavorModifierGroupIds = useMemo(
+    () =>
+      new Set(
+        modifierGroups
+          .filter((group) =>
+            group.category_ids.some((categoryId) => {
+              const category = categoriesById.get(categoryId);
+              return category ? isFlavorCategory(category.name) : false;
+            })
+          )
+          .map((group) => group.id)
+      ),
+    [categoriesById, modifierGroups]
+  );
+  const shouldOpenModifiersOnTap = useCallback(
+    (product: Product) =>
+      Boolean(
+        product.modifier_group_id &&
+          flavorModifierGroupIds.has(product.modifier_group_id) &&
+          modifierProducts.length > 0
+      ),
+    [flavorModifierGroupIds, modifierProducts.length]
   );
   const selectedModifierGroup = modifiersFor?.modifier_group_id
     ? modifierGroupById.get(modifiersFor.modifier_group_id) ?? null
@@ -412,9 +527,17 @@ export default function PosPage() {
           <ProductGrid
             products={baseProducts}
             categories={baseCategories}
-            onAddToCart={(p) => dispatch({ type: "ADD", product: p })}
+            onAddToCart={(p) => {
+              if (shouldOpenModifiersOnTap(p)) {
+                setModifiersFor(p);
+                return;
+              }
+              dispatch({ type: "ADD", product: p });
+            }}
             onLongPress={
-              modifierProducts.length > 0 ? (p) => setModifiersFor(p) : undefined
+              modifierGroups.length > 0 && modifierProducts.length > 0
+                ? (p) => setModifiersFor(p)
+                : undefined
             }
             noLongPressIds={noLongPressIds}
           />
