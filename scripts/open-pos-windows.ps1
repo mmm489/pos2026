@@ -47,7 +47,9 @@ if (-not $clientScreen) {
 $posBounds = $primary.WorkingArea
 $profileRoot = Join-Path $env:LOCALAPPDATA "HiCream"
 $clientProfile = Join-Path $profileRoot "ChromeCliente"
+$posProfile = Join-Path $profileRoot "ChromePOS"
 New-Item -ItemType Directory -Force $clientProfile | Out-Null
+New-Item -ItemType Directory -Force $posProfile | Out-Null
 
 $noTranslateArgs = @(
   "--disable-translate",
@@ -55,11 +57,15 @@ $noTranslateArgs = @(
   "--lang=ca-ES"
 )
 
-# Avoid leaving old customer-facing windows behind when reopening the POS.
+# Avoid leaving old POS/customer-facing windows behind when reopening the POS.
 Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
   Where-Object {
     $_.CommandLine -and (
+      $_.CommandLine -like "*localhost:3005/pos*" -or
+      $_.CommandLine -like "*127.0.0.1:3005/pos*" -or
       $_.CommandLine -like "*pantalla-cliente*" -or
+      $_.CommandLine -like ("*" + $posProfile.Replace("\", "\\") + "*") -or
+      $_.CommandLine -like ("*" + $posProfile + "*") -or
       $_.CommandLine -like ("*" + $clientProfile.Replace("\", "\\") + "*") -or
       $_.CommandLine -like ("*" + $clientProfile + "*")
     )
@@ -83,8 +89,10 @@ $clientArgs = @(
 
 $posArgs = @(
   "--new-window",
+  "--start-fullscreen",
   "--app=$PosUrl"
 ) + $noTranslateArgs + @(
+  "--user-data-dir=$posProfile",
   "--no-first-run",
   "--disable-session-crashed-bubble",
   "--window-position=$($posBounds.X),$($posBounds.Y)",

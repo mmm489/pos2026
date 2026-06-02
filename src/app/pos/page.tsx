@@ -306,6 +306,7 @@ export default function PosPage() {
   const [printingParkedTicketId, setPrintingParkedTicketId] = useState<string | null>(null);
   const [sendingParkedTicketId, setSendingParkedTicketId] = useState<string | null>(null);
   const [parkingInProgress, setParkingInProgress] = useState(false);
+  const [shuttingDown, setShuttingDown] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
@@ -824,6 +825,25 @@ export default function PosPage() {
     setLoading(true);
   };
 
+  const handleShutdown = useCallback(async () => {
+    const confirmed = window.confirm(
+      "Tancar el POS, la pantalla client i els serveis de HiCream?"
+    );
+    if (!confirmed) return;
+
+    setShuttingDown(true);
+    try {
+      const res = await fetch("/api/pos/shutdown", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "No s'ha pogut tancar el POS");
+      }
+    } catch (error) {
+      setShuttingDown(false);
+      window.alert((error as Error).message || "No s'ha pogut tancar el POS");
+    }
+  }, []);
+
   const handleCheckoutComplete = () => {
     dispatch({ type: "CLEAR" });
     setActiveParkedOrderId(null);
@@ -916,6 +936,13 @@ export default function PosPage() {
               </button>
             </>
           )}
+          <button
+            onClick={handleShutdown}
+            disabled={shuttingDown}
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl border border-[#e2c0b8] bg-[#fff4f1] px-3 py-2 text-[14px] font-medium text-[#a33a2c] active:bg-[#f7dfd8] disabled:opacity-60"
+          >
+            {shuttingDown ? "Tancant..." : "Sortir POS"}
+          </button>
           <button
             onClick={handleLogout}
             className="ml-1 min-h-[50px] shrink-0 whitespace-nowrap rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-[14px] font-medium text-[#241f1c] active:bg-[#f1eee7]"
