@@ -203,12 +203,12 @@ INSERT INTO pos.business (name, trade_name, nif, address, city, postal_code, pro
 VALUES (
   'APOLO HOLDINGS 2020, S.L.U.',
   'Hi Cream',
-  'B00000000',
+  'B55775068',
   'Calle Ejemplo 1',
   'Salou',
   '43840',
   'Tarragona',
-  '977 000 000',
+  '640990145',
   'S'
 )
 ON CONFLICT DO NOTHING;

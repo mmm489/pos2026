@@ -5,12 +5,12 @@ import { useEffect, useState } from "react";
 const DEFAULT_BUSINESS = {
   name: "APOLO HOLDINGS 2020, S.L.U.",
   trade_name: "Hi Cream",
-  nif: "B00000000",
+  nif: "B55775068",
   address: "Calle Ejemplo 1",
   city: "Salou",
   postal_code: "43840",
   province: "Tarragona",
-  phone: "977 000 000",
+  phone: "640990145",
 };
 
 const SAMPLE_TICKET = {
