@@ -97,15 +97,25 @@ if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" set "CHROME_EXE
 if not defined CHROME_EXE if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" set "CHROME_EXE=C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
 if not defined CHROME_EXE for /f "delims=" %%C in ('where chrome 2^>nul') do if not defined CHROME_EXE set "CHROME_EXE=%%C"
 
+set "POS_URL=http://localhost:3005/pos"
+set "CLIENT_URL=http://localhost:3005/pantalla-cliente"
+set "POS_WINDOW=--window-position=0,0 --window-size=1024,768"
+set "CLIENT_WINDOW=--window-position=1024,0 --window-size=1024,600"
+
 if defined CHROME_EXE (
-  start "HiCream POS" "%CHROME_EXE%" --app=http://localhost:3005/pos
+  start "HiCream Cliente" "%CHROME_EXE%" --app=%CLIENT_URL% %CLIENT_WINDOW% --start-fullscreen
+  timeout /t 2 /nobreak >nul
+  start "HiCream POS" "%CHROME_EXE%" --app=%POS_URL% %POS_WINDOW%
 ) else (
-  start http://localhost:3005/pos
+  start %CLIENT_URL%
+  timeout /t 2 /nobreak >nul
+  start %POS_URL%
 )
 
 echo.
 echo Listo.
-echo POS: http://localhost:3005/pos
+echo POS: %POS_URL%
+echo Pantalla cliente: %CLIENT_URL%
 echo Bridge: http://localhost:3006/health
 echo.
 echo Puedes cerrar esta ventana.

@@ -554,13 +554,6 @@ export default function PosPage() {
           >
             Pagaments
           </button>
-          <a
-            href="/pantalla-cliente"
-            target="hicream-customer-display"
-            className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
-          >
-            Client
-          </a>
           <button
             onClick={() => {
               loadRecentOrders();
