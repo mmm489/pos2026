@@ -56,6 +56,17 @@ export function publishCustomerDisplaySnapshot(snapshot: CustomerDisplaySnapshot
     // BroadcastChannel is best-effort; localStorage is the fallback.
   }
 
+  try {
+    void fetch("/api/pos/customer-display", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: serialized,
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // Server sync is best-effort; same-profile browser storage still works.
+  }
+
   window.dispatchEvent(
     new CustomEvent<CustomerDisplaySnapshot>(CUSTOMER_DISPLAY_CHANNEL, {
       detail: next,

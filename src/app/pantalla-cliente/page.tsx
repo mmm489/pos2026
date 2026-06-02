@@ -35,7 +35,28 @@ export default function CustomerDisplayPage() {
 
   useEffect(() => {
     setSnapshot(readCustomerDisplaySnapshot() ?? EMPTY_SNAPSHOT);
-    return subscribeCustomerDisplay(setSnapshot);
+    const unsubscribe = subscribeCustomerDisplay(setSnapshot);
+    let cancelled = false;
+
+    const loadRemoteSnapshot = async () => {
+      try {
+        const res = await fetch("/api/pos/customer-display", { cache: "no-store" });
+        if (!res.ok) return;
+        const next = (await res.json()) as CustomerDisplaySnapshot;
+        if (!cancelled) setSnapshot(next);
+      } catch {
+        // Same-profile localStorage/BroadcastChannel remains the fallback.
+      }
+    };
+
+    void loadRemoteSnapshot();
+    const interval = window.setInterval(loadRemoteSnapshot, 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   const hasItems = snapshot.items.length > 0;

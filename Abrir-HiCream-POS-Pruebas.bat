@@ -101,11 +101,16 @@ set "POS_URL=http://localhost:3005/pos"
 set "CLIENT_URL=http://localhost:3005/pantalla-cliente"
 set "POS_WINDOW=--window-position=0,0 --window-size=1024,768"
 set "CLIENT_WINDOW=--window-position=1024,0 --window-size=1024,600"
+set "WINDOW_SCRIPT=%APP_DIR%\scripts\open-pos-windows.ps1"
 
 if defined CHROME_EXE (
-  start "HiCream Cliente" "%CHROME_EXE%" --app=%CLIENT_URL% %CLIENT_WINDOW% --start-fullscreen
-  timeout /t 2 /nobreak >nul
-  start "HiCream POS" "%CHROME_EXE%" --app=%POS_URL% %POS_WINDOW%
+  if exist "%WINDOW_SCRIPT%" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%WINDOW_SCRIPT%" -ChromeExe "%CHROME_EXE%" -PosUrl "%POS_URL%" -ClientUrl "%CLIENT_URL%"
+  ) else (
+    start "HiCream Cliente" "%CHROME_EXE%" --app=%CLIENT_URL% %CLIENT_WINDOW%
+    timeout /t 2 /nobreak >nul
+    start "HiCream POS" "%CHROME_EXE%" --app=%POS_URL% %POS_WINDOW%
+  )
 ) else (
   start %CLIENT_URL%
   timeout /t 2 /nobreak >nul
