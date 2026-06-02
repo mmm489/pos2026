@@ -32,8 +32,10 @@ Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
     Stop-Process -Id $_.ProcessId -Force
   }
 
+# The dashboard sync is intentionally left alive. It runs in the background and
+# is protected by its watchdog so the cloud dashboard keeps updating even when
+# the cashier closes the visible POS.
 Stop-ScheduledTask -TaskName "HiCream POS Server"
-Stop-ScheduledTask -TaskName "HiCream Dashboard Sync"
 
 $processNames = @("node.exe", "cmd.exe", "powershell.exe")
 Get-CimInstance Win32_Process |
@@ -50,7 +52,6 @@ Get-CimInstance Win32_Process |
       $commandLine.Contains("next\dist\bin\next") -or
       $commandLine.Contains("next/dist/bin/next") -or
       $commandLine.Contains("next start") -or
-      $commandLine.Contains("sync-runner.js") -or
       $commandLine.Contains("bridge\index.js") -or
       $commandLine.Contains("bridge/index.js") -or
       $commandLine.Contains("node index.js")
