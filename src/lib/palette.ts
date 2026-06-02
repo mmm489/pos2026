@@ -178,6 +178,11 @@ export const ITEM_COLORS: Record<string, string> = {
   "Pistatxo salsa": "#9DBB62",
   "Oreo salsa": "#4B4A4D",
   "Bola gelat": "#E06AA0",
+  Fred: "#78C7D8",
+  Frio: "#78C7D8",
+  Calent: "#C98A45",
+  Caliente: "#C98A45",
+  XL: "#D6B36A",
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
@@ -218,6 +223,8 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Sabors: "#D6B36A",
   "Sabors gelat": "#D6B36A",
   "Extres batut": "#F0E8D6",
+  "Temperatura especialitats": "#78C7D8",
+  "Mida especialitats": "#D6B36A",
 };
 
 const FLAVOR_COLOR_INDEX = buildColorIndex(FLAVOR_COLORS);

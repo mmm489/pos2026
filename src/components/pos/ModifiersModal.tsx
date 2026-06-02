@@ -35,6 +35,16 @@ function isSingleChoiceExtraCategoryName(name: string) {
   return name.toLowerCase().includes("extres batut");
 }
 
+function isTemperatureCategoryName(name: string) {
+  const lower = name.toLowerCase();
+  return lower.includes("temperatura") || (lower.includes("fred") && lower.includes("calent"));
+}
+
+function isSizeCategoryName(name: string) {
+  const lower = name.toLowerCase();
+  return lower.includes("mida") || lower.includes("tamany") || lower.includes("size");
+}
+
 function isIceCreamBallProductName(name: string) {
   const lower = name.toLowerCase();
   return lower.includes("bola") && (lower.includes("gelat") || lower.includes("helado"));
@@ -97,6 +107,27 @@ export default function ModifiersModal({
       ),
     [modifierCategories]
   );
+  const temperatureCategoryIds = useMemo(
+    () =>
+      new Set(
+        modifierCategories
+          .filter((category) => isTemperatureCategoryName(category.name))
+          .map((category) => category.id)
+      ),
+    [modifierCategories]
+  );
+  const sizeCategoryIds = useMemo(
+    () =>
+      new Set(
+        modifierCategories
+          .filter((category) => isSizeCategoryName(category.name))
+          .map((category) => category.id)
+      ),
+    [modifierCategories]
+  );
+  const hasTemperatureSection = temperatureCategoryIds.size > 0;
+  const hasSizeSection = sizeCategoryIds.size > 0;
+  const sizeUnitPrice = extraUnitPrice > 0 ? extraUnitPrice : 1;
   const hasNestedFlavorPicker = useMemo(
     () =>
       flavorCategoryIds.size > 0 &&
@@ -136,10 +167,14 @@ export default function ModifiersModal({
     setSelections((prev) => {
       const product = productById.get(productId);
       const isFlavor = Boolean(product && flavorCategoryIds.has(product.category_id));
+      const isTemperature = Boolean(product && temperatureCategoryIds.has(product.category_id));
+      const isSize = Boolean(product && sizeCategoryIds.has(product.category_id));
       const isSingleChoiceExtra = Boolean(
         product &&
           (singleChoiceExtraCategoryIds.has(product.category_id) ||
-            isIceCreamBallProductName(product.name))
+            isIceCreamBallProductName(product.name) ||
+            isTemperature ||
+            isSize)
       );
       const normalizedQty =
         isFlavor || isSingleChoiceExtra ? Math.min(Math.max(qty, 0), 1) : qty;
@@ -154,6 +189,14 @@ export default function ModifiersModal({
       }
 
       const next = new Map(prev);
+      if (product && normalizedQty > 0 && (isTemperature || isSize)) {
+        for (const id of Array.from(next.keys())) {
+          const candidate = productById.get(id);
+          if (candidate?.category_id === product.category_id && id !== productId) {
+            next.delete(id);
+          }
+        }
+      }
       if (normalizedQty <= 0) next.delete(productId);
       else next.set(productId, normalizedQty);
       return next;
@@ -200,6 +243,16 @@ export default function ModifiersModal({
         continue;
       }
 
+      if (product && temperatureCategoryIds.has(product.category_id)) {
+        map.set(id, { included: qty, extra: 0 });
+        continue;
+      }
+
+      if (product && sizeCategoryIds.has(product.category_id)) {
+        map.set(id, { included: 0, extra: qty });
+        continue;
+      }
+
       let included = 0;
       let extra = 0;
       for (let index = 0; index < qty; index += 1) {
@@ -217,6 +270,8 @@ export default function ModifiersModal({
     hasNestedFlavorPicker,
     hasFlavorSection,
     flavorCategoryIds,
+    temperatureCategoryIds,
+    sizeCategoryIds,
     includedLimit,
   ]);
 
@@ -263,6 +318,16 @@ export default function ModifiersModal({
         continue;
       }
 
+      if (temperatureCategoryIds.has(product.category_id)) {
+        addPricedSelection(product, qty, 0, true);
+        continue;
+      }
+
+      if (sizeCategoryIds.has(product.category_id)) {
+        addPricedSelection(product, qty, sizeUnitPrice, false);
+        continue;
+      }
+
       for (let index = 0; index < qty; index += 1) {
         const included = consumedIncluded < includedLimit;
         const isIceCreamBall = isIceCreamBallProductName(product.name);
@@ -288,8 +353,11 @@ export default function ModifiersModal({
     hasNestedFlavorPicker,
     hasFlavorSection,
     flavorCategoryIds,
+    temperatureCategoryIds,
+    sizeCategoryIds,
     includedLimit,
     extraUnitPrice,
+    sizeUnitPrice,
     iceCreamBallFlavors,
   ]);
 
@@ -351,6 +419,12 @@ export default function ModifiersModal({
                   Max {includedLimit} sabor{includedLimit === 1 ? "" : "s"} gratis
                   {hasPaidSection ? `, extres +${formatPrice(extraUnitPrice)}` : ""}
                 </span>
+              ) : hasTemperatureSection || hasSizeSection ? (
+                <span className="font-black text-[#169b68]">
+                  {hasTemperatureSection ? "Fred/Calent gratis" : ""}
+                  {hasTemperatureSection && hasSizeSection ? ", " : ""}
+                  {hasSizeSection ? `XL +${formatPrice(sizeUnitPrice)}` : ""}
+                </span>
               ) : (
                 <span className="font-black text-[#169b68]">
                   {includedLimit} gratis, extres +{formatPrice(extraUnitPrice)}
@@ -391,6 +465,8 @@ export default function ModifiersModal({
                       const qty = selections.get(product.id) || 0;
                       const isSelected = qty > 0;
                       const isFlavor = flavorCategoryIds.has(product.category_id);
+                      const isTemperature = temperatureCategoryIds.has(product.category_id);
+                      const isSize = sizeCategoryIds.has(product.category_id);
                       const cardColor = resolveColor({
                         flavor: product.name,
                         category: category.name,
@@ -398,7 +474,7 @@ export default function ModifiersModal({
                       const isIceCreamBall = isIceCreamBallProductName(product.name);
                       const isSingleChoiceExtra = singleChoiceExtraCategoryIds.has(
                         product.category_id
-                      ) || isIceCreamBall;
+                      ) || isIceCreamBall || isTemperature || isSize;
                       const selectedIceCreamBallFlavor = iceCreamBallFlavors.get(product.id);
                       const selectedPricing = pricingByProduct.get(product.id);
                       const nextIceCreamBallPrice =
@@ -420,6 +496,14 @@ export default function ModifiersModal({
                         hasFlavorSection && isFlavor && !isSelected && selectedFlavorQty >= includedLimit;
                       const status = isIceCreamBall
                         ? iceCreamBallStatus
+                        : isTemperature
+                          ? isSelected
+                            ? "Escollit"
+                            : "Fred/Calent"
+                        : isSize
+                          ? isSelected
+                            ? `+${formatPrice(sizeUnitPrice)}`
+                            : `+${formatPrice(sizeUnitPrice)}`
                         : hasFlavorSection && isFlavor
                           ? isSelected
                             ? "Sabor escollit"
