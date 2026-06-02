@@ -90,14 +90,15 @@ set "CLIENT_URL=http://localhost:3005/pantalla-cliente"
 set "POS_WINDOW=--window-position=0,0 --window-size=1024,768"
 set "CLIENT_WINDOW=--window-position=1024,0 --window-size=1024,600"
 set "WINDOW_SCRIPT=%APP_DIR%\scripts\open-pos-windows.ps1"
+set "CHROME_NO_TRANSLATE=--disable-translate --disable-features=Translate,TranslateUI --lang=ca-ES"
 
 echo Abriendo Chrome en modo app...
 if exist "%WINDOW_SCRIPT%" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%WINDOW_SCRIPT%" -ChromeExe "%CHROME_EXE%" -PosUrl "%POS_URL%" -ClientUrl "%CLIENT_URL%"
 ) else (
-  start "Hi Cream Cliente" "%CHROME_EXE%" --app=%CLIENT_URL% %CLIENT_WINDOW%
+  start "Hi Cream Cliente" "%CHROME_EXE%" %CHROME_NO_TRANSLATE% --app=%CLIENT_URL% %CLIENT_WINDOW%
   timeout /t 2 /nobreak >nul
-  start "Hi Cream POS" "%CHROME_EXE%" --app=%POS_URL% %POS_WINDOW%
+  start "Hi Cream POS" "%CHROME_EXE%" %CHROME_NO_TRANSLATE% --app=%POS_URL% %POS_WINDOW%
 )
 
 endlocal

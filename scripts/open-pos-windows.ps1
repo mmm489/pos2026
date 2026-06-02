@@ -11,6 +11,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+try {
+  $chromePolicyPath = "HKCU:\Software\Policies\Google\Chrome"
+  New-Item -Path $chromePolicyPath -Force | Out-Null
+  New-ItemProperty -Path $chromePolicyPath -Name "TranslateEnabled" -PropertyType DWord -Value 0 -Force | Out-Null
+} catch {
+  Write-Warning "No se pudo desactivar Google Translate en Chrome: $($_.Exception.Message)"
+}
+
 Add-Type -AssemblyName System.Windows.Forms
 
 $screens = [System.Windows.Forms.Screen]::AllScreens
@@ -41,6 +49,12 @@ $profileRoot = Join-Path $env:LOCALAPPDATA "HiCream"
 $clientProfile = Join-Path $profileRoot "ChromeCliente"
 New-Item -ItemType Directory -Force $clientProfile | Out-Null
 
+$noTranslateArgs = @(
+  "--disable-translate",
+  "--disable-features=Translate,TranslateUI",
+  "--lang=ca-ES"
+)
+
 # Avoid leaving old customer-facing windows behind when reopening the POS.
 Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
   Where-Object {
@@ -57,6 +71,7 @@ Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
 $clientArgs = @(
   "--new-window",
   "--kiosk",
+  $noTranslateArgs,
   $ClientUrl,
   "--user-data-dir=$clientProfile",
   "--no-first-run",
@@ -69,6 +84,7 @@ $clientArgs = @(
 $posArgs = @(
   "--new-window",
   "--app=$PosUrl",
+  $noTranslateArgs,
   "--no-first-run",
   "--disable-session-crashed-bubble",
   "--window-position=$($posBounds.X),$($posBounds.Y)",
