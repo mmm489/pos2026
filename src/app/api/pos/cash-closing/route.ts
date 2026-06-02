@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, rawQuery, withTransaction } from "@/lib/db";
+import { ensureSupplierPaymentsSchema } from "@/lib/supplier-payments";
 import type { PoolClient } from "pg";
 import type { VatBreakdown } from "@/types/pos";
 
@@ -24,6 +25,16 @@ async function computeSummary(
   card_count: number;
   cancelled_count: number;
   total_refunded: number;
+  supplier_payments_total: number;
+  supplier_payments_count: number;
+  expected_cash_after_supplier_payments: number;
+  supplier_payments: {
+    id: number;
+    supplier_name: string;
+    amount: number;
+    reason: string | null;
+    created_at: string;
+  }[];
   first_invoice: string | null;
   last_invoice: string | null;
   by_employee: { name: string; tickets: number; total: number }[];
@@ -129,6 +140,23 @@ async function computeSummary(
     [since]
   );
 
+  const supplierPayments = await exec<{
+    id: number;
+    supplier_name: string;
+    amount: number;
+    reason: string | null;
+    created_at: string;
+  }>(
+    `SELECT id, supplier_name, amount::float AS amount, reason, created_at
+     FROM pos.supplier_payments
+     WHERE created_at >= $1::timestamptz
+       AND status = 'dispensed'
+     ORDER BY created_at ASC`,
+    [since]
+  );
+  const supplierPaymentsTotal =
+    Math.round(supplierPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * 100) / 100;
+
   return {
     total_cash: totals.total_cash,
     total_card: totals.total_card,
@@ -141,6 +169,11 @@ async function computeSummary(
     card_count: totals.card_count,
     cancelled_count: cancelledStats.cancelled_count,
     total_refunded: cancelledStats.total_refunded,
+    supplier_payments_total: supplierPaymentsTotal,
+    supplier_payments_count: supplierPayments.length,
+    expected_cash_after_supplier_payments:
+      Math.round((Number(totals.total_cash || 0) - supplierPaymentsTotal) * 100) / 100,
+    supplier_payments: supplierPayments,
     first_invoice: range.first_invoice,
     last_invoice: range.last_invoice,
     by_employee: byEmployee,
@@ -155,6 +188,7 @@ function formatZLabel(zNumber: number, year: number): string {
 export async function GET() {
   try {
     const sql = getDb();
+    await ensureSupplierPaymentsSchema();
 
     const [lastClosing] = await sql`
       SELECT closed_at FROM pos.cash_closings
@@ -195,6 +229,8 @@ export async function POST(request: NextRequest) {
     const closingNotes = notes || null;
 
     const closing = await withTransaction(async (client) => {
+      await ensureSupplierPaymentsSchema(client);
+
       // Find the cutoff: last closing or start-of-day fallback.
       const lastRes = await client.query(
         `SELECT closed_at FROM pos.cash_closings ORDER BY closed_at DESC LIMIT 1`
@@ -229,6 +265,8 @@ export async function POST(request: NextRequest) {
            total_base, total_vat, vat_breakdown,
            ticket_count, cash_count, card_count,
            cancelled_count, total_refunded,
+           supplier_payments_total, supplier_payments_count,
+           expected_cash_after_supplier_payments, supplier_payments_snapshot,
            first_invoice, last_invoice,
            z_number, z_label, business_snapshot, notes)
          VALUES ($1, $2::timestamptz, NOW(),
@@ -237,7 +275,9 @@ export async function POST(request: NextRequest) {
                  $9, $10, $11,
                  $12, $13,
                  $14, $15,
-                 $16, $17, $18::jsonb, $19)
+                 $16, $17::jsonb,
+                 $18, $19,
+                 $20, $21, $22::jsonb, $23)
          RETURNING *`,
         [
           employee_id || null,
@@ -253,6 +293,10 @@ export async function POST(request: NextRequest) {
           summary.card_count,
           summary.cancelled_count,
           summary.total_refunded,
+          summary.supplier_payments_total,
+          summary.supplier_payments_count,
+          summary.expected_cash_after_supplier_payments,
+          JSON.stringify(summary.supplier_payments),
           summary.first_invoice,
           summary.last_invoice,
           zNumber,

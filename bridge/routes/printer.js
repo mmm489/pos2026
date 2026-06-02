@@ -288,6 +288,18 @@ function formatZReportText(c) {
   lines.push(line(`Efectiu (${c.cash_count || 0}):`, money(c.total_cash)));
   lines.push(line(`Targeta (${c.card_count || 0}):`, money(c.total_card)));
   lines.push(separator());
+  if (Number(c.supplier_payments_count || 0) > 0) {
+    lines.push("SORTIDES DE CAIXA");
+    lines.push(line("Pagaments proveidors:", money(c.supplier_payments_total)));
+    lines.push(line("Efectiu esperat:", money(c.expected_cash_after_supplier_payments)));
+    const supplierPayments = Array.isArray(c.supplier_payments_snapshot)
+      ? c.supplier_payments_snapshot
+      : [];
+    for (const payment of supplierPayments.slice(0, 8)) {
+      lines.push(line(`  ${payment.supplier_name || "Proveidor"}`, money(payment.amount)));
+    }
+    lines.push(separator());
+  }
   if (c.vat_breakdown && Object.keys(c.vat_breakdown).length > 0) {
     lines.push("DESGLOSSAMENT IVA");
     for (const [rate, e] of Object.entries(c.vat_breakdown)) {
@@ -710,6 +722,25 @@ async function handlePrintZReport(req, res) {
     printer.println(rightAlign(`Efectiu (${c.cash_count || 0}):`, `${Number(c.total_cash || 0).toFixed(2)} EUR`));
     printer.println(rightAlign(`Targeta (${c.card_count || 0}):`, `${Number(c.total_card || 0).toFixed(2)} EUR`));
     printer.drawLine();
+
+    // ========== CASH OUT ==========
+    if (Number(c.supplier_payments_count || 0) > 0) {
+      printer.bold(true);
+      printer.println("SORTIDES DE CAIXA");
+      printer.bold(false);
+      printer.println(rightAlign("Pagaments proveidors:", `${Number(c.supplier_payments_total || 0).toFixed(2)} EUR`));
+      printer.println(rightAlign("Efectiu esperat:", `${Number(c.expected_cash_after_supplier_payments || 0).toFixed(2)} EUR`));
+      const supplierPayments = Array.isArray(c.supplier_payments_snapshot)
+        ? c.supplier_payments_snapshot
+        : [];
+      for (const payment of supplierPayments.slice(0, 8)) {
+        printer.println(rightAlign(
+          `  ${payment.supplier_name || "Proveidor"}`,
+          `${Number(payment.amount || 0).toFixed(2)} EUR`
+        ));
+      }
+      printer.drawLine();
+    }
 
     // ========== IVA BREAKDOWN ==========
     if (c.vat_breakdown && Object.keys(c.vat_breakdown).length > 0) {

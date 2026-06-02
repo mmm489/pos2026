@@ -9,6 +9,7 @@ import CheckoutModal from "@/components/pos/CheckoutModal";
 import PinLogin from "@/components/pos/PinLogin";
 import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
+import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import { buildModifierNote, getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
 
@@ -200,6 +201,7 @@ export default function PosPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showCashClosing, setShowCashClosing] = useState(false);
   const [showCashlogy, setShowCashlogy] = useState(false);
+  const [showSupplierPayments, setShowSupplierPayments] = useState(false);
   const [showRecentOrders, setShowRecentOrders] = useState(false);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -483,6 +485,12 @@ export default function PosPage() {
             Cashlogy
           </button>
           <button
+            onClick={() => setShowSupplierPayments(true)}
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-[16px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+          >
+            Pagaments
+          </button>
+          <button
             onClick={() => {
               loadRecentOrders();
               setShowRecentOrders(true);
@@ -619,6 +627,14 @@ export default function PosPage() {
       {/* Cashlogy inventory modal */}
       {showCashlogy && (
         <CashlogyModal onClose={() => setShowCashlogy(false)} />
+      )}
+
+      {/* Supplier payments modal */}
+      {showSupplierPayments && (
+        <SupplierPaymentsModal
+          employeeId={employee.id}
+          onClose={() => setShowSupplierPayments(false)}
+        />
       )}
 
       {/* Recent orders modal */}

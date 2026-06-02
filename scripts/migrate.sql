@@ -99,6 +99,21 @@ CREATE TABLE IF NOT EXISTS pos.cash_closings (
   synced BOOLEAN NOT NULL DEFAULT false
 );
 
+CREATE TABLE IF NOT EXISTS pos.supplier_payments (
+  id SERIAL PRIMARY KEY,
+  supplier_name VARCHAR(160) NOT NULL,
+  amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+  reason TEXT,
+  employee_id INTEGER REFERENCES pos.employees(id),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'dispensed', 'error', 'cancelled')),
+  cashlogy_result JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  dispensed_at TIMESTAMPTZ,
+  synced BOOLEAN NOT NULL DEFAULT false
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_products_category ON pos.products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_active ON pos.products(active);
@@ -106,6 +121,9 @@ CREATE INDEX IF NOT EXISTS idx_orders_status ON pos.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON pos.orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_synced ON pos.orders(synced);
 CREATE INDEX IF NOT EXISTS idx_cash_closings_synced ON pos.cash_closings(synced);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_created ON pos.supplier_payments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_status ON pos.supplier_payments(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_synced ON pos.supplier_payments(synced);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON pos.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_kds_events_order ON pos.kds_events(order_id);
 
@@ -222,3 +240,16 @@ BEGIN
   ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
   ALTER TABLE pos.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('cash', 'card', 'manual'));
 END $$;
+
+-- v10: supplier payments / cash out
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS supplier_payments_total NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS supplier_payments_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS expected_cash_after_supplier_payments NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS supplier_payments_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb;

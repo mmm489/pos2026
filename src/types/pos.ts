@@ -136,6 +136,16 @@ export interface CashClosing {
   cash_count: number;
   cancelled_count: number;
   total_refunded: number;
+  supplier_payments_total: number;
+  supplier_payments_count: number;
+  expected_cash_after_supplier_payments: number;
+  supplier_payments_snapshot?: {
+    id: number;
+    supplier_name: string;
+    amount: number;
+    reason: string | null;
+    created_at: string;
+  }[];
   first_invoice: string | null;
   last_invoice: string | null;
   notes: string | null;

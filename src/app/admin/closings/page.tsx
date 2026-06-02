@@ -13,6 +13,9 @@ interface ClosingListRow {
   total_cash: number;
   total_card: number;
   total_sales: number;
+  supplier_payments_total: number;
+  supplier_payments_count: number;
+  expected_cash_after_supplier_payments: number;
   ticket_count: number;
   cancelled_count: number;
   first_invoice: string | null;
@@ -218,6 +221,21 @@ function ClosingDetail({ closing }: { closing: CashClosing }) {
         <Stat label="Targeta" value={`${Number(closing.total_card).toFixed(2)}€`} sub={`${closing.card_count} tickets`} />
         <Stat label="Tickets" value={String(closing.ticket_count)} />
       </div>
+
+      {(closing.supplier_payments_count ?? 0) > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <Stat
+            label="Pagaments proveidors"
+            value={`${Number(closing.supplier_payments_total || 0).toFixed(2)} EUR`}
+            sub={`${closing.supplier_payments_count} operacions`}
+          />
+          <Stat
+            label="Efectiu esperat"
+            value={`${Number(closing.expected_cash_after_supplier_payments || 0).toFixed(2)} EUR`}
+            sub="Efectiu - pagaments"
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Stat label="Base imposable" value={`${Number(closing.total_base).toFixed(2)}€`} />

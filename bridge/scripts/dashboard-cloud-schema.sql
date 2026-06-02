@@ -128,7 +128,11 @@ CREATE TABLE IF NOT EXISTS pos.cash_closings (
   total_refunded NUMERIC(10,2) NOT NULL DEFAULT 0,
   card_count INTEGER NOT NULL DEFAULT 0,
   cash_count INTEGER NOT NULL DEFAULT 0,
-  business_snapshot JSONB
+  business_snapshot JSONB,
+  supplier_payments_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  supplier_payments_count INTEGER NOT NULL DEFAULT 0,
+  expected_cash_after_supplier_payments NUMERIC(10,2) NOT NULL DEFAULT 0,
+  supplier_payments_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 
 CREATE TABLE IF NOT EXISTS pos.card_transactions (
@@ -146,6 +150,20 @@ CREATE TABLE IF NOT EXISTS pos.card_transactions (
   response JSONB,
   duration_ms INTEGER,
   created_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS pos.supplier_payments (
+  id INTEGER PRIMARY KEY,
+  supplier_name VARCHAR(160) NOT NULL,
+  amount NUMERIC(10,2) NOT NULL,
+  reason TEXT,
+  employee_id INTEGER REFERENCES pos.employees(id),
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  cashlogy_result JSONB,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL,
+  dispensed_at TIMESTAMPTZ,
+  synced BOOLEAN NOT NULL DEFAULT true
 );
 
 CREATE TABLE IF NOT EXISTS pos.catalog_change_queue (
@@ -186,6 +204,8 @@ CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group ON pos.product_modi
 CREATE INDEX IF NOT EXISTS idx_cloud_cash_closings_closed ON pos.cash_closings(closed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_reference ON pos.card_transactions(reference);
+CREATE INDEX IF NOT EXISTS idx_cloud_supplier_payments_created ON pos.supplier_payments(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_supplier_payments_status ON pos.supplier_payments(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_catalog_change_queue_status ON pos.catalog_change_queue(status, requested_at);
 
 ALTER TABLE pos.product_modifier_groups
@@ -193,3 +213,15 @@ ADD COLUMN IF NOT EXISTS included_count INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE pos.product_modifier_groups
 ADD COLUMN IF NOT EXISTS extra_price NUMERIC(8,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS supplier_payments_total NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS supplier_payments_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS expected_cash_after_supplier_payments NUMERIC(10,2) NOT NULL DEFAULT 0;
+
+ALTER TABLE pos.cash_closings
+ADD COLUMN IF NOT EXISTS supplier_payments_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { ensureSupplierPaymentsSchema } from "@/lib/supplier-payments";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const sql = getDb();
+    await ensureSupplierPaymentsSchema();
     const { searchParams } = new URL(request.url);
     const month = searchParams.get("month"); // "2026-04"
 
@@ -20,6 +22,8 @@ export async function GET(request: NextRequest) {
       rows = await sql`
         SELECT c.id, c.z_number, c.z_label, c.opened_at, c.closed_at,
                c.total_cash, c.total_card, c.total_sales,
+               c.supplier_payments_total, c.supplier_payments_count,
+               c.expected_cash_after_supplier_payments,
                c.ticket_count, c.cancelled_count,
                c.first_invoice, c.last_invoice,
                e.name AS employee_name
@@ -33,6 +37,8 @@ export async function GET(request: NextRequest) {
       rows = await sql`
         SELECT c.id, c.z_number, c.z_label, c.opened_at, c.closed_at,
                c.total_cash, c.total_card, c.total_sales,
+               c.supplier_payments_total, c.supplier_payments_count,
+               c.expected_cash_after_supplier_payments,
                c.ticket_count, c.cancelled_count,
                c.first_invoice, c.last_invoice,
                e.name AS employee_name

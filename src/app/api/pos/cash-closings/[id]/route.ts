@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { ensureSupplierPaymentsSchema } from "@/lib/supplier-payments";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function GET(
       return NextResponse.json({ error: "ID invàlid" }, { status: 400 });
     }
     const sql = getDb();
+    await ensureSupplierPaymentsSchema();
     const [row] = await sql`
       SELECT c.*, e.name AS employee_name
       FROM pos.cash_closings c

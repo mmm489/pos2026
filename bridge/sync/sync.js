@@ -153,8 +153,30 @@ const TABLES = [
       "card_count",
       "cash_count",
       "business_snapshot",
+      "supplier_payments_total",
+      "supplier_payments_count",
+      "expected_cash_after_supplier_payments",
+      "supplier_payments_snapshot",
     ],
     orderBy: "id",
+  },
+  {
+    name: "supplier_payments",
+    columns: [
+      "id",
+      "supplier_name",
+      "amount",
+      "reason",
+      "employee_id",
+      "status",
+      "cashlogy_result",
+      "error_message",
+      "created_at",
+      "dispensed_at",
+      "synced",
+    ],
+    orderBy: "id",
+    optional: true,
   },
   {
     name: "card_transactions",
@@ -295,6 +317,49 @@ async function ensureLocalModifierSchema(local) {
   await local.query(`
     CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group
     ON pos.product_modifier_groups(group_id)
+  `);
+}
+
+async function ensureLocalSupplierPaymentSchema(local) {
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.supplier_payments (
+      id SERIAL PRIMARY KEY,
+      supplier_name VARCHAR(160) NOT NULL,
+      amount NUMERIC(10,2) NOT NULL CHECK (amount > 0),
+      reason TEXT,
+      employee_id INTEGER REFERENCES pos.employees(id),
+      status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'dispensed', 'error', 'cancelled')),
+      cashlogy_result JSONB,
+      error_message TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      dispensed_at TIMESTAMPTZ,
+      synced BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_supplier_payments_created
+    ON pos.supplier_payments(created_at DESC)
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_supplier_payments_status
+    ON pos.supplier_payments(status, created_at DESC)
+  `);
+  await local.query(`
+    ALTER TABLE pos.cash_closings
+    ADD COLUMN IF NOT EXISTS supplier_payments_total NUMERIC(10,2) NOT NULL DEFAULT 0
+  `);
+  await local.query(`
+    ALTER TABLE pos.cash_closings
+    ADD COLUMN IF NOT EXISTS supplier_payments_count INTEGER NOT NULL DEFAULT 0
+  `);
+  await local.query(`
+    ALTER TABLE pos.cash_closings
+    ADD COLUMN IF NOT EXISTS expected_cash_after_supplier_payments NUMERIC(10,2) NOT NULL DEFAULT 0
+  `);
+  await local.query(`
+    ALTER TABLE pos.cash_closings
+    ADD COLUMN IF NOT EXISTS supplier_payments_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb
   `);
 }
 
@@ -655,6 +720,7 @@ async function runSync() {
     cloud = await connectDashboard(DASHBOARD_DB_URL);
 
     await ensureLocalModifierSchema(local);
+    await ensureLocalSupplierPaymentSchema(local);
     await ensureCloudSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
 

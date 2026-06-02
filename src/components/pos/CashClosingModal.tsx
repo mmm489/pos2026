@@ -18,6 +18,16 @@ interface CashClosingData {
   card_count: number;
   cancelled_count: number;
   total_refunded: number;
+  supplier_payments_total: number;
+  supplier_payments_count: number;
+  expected_cash_after_supplier_payments: number;
+  supplier_payments: {
+    id: number;
+    supplier_name: string;
+    amount: number;
+    reason: string | null;
+    created_at: string;
+  }[];
   first_invoice: string | null;
   last_invoice: string | null;
   ticket_medio: number;
@@ -159,6 +169,39 @@ export default function CashClosingModal({
             </p>
           </div>
         </div>
+
+        {(data.supplier_payments_count ?? 0) > 0 && (
+          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-sm font-medium text-amber-700">Pagaments proveidors</p>
+                <p className="text-2xl font-bold text-amber-800">
+                  {n(data.supplier_payments_total).toFixed(2)} &euro;
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-amber-700">Operacions</p>
+                <p className="text-2xl font-bold text-amber-800">
+                  {data.supplier_payments_count}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-amber-700">Efectiu esperat</p>
+                <p className="text-2xl font-bold text-amber-800">
+                  {n(data.expected_cash_after_supplier_payments).toFixed(2)} &euro;
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1">
+              {data.supplier_payments.map((payment) => (
+                <div key={payment.id} className="flex justify-between text-sm text-amber-900">
+                  <span>{payment.supplier_name}{payment.reason ? ` - ${payment.reason}` : ""}</span>
+                  <span className="font-semibold">{n(payment.amount).toFixed(2)} &euro;</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="flex gap-6 mb-6 text-center">
