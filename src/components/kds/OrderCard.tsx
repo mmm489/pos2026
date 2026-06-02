@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Order } from "@/types/pos";
-import { getModifierDisplayName, getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
+import {
+  getModifierDisplayName,
+  getModifierParent,
+  getVisibleItemNote,
+  groupItemsWithModifiers,
+} from "@/lib/item-grouping";
 
 interface OrderCardProps {
   order: Order;
@@ -99,11 +104,11 @@ export default function OrderCard({
             const groupPartial =
               !groupReady && groupItems.some((item) => item.kds_ready);
             const modifierParent = getModifierParent(base.notes);
-            const visibleBaseNote = base.notes && !modifierParent ? base.notes : null;
+            const visibleBaseNote = !modifierParent ? getVisibleItemNote(base.notes) : null;
 
             return (
               <li
-                key={`${base.id}-${base.notes || "base"}`}
+                key={base.id}
                 className={`rounded-lg border transition-all select-none ${
                   groupReady
                     ? "bg-green-100 border-green-300"

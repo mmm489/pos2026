@@ -11,7 +11,13 @@ import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
-import { buildModifierNote, getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
+import {
+  buildBaseLineNote,
+  buildModifierNote,
+  getModifierParent,
+  getModifierParentLineId,
+  groupItemsWithModifiers,
+} from "@/lib/item-grouping";
 
 type CartAction =
   | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
@@ -68,10 +74,11 @@ function normalizeCartModifierPrices(items: CartItem[]): CartItem[] {
   for (const item of normalizedQtyItems) {
     const parent = getModifierParent(item.notes);
     if (!parent) continue;
-    const group = groups.get(parent) ?? { balls: [], others: [] };
+    const groupKey = getModifierParentLineId(item.notes) ?? parent;
+    const group = groups.get(groupKey) ?? { balls: [], others: [] };
     if (isIceCreamBallName(item.name)) group.balls.push(item);
     else group.others.push(item);
-    groups.set(parent, group);
+    groups.set(groupKey, group);
   }
 
   const ballPriceByLineId = new Map<string, number>();
@@ -170,7 +177,11 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
       return normalizeCartModifierPrices(removeCartItemWithModifiers(state, action.lineId));
     case "SET_NOTE":
       return normalizeCartModifierPrices(state.map((i) =>
-        i.line_id === action.lineId ? { ...i, notes: action.note } : i
+        i.line_id === action.lineId && !getModifierParent(i.notes)
+          ? { ...i, notes: buildBaseLineNote(i.line_id, action.note) }
+          : i.line_id === action.lineId
+          ? { ...i, notes: action.note }
+          : i
       ));
     case "NORMALIZE":
       return normalizeCartModifierPrices(state);
@@ -599,14 +610,22 @@ export default function PosPage() {
           extraPrice={modifiersFor.modifier_extra_price ?? 0}
           onCancel={() => setModifiersFor(null)}
           onConfirm={(extras, note) => {
-            dispatch({ type: "ADD", product: modifiersFor, note, merge: !note });
+            const hasCustomizations = extras.length > 0 || Boolean(note?.trim());
+            const baseLineId = makeCartLineId(modifiersFor.id);
+            dispatch({
+              type: "ADD",
+              product: modifiersFor,
+              note: hasCustomizations ? buildBaseLineNote(baseLineId, note) : note,
+              merge: !hasCustomizations,
+              lineId: hasCustomizations ? baseLineId : undefined,
+            });
             for (const { product, qty, unitPrice } of extras) {
               for (let i = 0; i < qty; i++) {
                 dispatch({
                   type: "ADD",
                   product,
                   price: unitPrice,
-                  note: buildModifierNote(modifiersFor.name, product.name),
+                  note: buildModifierNote(modifiersFor.name, product.name, baseLineId),
                 });
               }
             }

@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { CartItem } from "@/types/pos";
-import { getModifierParent, groupItemsWithModifiers } from "@/lib/item-grouping";
+import {
+  getModifierParent,
+  getVisibleItemNote,
+  groupItemsWithModifiers,
+} from "@/lib/item-grouping";
 import { titleCase } from "@/lib/palette";
 
 interface CartProps {
@@ -68,7 +72,7 @@ export default function Cart({
                   onRemove={onRemove}
                   onEditNote={(item) => {
                     setEditingNoteFor(item.line_id);
-                    setNoteDraft(item.notes || "");
+                    setNoteDraft(getVisibleItemNote(item.notes) || "");
                   }}
                 />
 
@@ -87,7 +91,7 @@ export default function Cart({
                           onRemove={onRemove}
                           onEditNote={(item) => {
                             setEditingNoteFor(item.line_id);
-                            setNoteDraft(item.notes || "");
+                            setNoteDraft(getVisibleItemNote(item.notes) || "");
                           }}
                         />
                       ))}
@@ -169,7 +173,7 @@ function CartLine({
   onEditNote: (item: CartItem) => void;
 }) {
   const modifierParent = getModifierParent(item.notes);
-  const visibleNote = item.notes && !modifierParent ? item.notes : null;
+  const visibleNote = !modifierParent ? getVisibleItemNote(item.notes) : null;
   const hideIncreaseButton = isSingleChoiceCartModifier(item.name, modifierParent);
 
   return (

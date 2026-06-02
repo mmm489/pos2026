@@ -31,6 +31,21 @@ function logPrintError(printerType, payload, err) {
 }
 
 // Receipt printer — Mostrador (EPSON TM-m30 via USB or TCP)
+function visibleKitchenNote(notes) {
+  if (!notes) return "";
+  const lines = String(notes)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line, index) => {
+      if (!line) return false;
+      if (index === 0 && line.toLowerCase().startsWith("per ")) return false;
+      if (/^HC-(PARENT-)?LINE:/i.test(line)) return false;
+      if (/^nom:/i.test(line)) return false;
+      return true;
+    });
+  return lines.join("\n").trim();
+}
+
 function getPrinterCharacterSet() {
   return process.env.PRINTER_CHARACTER_SET || "PC858_EURO";
 }
@@ -575,8 +590,9 @@ async function handlePrintKitchenTicket(req, res) {
         printer.bold(false);
         printer.println(item.name);
       }
-      if (item.notes) {
-        printer.println(`   ** ${item.notes}`);
+      const note = visibleKitchenNote(item.notes);
+      if (note) {
+        printer.println(`   ** ${note}`);
       }
     }
     printer.setTextNormal();

@@ -15,6 +15,7 @@ import {
 import { broadcastNewOrder } from "@/lib/demo-channel";
 import { Business } from "@/types/pos";
 import { useDatafonoHealth } from "@/hooks/useDatafonoHealth";
+import { getVisibleItemNote } from "@/lib/item-grouping";
 
 function getNextDemoOrderNumber(): string {
   const key = "pos_demo_order_count";
@@ -197,7 +198,11 @@ export default function CheckoutModal({
       printKitchenTicket({
         orderNumber: order.order_number,
         tableNumber: tableNumber || undefined,
-        items: items.map((i) => ({ name: i.name, qty: i.qty, notes: i.notes })),
+        items: items.map((i) => ({
+          name: i.name,
+          qty: i.qty,
+          notes: getVisibleItemNote(i.notes),
+        })),
       }).catch(() => {});
 
       setStep("success");
@@ -282,7 +287,11 @@ export default function CheckoutModal({
       printKitchenTicket({
         orderNumber: order.order_number,
         tableNumber: tableNumber || undefined,
-        items: items.map((i) => ({ name: i.name, qty: i.qty, notes: i.notes })),
+        items: items.map((i) => ({
+          name: i.name,
+          qty: i.qty,
+          notes: getVisibleItemNote(i.notes),
+        })),
       }).catch(() => {});
 
       // Card payments: always print the merchant copy (we need it for our records),
