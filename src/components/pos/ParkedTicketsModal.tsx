@@ -9,7 +9,9 @@ interface ParkedTicketsModalProps {
   onRecover: (ticket: ParkedTicket) => void;
   onDelete: (ticketId: string) => void;
   onPrint: (ticket: ParkedTicket) => void;
+  onSendToKds: (ticket: ParkedTicket) => void;
   printingTicketId?: string | null;
+  sendingTicketId?: string | null;
   onClose: () => void;
 }
 
@@ -19,7 +21,9 @@ export default function ParkedTicketsModal({
   onRecover,
   onDelete,
   onPrint,
+  onSendToKds,
   printingTicketId,
+  sendingTicketId,
   onClose,
 }: ParkedTicketsModalProps) {
   return (
@@ -112,6 +116,15 @@ export default function ParkedTicketsModal({
                         >
                           {printingTicketId === ticket.id ? "..." : "Imprimir"}
                         </button>
+                        {(ticket.kitchen_error || !ticket.order_id) && (
+                          <button
+                            onClick={() => onSendToKds(ticket)}
+                            disabled={sendingTicketId === ticket.id}
+                            className="col-span-2 rounded-xl bg-[#fff2cc] px-4 py-3 text-sm font-semibold text-[#8a5d00] active:bg-[#ffe6a3] disabled:opacity-60"
+                          >
+                            {sendingTicketId === ticket.id ? "Enviant..." : "Enviar KDS"}
+                          </button>
+                        )}
                         <button
                           onClick={() => onDelete(ticket.id)}
                           className="col-span-2 rounded-xl bg-[#fdeceb] px-4 py-3 text-sm font-semibold text-[#c4423a] active:bg-[#fad6d3]"

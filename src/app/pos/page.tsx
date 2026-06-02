@@ -304,6 +304,7 @@ export default function PosPage() {
   const [recoveringTicket, setRecoveringTicket] = useState<ParkedTicket | null>(null);
   const [activeParkedOrderId, setActiveParkedOrderId] = useState<number | null>(null);
   const [printingParkedTicketId, setPrintingParkedTicketId] = useState<string | null>(null);
+  const [sendingParkedTicketId, setSendingParkedTicketId] = useState<string | null>(null);
   const [parkingInProgress, setParkingInProgress] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("client");
@@ -663,6 +664,37 @@ export default function PosPage() {
     setRecoveringTicket((current) => (current?.id === ticketId ? null : current));
   }, [employee?.id, parkedTickets, saveParkedTickets]);
 
+  const handleSendParkedTicketToKds = useCallback(async (ticket: ParkedTicket) => {
+    setSendingParkedTicketId(ticket.id);
+    try {
+      const order = await sendParkedTicketToKds(ticket.items, ticket.order_id);
+      const updatedTicket: ParkedTicket = {
+        ...ticket,
+        order_id: order.id,
+        order_number: order.order_number,
+        kitchen_sent_at: new Date().toISOString(),
+        kitchen_error: order.kitchen_print?.success ? null : order.kitchen_print?.error || "No s'ha pogut imprimir a cuina",
+      };
+      saveParkedTickets(parkedTickets.map((candidate) => (
+        candidate.id === ticket.id ? updatedTicket : candidate
+      )));
+      if (updatedTicket.kitchen_error) {
+        window.alert(`Enviat al KDS, pero hi ha hagut un avís de cuina: ${updatedTicket.kitchen_error}`);
+      }
+    } catch (error) {
+      const updatedTicket: ParkedTicket = {
+        ...ticket,
+        kitchen_error: (error as Error).message || "No s'ha pogut enviar a cuina",
+      };
+      saveParkedTickets(parkedTickets.map((candidate) => (
+        candidate.id === ticket.id ? updatedTicket : candidate
+      )));
+      window.alert(`No s'ha pogut enviar al KDS: ${updatedTicket.kitchen_error}`);
+    } finally {
+      setSendingParkedTicketId(null);
+    }
+  }, [parkedTickets, saveParkedTickets, sendParkedTicketToKds]);
+
   const handlePrintParkedTicket = useCallback(async (ticket: ParkedTicket) => {
     setPrintingParkedTicketId(ticket.id);
     try {
@@ -1014,7 +1046,9 @@ export default function PosPage() {
           onRecover={handleRecoverParkedTicket}
           onDelete={handleDeleteParkedTicket}
           onPrint={handlePrintParkedTicket}
+          onSendToKds={handleSendParkedTicketToKds}
           printingTicketId={printingParkedTicketId}
+          sendingTicketId={sendingParkedTicketId}
           onClose={() => {
             setShowParkedTickets(false);
             setRecoveringTicket(null);

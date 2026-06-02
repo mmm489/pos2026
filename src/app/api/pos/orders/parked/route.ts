@@ -20,6 +20,30 @@ type KitchenOrderItem = {
 type KitchenPrintResult = {
   success: boolean;
   error?: string;
+  skipped?: boolean;
+};
+
+type OrderItemWithVat = {
+  product_id: number;
+  qty: number;
+  price: number;
+  vat_rate: number;
+  notes: string | null;
+};
+
+type ExistingOrderItem = {
+  product_id: number;
+  qty: number;
+  unit_price: string | number;
+  vat_rate: string | number | null;
+  notes: string | null;
+  kds_ready?: boolean | null;
+  kds_ready_at?: string | Date | null;
+};
+
+type InsertableOrderItem = OrderItemWithVat & {
+  kds_ready?: boolean;
+  kds_ready_at?: string | Date | null;
 };
 
 function getBridgeUrl() {
@@ -73,6 +97,71 @@ async function printKitchenTicketForOrder(order: {
   }
 }
 
+function lineKey(item: { product_id: number; unit_price?: string | number; price?: number; notes?: string | null }) {
+  const unitPrice = Number(item.price ?? item.unit_price ?? 0);
+  return [
+    Number(item.product_id),
+    Math.round(unitPrice * 100),
+    String(item.notes || "").trim(),
+  ].join("|");
+}
+
+function splitIncomingItemsForKds(
+  incomingItems: OrderItemWithVat[],
+  existingItems: ExistingOrderItem[]
+): { itemsToInsert: InsertableOrderItem[]; kitchenItems: OrderItemWithVat[] } {
+  const existingByKey = new Map<string, { remainingQty: number; ready: boolean; readyAt: string | Date | null }>();
+  for (const item of existingItems) {
+    const key = lineKey(item);
+    const current = existingByKey.get(key);
+    const ready = Boolean(item.kds_ready);
+    const readyAt = item.kds_ready_at || null;
+    if (!current) {
+      existingByKey.set(key, {
+        remainingQty: Number(item.qty || 0),
+        ready,
+        readyAt,
+      });
+    } else {
+      current.remainingQty += Number(item.qty || 0);
+      current.ready = current.ready && ready;
+      current.readyAt = current.readyAt || readyAt;
+    }
+  }
+
+  const itemsToInsert: InsertableOrderItem[] = [];
+  const kitchenItems: OrderItemWithVat[] = [];
+
+  for (const item of incomingItems) {
+    const key = lineKey(item);
+    const existing = existingByKey.get(key);
+    const coveredQty = existing ? Math.min(existing.remainingQty, item.qty) : 0;
+    const deltaQty = Math.round((item.qty - coveredQty) * 1000) / 1000;
+
+    if (coveredQty > 0) {
+      itemsToInsert.push({
+        ...item,
+        qty: coveredQty,
+        kds_ready: Boolean(existing?.ready),
+        kds_ready_at: existing?.readyAt || null,
+      });
+      if (existing) existing.remainingQty = Math.max(0, existing.remainingQty - coveredQty);
+    }
+
+    if (deltaQty > 0) {
+      const deltaItem = { ...item, qty: deltaQty };
+      itemsToInsert.push({
+        ...deltaItem,
+        kds_ready: false,
+        kds_ready_at: null,
+      });
+      kitchenItems.push(deltaItem);
+    }
+  }
+
+  return { itemsToInsert, kitchenItems };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -106,13 +195,7 @@ export async function POST(request: NextRequest) {
       let total = 0;
       let totalBase = 0;
       let totalVat = 0;
-      const itemsWithVat: {
-        product_id: number;
-        qty: number;
-        price: number;
-        vat_rate: number;
-        notes: string | null;
-      }[] = [];
+      const itemsWithVat: OrderItemWithVat[] = [];
 
       for (const item of items) {
         const productId = Number(item.product_id);
@@ -141,7 +224,23 @@ export async function POST(request: NextRequest) {
       totalBase = Math.round(totalBase * 100) / 100;
       totalVat = Math.round(totalVat * 100) / 100;
 
+      await client.query(`
+        ALTER TABLE pos.order_items
+        ADD COLUMN IF NOT EXISTS kds_ready BOOLEAN NOT NULL DEFAULT false
+      `);
+      await client.query(`
+        ALTER TABLE pos.order_items
+        ADD COLUMN IF NOT EXISTS kds_ready_at TIMESTAMPTZ
+      `);
+
       let order;
+      let kitchenItems: OrderItemWithVat[] = itemsWithVat;
+      let itemsToInsert: InsertableOrderItem[] = itemsWithVat.map((item) => ({
+        ...item,
+        kds_ready: false,
+        kds_ready_at: null,
+      }));
+
       if (parkedOrderId) {
         const currentRes = await client.query(
           `SELECT id, order_number, payment_method
@@ -155,6 +254,17 @@ export async function POST(request: NextRequest) {
         if (current.payment_method !== "parked") {
           throw new Error("Aquest ticket ja no esta aparcat");
         }
+
+        const existingItemsRes = await client.query(
+          `SELECT product_id, qty, unit_price, vat_rate, notes, kds_ready, kds_ready_at
+           FROM pos.order_items
+           WHERE order_id = $1
+           ORDER BY id ASC`,
+          [parkedOrderId]
+        );
+        const split = splitIncomingItemsForKds(itemsWithVat, existingItemsRes.rows as ExistingOrderItem[]);
+        itemsToInsert = split.itemsToInsert;
+        kitchenItems = split.kitchenItems;
 
         const orderRes = await client.query(
           `UPDATE pos.orders
@@ -190,11 +300,11 @@ export async function POST(request: NextRequest) {
         order = orderRes.rows[0];
       }
 
-      for (const item of itemsWithVat) {
+      for (const item of itemsToInsert) {
         await client.query(
-          `INSERT INTO pos.order_items (order_id, product_id, qty, unit_price, vat_rate, notes)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [order.id, item.product_id, item.qty, item.price, item.vat_rate, item.notes]
+          `INSERT INTO pos.order_items (order_id, product_id, qty, unit_price, vat_rate, notes, kds_ready, kds_ready_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [order.id, item.product_id, item.qty, item.price, item.vat_rate, item.notes, Boolean(item.kds_ready), item.kds_ready_at || null]
         );
       }
 
@@ -207,7 +317,20 @@ export async function POST(request: NextRequest) {
         [order.id]
       );
 
-      return { ...order, items: itemsRes.rows };
+      const kitchenItemsWithNames = kitchenItems.map((item) => {
+        const inserted = itemsRes.rows.find((candidate) =>
+          Number(candidate.product_id) === item.product_id &&
+          Number(candidate.qty) === item.qty &&
+          Number(candidate.unit_price) === item.price &&
+          String(candidate.notes || "") === String(item.notes || "")
+        );
+        return {
+          ...item,
+          product_name: inserted?.product_name || "",
+        };
+      });
+
+      return { ...order, items: itemsRes.rows, kitchen_items: kitchenItemsWithNames };
     });
 
     try {
@@ -217,10 +340,13 @@ export async function POST(request: NextRequest) {
       console.error("Pusher emit error:", error);
     }
 
-    const kitchenPrint = await printKitchenTicketForOrder(parkedOrder);
+    const kitchenItems = (parkedOrder as typeof parkedOrder & { kitchen_items?: KitchenOrderItem[] }).kitchen_items || [];
+    const kitchenPrint = kitchenItems.length > 0
+      ? await printKitchenTicketForOrder({ ...parkedOrder, items: kitchenItems })
+      : { success: true, skipped: true };
 
     return NextResponse.json(
-      { ...parkedOrder, kitchen_print: kitchenPrint },
+      { ...parkedOrder, kitchen_print: kitchenPrint, kitchen_items: undefined },
       { status: parkedOrderId ? 200 : 201 }
     );
   } catch (error) {
