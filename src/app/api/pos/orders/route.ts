@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { items, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text } = body;
+    const { items, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text, parked_order_id } = body;
 
     if (!items || items.length === 0 || !payment_method) {
       return NextResponse.json(
@@ -155,9 +155,20 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (!["cash", "card", "manual"].includes(payment_method)) {
+      return NextResponse.json(
+        { error: "Metodo de pago no valido" },
+        { status: 400 }
+      );
+    }
 
     const empId = employee_id || null;
     const tblNum = table_number || null;
+    const parsedParkedOrderId = Number(parked_order_id);
+    const parkedOrderId = Number.isInteger(parsedParkedOrderId) && parsedParkedOrderId > 0
+      ? parsedParkedOrderId
+      : null;
+    const isFinalizingParkedOrder = parkedOrderId !== null;
     const cardRef = (payment_method === "card" && card_reference) ? String(card_reference).slice(0, 20) : null;
     const cardAuth = (payment_method === "card" && card_authorization) ? String(card_authorization).slice(0, 20) : null;
     // Receipt text from REDSYS DatosRecibo — kept verbatim, can be quite long
@@ -225,14 +236,48 @@ export async function POST(request: NextRequest) {
       const initialStatus = "pending";
       const initialCompletedAt = "NULL";
 
-      // Create order with invoice number, VAT breakdown, and card audit trail
-      const orderRes = await client.query(
-        `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text, completed_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ${initialCompletedAt})
-         RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
-        [orderNumber, invoiceNumber, initialStatus, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText]
-      );
-      const order = orderRes.rows[0];
+      let order;
+      if (isFinalizingParkedOrder) {
+        const currentRes = await client.query(
+          `SELECT id, payment_method
+           FROM pos.orders
+           WHERE id = $1
+           FOR UPDATE`,
+          [parkedOrderId]
+        );
+        const current = currentRes.rows[0];
+        if (!current) throw new Error("Ticket aparcat no trobat");
+        if (current.payment_method !== "parked") {
+          throw new Error("Aquest ticket ja no esta aparcat");
+        }
+
+        const orderRes = await client.query(
+          `UPDATE pos.orders
+           SET invoice_number = $1,
+               total = $2,
+               total_base = $3,
+               total_vat = $4,
+               payment_method = $5,
+               employee_id = $6,
+               table_number = $7,
+               card_reference = $8,
+               card_authorization = $9,
+               card_receipt_text = $10
+           WHERE id = $11
+           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
+          [invoiceNumber, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText, parkedOrderId]
+        );
+        order = orderRes.rows[0];
+        await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
+      } else {
+        const orderRes = await client.query(
+          `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text, completed_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ${initialCompletedAt})
+           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
+          [orderNumber, invoiceNumber, initialStatus, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText]
+        );
+        order = orderRes.rows[0];
+      }
 
       // Insert order items with their actual VAT rate
       for (const item of itemsWithVat) {
@@ -264,7 +309,9 @@ export async function POST(request: NextRequest) {
       console.error("Pusher emit error:", e);
     }
 
-    const kitchenPrint = await printKitchenTicketForOrder(completeOrder);
+    const kitchenPrint = isFinalizingParkedOrder
+      ? { success: true }
+      : await printKitchenTicketForOrder(completeOrder);
 
     return NextResponse.json(
       { ...completeOrder, kitchen_print: kitchenPrint },

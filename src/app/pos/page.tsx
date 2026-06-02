@@ -22,7 +22,8 @@ import {
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
 import { publishCustomerDisplaySnapshot } from "@/lib/customer-display";
-import type { ParkedTicket } from "@/types/pos";
+import { printTicket } from "@/lib/bridge";
+import type { Business, ParkedTicket } from "@/types/pos";
 
 type CartAction =
   | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
@@ -239,10 +240,18 @@ function summarizeCart(items: CartItem[]) {
   return remaining > 0 ? `${names.join(", ")} +${remaining} mes` : names.join(", ");
 }
 
-function buildParkedTicket(items: CartItem[], employee: Employee | null): ParkedTicket {
+function buildParkedTicket(
+  items: CartItem[],
+  employee: Employee | null,
+  orderInfo?: Pick<ParkedTicket, "order_id" | "order_number" | "kitchen_sent_at" | "kitchen_error">
+): ParkedTicket {
   const now = new Date();
   return {
     id: makeLocalId(),
+    order_id: orderInfo?.order_id ?? null,
+    order_number: orderInfo?.order_number ?? null,
+    kitchen_sent_at: orderInfo?.kitchen_sent_at ?? null,
+    kitchen_error: orderInfo?.kitchen_error ?? null,
     business_date: localBusinessDate(now),
     created_at: now.toISOString(),
     employee_id: employee?.id ?? null,
@@ -293,6 +302,9 @@ export default function PosPage() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [parkedTickets, setParkedTickets] = useState<ParkedTicket[]>([]);
   const [recoveringTicket, setRecoveringTicket] = useState<ParkedTicket | null>(null);
+  const [activeParkedOrderId, setActiveParkedOrderId] = useState<number | null>(null);
+  const [printingParkedTicketId, setPrintingParkedTicketId] = useState<string | null>(null);
+  const [parkingInProgress, setParkingInProgress] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
@@ -301,6 +313,12 @@ export default function PosPage() {
   useEffect(() => {
     dispatch({ type: "NORMALIZE" });
   }, [cart]);
+
+  useEffect(() => {
+    if (cart.length === 0) {
+      setActiveParkedOrderId(null);
+    }
+  }, [cart.length]);
 
   // Split products by whether they belong to a modifier category. Modifier
   // products show up in the modifiers picker; everything else is a base product
@@ -501,17 +519,67 @@ export default function PosPage() {
     writeParkedTickets(todayTickets);
   }, []);
 
-  const handleParkCurrentTicket = useCallback(() => {
-    if (cart.length === 0) return;
-    const ticket = buildParkedTicket(cart, employee);
-    saveParkedTickets([ticket, ...parkedTickets]);
-    dispatch({ type: "CLEAR" });
-    setShowCheckout(false);
-    setModifiersFor(null);
-  }, [cart, employee, parkedTickets, saveParkedTickets]);
+  const sendParkedTicketToKds = useCallback(async (items: CartItem[], orderId?: number | null) => {
+    const res = await fetch("/api/pos/orders/parked", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order_id: orderId || null,
+        items,
+        employee_id: employee?.id,
+        table_number: null,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.error || "No s'ha pogut enviar la comanda a cuina");
+    }
+    return data as Order & { kitchen_print?: { success?: boolean; error?: string } };
+  }, [employee?.id]);
+
+  const handleParkCurrentTicket = useCallback(async () => {
+    if (cart.length === 0 || parkingInProgress) return;
+    setParkingInProgress(true);
+    try {
+      let orderInfo: Pick<ParkedTicket, "order_id" | "order_number" | "kitchen_sent_at" | "kitchen_error"> = {
+        order_id: activeParkedOrderId,
+        order_number: null,
+        kitchen_sent_at: null,
+        kitchen_error: null,
+      };
+      try {
+        const order = await sendParkedTicketToKds(cart, activeParkedOrderId);
+        orderInfo = {
+          order_id: order.id,
+          order_number: order.order_number,
+          kitchen_sent_at: new Date().toISOString(),
+          kitchen_error: order.kitchen_print?.success ? null : order.kitchen_print?.error || "No s'ha pogut imprimir a cuina",
+        };
+      } catch (error) {
+        orderInfo = {
+          ...orderInfo,
+          kitchen_error: (error as Error).message || "No s'ha pogut enviar a cuina",
+        };
+        window.alert(`Ticket aparcat, pero hi ha hagut un avís de cuina/KDS: ${orderInfo.kitchen_error}`);
+      }
+      const ticket = buildParkedTicket(cart, employee, orderInfo);
+      const withoutSameOrder = parkedTickets.filter((candidate) => {
+        if (ticket.order_id && candidate.order_id === ticket.order_id) return false;
+        return candidate.id !== ticket.id;
+      });
+      saveParkedTickets([ticket, ...withoutSameOrder]);
+      dispatch({ type: "CLEAR" });
+      setActiveParkedOrderId(null);
+      setShowCheckout(false);
+      setModifiersFor(null);
+    } finally {
+      setParkingInProgress(false);
+    }
+  }, [activeParkedOrderId, cart, employee, parkedTickets, parkingInProgress, saveParkedTickets, sendParkedTicketToKds]);
 
   const restoreParkedTicket = useCallback((ticket: ParkedTicket) => {
     dispatch({ type: "RESTORE", items: ticket.items });
+    setActiveParkedOrderId(ticket.order_id ?? null);
     saveParkedTickets(parkedTickets.filter((candidate) => candidate.id !== ticket.id));
     setShowParkedTickets(false);
     setRecoveringTicket(null);
@@ -527,21 +595,47 @@ export default function PosPage() {
     restoreParkedTicket(ticket);
   }, [cart.length, restoreParkedTicket]);
 
-  const handleParkCurrentAndRecover = useCallback(() => {
+  const handleParkCurrentAndRecover = useCallback(async () => {
     if (!recoveringTicket) return;
-    const currentTicket = cart.length > 0 ? buildParkedTicket(cart, employee) : null;
+    let currentTicket: ParkedTicket | null = null;
+    if (cart.length > 0) {
+      let orderInfo: Pick<ParkedTicket, "order_id" | "order_number" | "kitchen_sent_at" | "kitchen_error"> = {
+        order_id: activeParkedOrderId,
+        order_number: null,
+        kitchen_sent_at: null,
+        kitchen_error: null,
+      };
+      try {
+        const order = await sendParkedTicketToKds(cart, activeParkedOrderId);
+        orderInfo = {
+          order_id: order.id,
+          order_number: order.order_number,
+          kitchen_sent_at: new Date().toISOString(),
+          kitchen_error: order.kitchen_print?.success ? null : order.kitchen_print?.error || "No s'ha pogut imprimir a cuina",
+        };
+      } catch (error) {
+        orderInfo = {
+          ...orderInfo,
+          kitchen_error: (error as Error).message || "No s'ha pogut enviar a cuina",
+        };
+        window.alert(`Ticket aparcat, pero hi ha hagut un avís de cuina/KDS: ${orderInfo.kitchen_error}`);
+      }
+      currentTicket = buildParkedTicket(cart, employee, orderInfo);
+    }
     const remaining = parkedTickets.filter((ticket) => ticket.id !== recoveringTicket.id);
     saveParkedTickets(currentTicket ? [currentTicket, ...remaining] : remaining);
     dispatch({ type: "RESTORE", items: recoveringTicket.items });
+    setActiveParkedOrderId(recoveringTicket.order_id ?? null);
     setShowParkedTickets(false);
     setRecoveringTicket(null);
     setShowCheckout(false);
     setModifiersFor(null);
-  }, [cart, employee, parkedTickets, recoveringTicket, saveParkedTickets]);
+  }, [activeParkedOrderId, cart, employee, parkedTickets, recoveringTicket, saveParkedTickets, sendParkedTicketToKds]);
 
   const handleDiscardCurrentAndRecover = useCallback(() => {
     if (!recoveringTicket) return;
     dispatch({ type: "RESTORE", items: recoveringTicket.items });
+    setActiveParkedOrderId(recoveringTicket.order_id ?? null);
     saveParkedTickets(parkedTickets.filter((ticket) => ticket.id !== recoveringTicket.id));
     setShowParkedTickets(false);
     setRecoveringTicket(null);
@@ -549,10 +643,63 @@ export default function PosPage() {
     setModifiersFor(null);
   }, [parkedTickets, recoveringTicket, saveParkedTickets]);
 
-  const handleDeleteParkedTicket = useCallback((ticketId: string) => {
+  const handleDeleteParkedTicket = useCallback(async (ticketId: string) => {
+    const ticket = parkedTickets.find((candidate) => candidate.id === ticketId);
+    if (ticket?.order_id) {
+      try {
+        await fetch(`/api/pos/orders/${ticket.order_id}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reason: "Ticket aparcat eliminat",
+            employee_id: employee?.id,
+          }),
+        });
+      } catch {
+        // Keep local delete responsive even if the KDS/API is temporarily offline.
+      }
+    }
     saveParkedTickets(parkedTickets.filter((ticket) => ticket.id !== ticketId));
     setRecoveringTicket((current) => (current?.id === ticketId ? null : current));
-  }, [parkedTickets, saveParkedTickets]);
+  }, [employee?.id, parkedTickets, saveParkedTickets]);
+
+  const handlePrintParkedTicket = useCallback(async (ticket: ParkedTicket) => {
+    setPrintingParkedTicketId(ticket.id);
+    try {
+      let business: Business | undefined;
+      try {
+        const res = await fetch("/api/pos/business");
+        if (res.ok) business = await res.json();
+      } catch {
+        // Ticket can still print without fiscal business data.
+      }
+
+      const totalBase = Math.round((ticket.total / 1.10) * 100) / 100;
+      const totalVat = Math.round((ticket.total - totalBase) * 100) / 100;
+      const result = await printTicket({
+        orderNumber: ticket.order_number || "APARCAT",
+        items: ticket.items.map((item) => ({
+          name: getModifierParent(item.notes)
+            ? `+ ${getModifierDisplayName(item.name, item.notes)}`
+            : item.name,
+          qty: item.qty,
+          price: item.price,
+        })),
+        total: ticket.total,
+        totalBase,
+        totalVat,
+        vatRate: 10,
+        paymentMethod: "Aparcat",
+        date: new Date(ticket.created_at).toLocaleString("es-ES"),
+        business,
+      });
+      if (!result.success) {
+        window.alert(result.error || "No s'ha pogut imprimir el ticket aparcat");
+      }
+    } finally {
+      setPrintingParkedTicketId(null);
+    }
+  }, []);
 
   // Restore session
   useEffect(() => {
@@ -641,11 +788,13 @@ export default function PosPage() {
     setEmployee(null);
     localStorage.removeItem("pos_employee");
     dispatch({ type: "CLEAR" });
+    setActiveParkedOrderId(null);
     setLoading(true);
   };
 
   const handleCheckoutComplete = () => {
     dispatch({ type: "CLEAR" });
+    setActiveParkedOrderId(null);
     setShowCheckout(false);
   };
 
@@ -794,6 +943,7 @@ export default function PosPage() {
           items={cart}
           total={cart.reduce((sum, i) => sum + i.price * i.qty, 0)}
           employeeId={employee.id}
+          parkedOrderId={activeParkedOrderId}
           onClose={() => setShowCheckout(false)}
           onComplete={handleCheckoutComplete}
         />
@@ -863,6 +1013,8 @@ export default function PosPage() {
           currentCartHasItems={cart.length > 0}
           onRecover={handleRecoverParkedTicket}
           onDelete={handleDeleteParkedTicket}
+          onPrint={handlePrintParkedTicket}
+          printingTicketId={printingParkedTicketId}
           onClose={() => {
             setShowParkedTickets(false);
             setRecoveringTicket(null);

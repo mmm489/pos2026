@@ -39,7 +39,7 @@ export interface Order {
   total: number;
   total_base?: number;
   total_vat?: number;
-  payment_method: "cash" | "card" | "manual";
+  payment_method: "cash" | "card" | "manual" | "parked";
   employee_id: number | null;
   table_number?: string;
   created_at: string;
@@ -164,6 +164,10 @@ export interface CartItem {
 
 export interface ParkedTicket {
   id: string;
+  order_id?: number | null;
+  order_number?: string | null;
+  kitchen_sent_at?: string | null;
+  kitchen_error?: string | null;
   business_date: string;
   created_at: string;
   employee_id: number | null;

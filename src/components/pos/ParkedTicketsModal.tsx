@@ -8,6 +8,8 @@ interface ParkedTicketsModalProps {
   currentCartHasItems: boolean;
   onRecover: (ticket: ParkedTicket) => void;
   onDelete: (ticketId: string) => void;
+  onPrint: (ticket: ParkedTicket) => void;
+  printingTicketId?: string | null;
   onClose: () => void;
 }
 
@@ -16,6 +18,8 @@ export default function ParkedTicketsModal({
   currentCartHasItems,
   onRecover,
   onDelete,
+  onPrint,
+  printingTicketId,
   onClose,
 }: ParkedTicketsModalProps) {
   return (
@@ -74,10 +78,20 @@ export default function ParkedTicketsModal({
                             {ticket.employee_name}
                           </span>
                         )}
+                        {ticket.order_number && (
+                          <span className="rounded-full bg-[#f1eee7] px-3 py-1 text-sm font-semibold text-[#5f6878]">
+                            KDS {ticket.order_number}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-3 line-clamp-2 text-lg font-medium leading-6 text-[#241f1c]">
                         {titleCase(ticket.summary)}
                       </p>
+                      {ticket.kitchen_error && (
+                        <p className="mt-2 rounded-xl bg-[#fdeceb] px-3 py-2 text-sm font-semibold text-[#c4423a]">
+                          KDS: {ticket.kitchen_error}
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex shrink-0 flex-col gap-3 md:w-[230px]">
@@ -92,8 +106,15 @@ export default function ParkedTicketsModal({
                           Recuperar
                         </button>
                         <button
+                          onClick={() => onPrint(ticket)}
+                          disabled={printingTicketId === ticket.id}
+                          className="rounded-xl bg-[#e4f0fb] px-4 py-3 text-sm font-semibold text-[#275a8f] active:bg-[#d4e7f8] disabled:opacity-60"
+                        >
+                          {printingTicketId === ticket.id ? "..." : "Imprimir"}
+                        </button>
+                        <button
                           onClick={() => onDelete(ticket.id)}
-                          className="rounded-xl bg-[#fdeceb] px-4 py-3 text-sm font-semibold text-[#c4423a] active:bg-[#fad6d3]"
+                          className="col-span-2 rounded-xl bg-[#fdeceb] px-4 py-3 text-sm font-semibold text-[#c4423a] active:bg-[#fad6d3]"
                         >
                           Eliminar
                         </button>

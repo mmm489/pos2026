@@ -49,7 +49,7 @@ async function computeSummary(
   };
 
   // Active orders only (exclude pending and cancelled).
-  const activeWhere = `o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled')`;
+  const activeWhere = `o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked'`;
 
   const [totals] = await exec<{
     total_cash: number;

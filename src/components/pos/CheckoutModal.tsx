@@ -33,6 +33,7 @@ interface CheckoutModalProps {
   items: CartItem[];
   total: number;
   employeeId?: number;
+  parkedOrderId?: number | null;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -46,6 +47,7 @@ export default function CheckoutModal({
   items,
   total,
   employeeId,
+  parkedOrderId,
   onClose,
   onComplete,
 }: CheckoutModalProps) {
@@ -220,6 +222,7 @@ export default function CheckoutModal({
             payment_method: "manual",
             employee_id: employeeId,
             table_number: tableNumber || null,
+            parked_order_id: parkedOrderId || null,
           }),
         });
         if (orderRes.ok) {
@@ -240,7 +243,9 @@ export default function CheckoutModal({
       setTicketPrinted(false);
       setTicketError("");
 
-      await printKitchenFallback(order);
+      if (!parkedOrderId) {
+        await printKitchenFallback(order);
+      }
 
       setStep("success");
     } catch {
@@ -299,6 +304,7 @@ export default function CheckoutModal({
             payment_method: paymentMethod,
             employee_id: employeeId,
             table_number: tableNumber || null,
+            parked_order_id: parkedOrderId || null,
             card_reference: cardReference,
             card_authorization: cardAuthorization,
             card_receipt_text: cardReceiptText,
@@ -322,7 +328,9 @@ export default function CheckoutModal({
       setTicketPrinted(false);
       setTicketError("");
 
-      await printKitchenFallback(order);
+      if (!parkedOrderId) {
+        await printKitchenFallback(order);
+      }
 
       // Card payments: always print the merchant copy (we need it for our records),
       // and stash the receipt text so the success screen can ask the customer
