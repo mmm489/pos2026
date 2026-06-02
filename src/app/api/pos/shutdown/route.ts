@@ -50,7 +50,6 @@ export async function POST(request: NextRequest) {
     powershellPath,
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", scriptPath],
     {
-      detached: true,
       stdio: "ignore",
       windowsHide: true,
     }
@@ -59,7 +58,6 @@ export async function POST(request: NextRequest) {
     writeShutdownApiLog(`Failed to spawn shutdown script: ${error.message}`);
   });
   writeShutdownApiLog(`Spawned shutdown script pid=${child.pid ?? "unknown"}`);
-  child.unref();
 
   return NextResponse.json({ success: true });
 }
