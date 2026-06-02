@@ -50,7 +50,7 @@ export default function CustomerDisplayPage() {
     };
 
     void loadRemoteSnapshot();
-    const interval = window.setInterval(loadRemoteSnapshot, 1000);
+    const interval = window.setInterval(loadRemoteSnapshot, 500);
 
     return () => {
       cancelled = true;

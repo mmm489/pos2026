@@ -56,15 +56,35 @@ export function publishCustomerDisplaySnapshot(snapshot: CustomerDisplaySnapshot
     // BroadcastChannel is best-effort; localStorage is the fallback.
   }
 
-  try {
-    void fetch("/api/pos/customer-display", {
+  /*
+   * The customer display may run in a separate Chrome profile on the second
+   * monitor. In that case localStorage/BroadcastChannel are isolated, so the
+   * local server endpoint is the source of truth for cross-window updates.
+   */
+  const postSnapshot = () =>
+    fetch("/api/pos/customer-display", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: serialized,
-      keepalive: true,
-    }).catch(() => {});
+      cache: "no-store",
+    });
+
+  try {
+    void postSnapshot().catch(() => {});
+    window.setTimeout(() => {
+      void postSnapshot().catch(() => {});
+    }, 250);
   } catch {
     // Server sync is best-effort; same-profile browser storage still works.
+  }
+
+  try {
+    if ("sendBeacon" in navigator) {
+      const blob = new Blob([serialized], { type: "application/json" });
+      navigator.sendBeacon("/api/pos/customer-display", blob);
+    }
+  } catch {
+    // Some kiosk/browser modes disable sendBeacon.
   }
 
   window.dispatchEvent(

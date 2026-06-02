@@ -56,10 +56,12 @@ Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
 
 $clientArgs = @(
   "--new-window",
-  "--app=$ClientUrl",
+  "--kiosk",
+  $ClientUrl,
   "--user-data-dir=$clientProfile",
   "--no-first-run",
   "--disable-session-crashed-bubble",
+  "--overscroll-history-navigation=0",
   "--window-position=$($clientBounds.X),$($clientBounds.Y)",
   "--window-size=$($clientBounds.Width),$($clientBounds.Height)"
 )
