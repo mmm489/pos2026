@@ -16,7 +16,7 @@ try {
   New-Item -Path $chromePolicyPath -Force | Out-Null
   New-ItemProperty -Path $chromePolicyPath -Name "TranslateEnabled" -PropertyType DWord -Value 0 -Force | Out-Null
 } catch {
-  Write-Warning "No se pudo desactivar Google Translate en Chrome: $($_.Exception.Message)"
+  # Some kiosk users cannot write Chrome policy keys; launch flags and page metadata still disable translation.
 }
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -70,8 +70,8 @@ Get-CimInstance Win32_Process -Filter "Name = 'chrome.exe'" |
 
 $clientArgs = @(
   "--new-window",
-  "--kiosk",
-  $noTranslateArgs,
+  "--kiosk"
+) + $noTranslateArgs + @(
   $ClientUrl,
   "--user-data-dir=$clientProfile",
   "--no-first-run",
@@ -83,8 +83,8 @@ $clientArgs = @(
 
 $posArgs = @(
   "--new-window",
-  "--app=$PosUrl",
-  $noTranslateArgs,
+  "--app=$PosUrl"
+) + $noTranslateArgs + @(
   "--no-first-run",
   "--disable-session-crashed-bubble",
   "--window-position=$($posBounds.X),$($posBounds.Y)",
