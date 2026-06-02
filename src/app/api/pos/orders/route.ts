@@ -6,6 +6,71 @@ export const dynamic = "force-dynamic";
 
 let kdsReadyColumnsEnsured = false;
 
+type KitchenOrderItem = {
+  product_name?: string | null;
+  qty?: number | string | null;
+  notes?: string | null;
+};
+
+type KitchenPrintResult = {
+  success: boolean;
+  error?: string;
+};
+
+function getBridgeUrl() {
+  return (
+    process.env.BRIDGE_URL ||
+    process.env.NEXT_PUBLIC_BRIDGE_URL ||
+    "http://127.0.0.1:3006"
+  ).replace(/\/$/, "");
+}
+
+async function printKitchenTicketForOrder(order: {
+  order_number: string;
+  table_number?: string | null;
+  items?: KitchenOrderItem[];
+}): Promise<KitchenPrintResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const payload = {
+      orderNumber: order.order_number,
+      tableNumber: order.table_number || undefined,
+      items: (order.items || []).map((item) => ({
+        name: item.product_name || "",
+        qty: Number(item.qty || 0),
+        notes: item.notes || undefined,
+      })),
+    };
+
+    const res = await fetch(`${getBridgeUrl()}/printer/kitchen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const data = (await res.json().catch(() => null)) as KitchenPrintResult | null;
+
+    if (!res.ok || !data?.success) {
+      const error = data?.error || `HTTP ${res.status}`;
+      console.error(`[Kitchen] No se pudo imprimir ${order.order_number}: ${error}`);
+      return { success: false, error };
+    }
+
+    return { success: true };
+  } catch (error) {
+    const message =
+      (error as Error).name === "AbortError"
+        ? "Timeout imprimiendo comanda de cocina"
+        : (error as Error).message || "Error imprimiendo comanda de cocina";
+    console.error(`[Kitchen] No se pudo imprimir ${order.order_number}: ${message}`);
+    return { success: false, error: message };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function ensureKdsReadyColumns() {
   if (kdsReadyColumnsEnsured) return;
   const sql = getDb();
@@ -199,7 +264,12 @@ export async function POST(request: NextRequest) {
       console.error("Pusher emit error:", e);
     }
 
-    return NextResponse.json(completeOrder, { status: 201 });
+    const kitchenPrint = await printKitchenTicketForOrder(completeOrder);
+
+    return NextResponse.json(
+      { ...completeOrder, kitchen_print: kitchenPrint },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Error creating order:", error);
     return NextResponse.json(

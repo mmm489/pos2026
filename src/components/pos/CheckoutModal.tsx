@@ -39,6 +39,8 @@ interface CheckoutModalProps {
 
 type Step = "select" | "processing" | "success" | "error";
 type TicketPrintData = Parameters<typeof printTicket>[0];
+type KitchenPrintResult = { success?: boolean; error?: string };
+type OrderWithKitchenPrint = Order & { kitchen_print?: KitchenPrintResult };
 
 export default function CheckoutModal({
   items,
@@ -64,6 +66,7 @@ export default function CheckoutModal({
   const [printingTicket, setPrintingTicket] = useState(false);
   const [ticketPrinted, setTicketPrinted] = useState(false);
   const [ticketError, setTicketError] = useState("");
+  const [kitchenPrintError, setKitchenPrintError] = useState("");
   const [aborting, setAborting] = useState(false);
   // Poll datafono health every 15s while the modal is open so the cashier
   // sees a fresh status indicator without spamming the bridge.
@@ -156,6 +159,27 @@ export default function CheckoutModal({
       })),
     }));
 
+  const printKitchenFallback = async (order: OrderWithKitchenPrint) => {
+    if (order.kitchen_print?.success) return;
+
+    const result = await printKitchenTicket({
+      orderNumber: order.order_number,
+      tableNumber: tableNumber || undefined,
+      items: buildKitchenItems(),
+    }).catch((error) => ({
+      success: false,
+      error: (error as Error).message || "No s'ha pogut imprimir a cuina",
+    }));
+
+    if (!result.success) {
+      setKitchenPrintError(
+        result.error ||
+          order.kitchen_print?.error ||
+          "No s'ha pogut imprimir la comanda de cuina"
+      );
+    }
+  };
+
   const handlePrintOrderTicket = async () => {
     if (!pendingTicket) return;
     setPrintingTicket(true);
@@ -183,9 +207,10 @@ export default function CheckoutModal({
   const processManualPayment = async () => {
     setMethod("manual");
     setStep("processing");
+    setKitchenPrintError("");
 
     try {
-      let order: Order | null = null;
+      let order: OrderWithKitchenPrint | null = null;
       try {
         const orderRes = await fetch("/api/pos/orders", {
           method: "POST",
@@ -215,11 +240,7 @@ export default function CheckoutModal({
       setTicketPrinted(false);
       setTicketError("");
 
-      printKitchenTicket({
-        orderNumber: order.order_number,
-        tableNumber: tableNumber || undefined,
-        items: buildKitchenItems(),
-      }).catch(() => {});
+      await printKitchenFallback(order);
 
       setStep("success");
     } catch {
@@ -231,6 +252,7 @@ export default function CheckoutModal({
   const processPayment = async (paymentMethod: "cash" | "card") => {
     setMethod(paymentMethod);
     setStep("processing");
+    setKitchenPrintError("");
     setDepositedEur(0);
     setCashStatus("depositing");
 
@@ -267,7 +289,7 @@ export default function CheckoutModal({
           : null;
 
       // Create order via API
-      let order: Order | null = null;
+      let order: OrderWithKitchenPrint | null = null;
       try {
         const orderRes = await fetch("/api/pos/orders", {
           method: "POST",
@@ -300,11 +322,7 @@ export default function CheckoutModal({
       setTicketPrinted(false);
       setTicketError("");
 
-      printKitchenTicket({
-        orderNumber: order.order_number,
-        tableNumber: tableNumber || undefined,
-        items: buildKitchenItems(),
-      }).catch(() => {});
+      await printKitchenFallback(order);
 
       // Card payments: always print the merchant copy (we need it for our records),
       // and stash the receipt text so the success screen can ask the customer
@@ -621,6 +639,17 @@ export default function CheckoutModal({
               <p className="text-lg font-medium text-[#a87912]">
                 Canvi: {change.toFixed(2)} &euro;
               </p>
+            )}
+
+            {kitchenPrintError && (
+              <div className="mt-5 rounded-2xl border border-[#f0bdb4] bg-[#fdeceb] p-4 text-left">
+                <p className="text-base font-semibold text-[#c4423a]">
+                  No s&apos;ha imprès la comanda de cuina
+                </p>
+                <p className="mt-1 text-sm font-medium text-[#8f4b45]">
+                  {kitchenPrintError}
+                </p>
+              </div>
             )}
 
             {pendingTicket && (
