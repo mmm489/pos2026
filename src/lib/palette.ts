@@ -169,6 +169,8 @@ export const ITEM_COLORS: Record<string, string> = {
   "Mini nuvols": "#D9C4F0",
   Nube: "#D9C4F0",
   Sucre: "#EDE7DA",
+  Platan: "#EBD24A",
+  "Plàtan": "#EBD24A",
   "Platan natural": "#EBD24A",
   "Xoco maduixa": "#B9485E",
   "Xocolata blanca": "#EFE6C6",
