@@ -25,9 +25,9 @@ BEGIN
   ALTER TABLE pos.orders ADD CONSTRAINT orders_status_check CHECK (status IN ('pending', 'preparing', 'ready', 'completed', 'cancelled'));
   RAISE NOTICE 'Updated constraint: orders_status_check';
 
-  -- Update payment_method CHECK constraint to include 'manual'
+  -- Update payment_method CHECK constraint to include manual/parked
   ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
-  ALTER TABLE pos.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('cash', 'card', 'manual'));
+  ALTER TABLE pos.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('cash', 'card', 'manual', 'parked'));
   RAISE NOTICE 'Updated constraint: orders_payment_method_check';
 
   RAISE NOTICE 'Migration v2 complete!';

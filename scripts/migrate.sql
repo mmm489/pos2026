@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   total NUMERIC(10,2) NOT NULL,
   total_base NUMERIC(10,2),
   total_vat NUMERIC(10,2),
-  payment_method VARCHAR(10) NOT NULL CHECK (payment_method IN ('cash', 'card', 'manual')),
+  payment_method VARCHAR(10) NOT NULL CHECK (payment_method IN ('cash', 'card', 'manual', 'parked')),
   employee_id INTEGER REFERENCES pos.employees(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
@@ -236,9 +236,9 @@ BEGIN
   ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_status_check;
   ALTER TABLE pos.orders ADD CONSTRAINT orders_status_check CHECK (status IN ('pending', 'preparing', 'ready', 'completed', 'cancelled'));
 
-  -- Update payment_method CHECK constraint to include 'manual'
+  -- Update payment_method CHECK constraint to include manual/parked
   ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
-  ALTER TABLE pos.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('cash', 'card', 'manual'));
+  ALTER TABLE pos.orders ADD CONSTRAINT orders_payment_method_check CHECK (payment_method IN ('cash', 'card', 'manual', 'parked'));
 END $$;
 
 -- v10: supplier payments / cash out
