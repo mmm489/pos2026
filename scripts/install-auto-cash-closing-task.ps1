@@ -23,8 +23,13 @@ $settings = New-ScheduledTaskSettingsSet `
   -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
   -AllowStartIfOnBatteries `
   -DisallowStartOnRemoteAppSession
+$userId = (& whoami).Trim()
+if (-not $userId) {
+  $userId = "$env:USERDOMAIN\$env:USERNAME"
+}
+
 $principal = New-ScheduledTaskPrincipal `
-  -UserId "$env:USERDOMAIN\$env:USERNAME" `
+  -UserId $userId `
   -LogonType Interactive `
   -RunLevel Limited
 
