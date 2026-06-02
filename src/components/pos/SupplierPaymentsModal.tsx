@@ -21,9 +21,24 @@ interface SupplierPayment {
 
 const COMMON_SUPPLIERS = ["Hielo", "Fruita", "Llet", "Neteja", "Reparacio"];
 const QUICK_AMOUNTS = [10, 20, 30, 50, 100];
+const AMOUNT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ",", "0", "DEL"];
 
 function money(value: number | string) {
   return `${Number(value || 0).toFixed(2)} EUR`;
+}
+
+function normalizeAmountInput(value: string) {
+  let clean = value.replace(/[^\d,.]/g, "").replace(".", ",");
+  const firstComma = clean.indexOf(",");
+  if (firstComma >= 0) {
+    clean =
+      clean.slice(0, firstComma + 1) +
+      clean.slice(firstComma + 1).replace(/,/g, "");
+  }
+  const [euros, cents] = clean.split(",");
+  const normalizedEuros = euros.replace(/^0+(?=\d)/, "");
+  if (cents == null) return normalizedEuros.slice(0, 6);
+  return `${normalizedEuros.slice(0, 6)},${cents.slice(0, 2)}`;
 }
 
 export default function SupplierPaymentsModal({ employeeId, onClose }: SupplierPaymentsModalProps) {
@@ -49,6 +64,18 @@ export default function SupplierPaymentsModal({ employeeId, onClose }: SupplierP
       // The payment form can still be used if history fails to load.
     }
     setLoading(false);
+  };
+
+  const setQuickAmount = (value: number) => {
+    setAmount(value.toFixed(2).replace(".", ","));
+  };
+
+  const pressAmountKey = (key: string) => {
+    if (key === "DEL") {
+      setAmount((current) => current.slice(0, -1));
+      return;
+    }
+    setAmount((current) => normalizeAmountInput(`${current}${key}`));
   };
 
   useEffect(() => {
@@ -118,7 +145,7 @@ export default function SupplierPaymentsModal({ employeeId, onClose }: SupplierP
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto lg:grid-cols-[1fr_360px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-y-auto lg:grid-cols-[1fr_340px]">
           <div className="space-y-5 p-6">
             <div>
               <label className="mb-2 block text-sm font-semibold uppercase tracking-wide text-[#7b7469]">
@@ -150,7 +177,7 @@ export default function SupplierPaymentsModal({ employeeId, onClose }: SupplierP
               <div className="flex gap-3">
                 <input
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(event) => setAmount(normalizeAmountInput(event.target.value))}
                   inputMode="decimal"
                   placeholder="0,00"
                   className="h-20 min-w-0 flex-1 rounded-2xl border border-[#d4cbbb] bg-white px-5 text-4xl font-semibold outline-none focus:border-[#2e9e5b] focus:ring-4 focus:ring-[#2e9e5b]/10"
@@ -163,12 +190,29 @@ export default function SupplierPaymentsModal({ employeeId, onClose }: SupplierP
                 {QUICK_AMOUNTS.map((quickAmount) => (
                   <button
                     key={quickAmount}
-                    onClick={() => setAmount(String(quickAmount))}
+                    onClick={() => setQuickAmount(quickAmount)}
                     className="h-14 rounded-2xl bg-[#ead9bb] text-xl font-semibold text-[#241f1c] active:bg-[#dfcba7]"
                   >
                     {quickAmount}
                   </button>
                 ))}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {AMOUNT_KEYS.map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => pressAmountKey(key)}
+                    className="h-16 rounded-2xl border border-[#d4cbbb] bg-white text-3xl font-semibold text-[#241f1c] shadow-sm active:bg-[#f1eee7]"
+                  >
+                    {key}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setAmount("")}
+                  className="col-span-3 h-14 rounded-2xl bg-[#efe8db] text-xl font-semibold text-[#6f665c] active:bg-[#e4dccf]"
+                >
+                  Esborrar import
+                </button>
               </div>
             </div>
 
@@ -274,4 +318,3 @@ export default function SupplierPaymentsModal({ employeeId, onClose }: SupplierP
     </div>
   );
 }
-
