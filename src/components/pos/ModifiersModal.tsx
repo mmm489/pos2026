@@ -4,6 +4,7 @@ import { Category, Product } from "@/types/pos";
 import { resolveColor, sentenceCase, textColorOn, titleCase } from "@/lib/palette";
 import type { CSSProperties } from "react";
 import { useMemo, useState } from "react";
+import TouchKeyboard from "./TouchKeyboard";
 
 interface PricedModifierSelection {
   product: Product;
@@ -589,6 +590,9 @@ export default function ModifiersModal({
               placeholder="Sense lactosa, sense sucre, etc."
               className="h-16 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm font-normal text-[#241f1c] outline-none placeholder:text-[#8f887c] focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/20"
             />
+            <div className="mt-3">
+              <TouchKeyboard value={note} onChange={setNote} compact />
+            </div>
           </div>
         </div>
 

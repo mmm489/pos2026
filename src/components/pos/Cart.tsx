@@ -8,6 +8,7 @@ import {
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
 import { titleCase } from "@/lib/palette";
+import TouchKeyboard from "./TouchKeyboard";
 
 interface CartProps {
   items: CartItem[];
@@ -143,16 +144,26 @@ export default function Cart({
       </div>
 
       {editingNoteFor !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45">
-          <div className="mx-4 w-full max-w-sm rounded-xl border border-[#ddd4c4] bg-white p-6">
-            <h3 className="mb-3 text-lg font-medium text-[#241f1c]">Nota per a cuina</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-3">
+          <div className="flex max-h-[94vh] w-full max-w-3xl flex-col rounded-xl border border-[#ddd4c4] bg-white p-4">
+            <h3 className="mb-3 text-xl font-medium text-[#241f1c]">Nota per a cuina</h3>
             <textarea
               value={noteDraft}
               onChange={(e) => setNoteDraft(e.target.value)}
               placeholder="Ex. sense sucre, sense lactosa, extra xocolata..."
-              className="h-24 w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
-              autoFocus
+              className="h-24 w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-[17px] outline-none focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"
             />
+            <div className="mt-3 min-h-0 overflow-y-auto">
+              <TouchKeyboard
+                value={noteDraft}
+                onChange={setNoteDraft}
+                onDone={() => {
+                  onSetNote(editingNoteFor, noteDraft.trim() || null);
+                  setEditingNoteFor(null);
+                  setNoteDraft("");
+                }}
+              />
+            </div>
             <div className="mt-4 flex gap-3">
               <button
                 onClick={() => {
