@@ -14,10 +14,13 @@ import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import {
   buildBaseLineNote,
   buildModifierNote,
+  getModifierDisplayName,
   getModifierParent,
   getModifierParentLineId,
+  getVisibleItemNote,
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
+import { publishCustomerDisplaySnapshot } from "@/lib/customer-display";
 
 type CartAction =
   | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
@@ -316,6 +319,38 @@ export default function PosPage() {
     () => modifierCategories.filter((c) => selectedModifierCategoryIds.has(c.id)),
     [modifierCategories, selectedModifierCategoryIds]
   );
+  const customerDisplayItems = useMemo(
+    () =>
+      groupItemsWithModifiers(
+        cart,
+        (item) => item.name,
+        (item) => item.notes
+      ).map(({ base, modifiers }) => ({
+        lineId: base.line_id,
+        name: base.name,
+        qty: base.qty,
+        unitPrice: base.price,
+        lineTotal: Math.round(base.price * base.qty * 100) / 100,
+        note: getVisibleItemNote(base.notes),
+        modifiers: modifiers.map((modifier) => ({
+          lineId: modifier.line_id,
+          name: getModifierDisplayName(modifier.name, modifier.notes),
+          qty: modifier.qty,
+          unitPrice: modifier.price,
+          lineTotal: Math.round(modifier.price * modifier.qty * 100) / 100,
+          note: getVisibleItemNote(modifier.notes),
+        })),
+      })),
+    [cart]
+  );
+  const customerDisplayTotal = useMemo(
+    () => Math.round(cart.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100,
+    [cart]
+  );
+  const customerDisplayItemCount = useMemo(
+    () => customerDisplayItems.reduce((sum, item) => sum + item.qty, 0),
+    [customerDisplayItems]
+  );
   const noLongPressIds = useMemo(() => {
     const ids = new Set(modifierProductIds);
     if (modifierGroups.length > 0) {
@@ -330,6 +365,24 @@ export default function PosPage() {
     }
     return ids;
   }, [activeModifierGroupIds, baseProducts, modifierProductIds, modifierGroups.length]);
+
+  useEffect(() => {
+    publishCustomerDisplaySnapshot({
+      status: !employee || cart.length === 0 ? "idle" : showCheckout ? "checkout" : "active",
+      employeeName: employee?.name ?? null,
+      items: employee ? customerDisplayItems : [],
+      itemCount: employee ? customerDisplayItemCount : 0,
+      total: employee ? customerDisplayTotal : 0,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    cart.length,
+    customerDisplayItemCount,
+    customerDisplayItems,
+    customerDisplayTotal,
+    employee,
+    showCheckout,
+  ]);
 
   const loadRecentOrders = useCallback(async () => {
     try {
@@ -501,6 +554,13 @@ export default function PosPage() {
           >
             Pagaments
           </button>
+          <a
+            href="/pantalla-cliente"
+            target="hicream-customer-display"
+            className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+          >
+            Client
+          </a>
           <button
             onClick={() => {
               loadRecentOrders();
