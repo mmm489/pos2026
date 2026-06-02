@@ -12,10 +12,12 @@ function splitNoteLines(notes?: string | null): string[] {
 }
 
 function isInternalLine(line: string): boolean {
-  const trimmed = line.trim().toUpperCase();
+  const trimmed = line.trim();
+  const normalized = trimmed.toUpperCase();
   return (
-    trimmed.startsWith(LINE_MARKER_PREFIX) ||
-    trimmed.startsWith(PARENT_LINE_MARKER_PREFIX)
+    normalized.startsWith(LINE_MARKER_PREFIX) ||
+    normalized.startsWith(PARENT_LINE_MARKER_PREFIX) ||
+    /^HC[-_\s]*(PARENT[-_\s]*)?LINE\s*:?\s*/i.test(trimmed)
   );
 }
 

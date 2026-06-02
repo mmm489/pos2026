@@ -371,7 +371,12 @@ export async function getCashlogyState() {
 export async function printKitchenTicket(data: {
   orderNumber: string;
   tableNumber?: string;
-  items: { name: string; qty: number; notes?: string | null }[];
+  items: {
+    name: string;
+    qty: number;
+    notes?: string | null;
+    modifiers?: { name: string; qty: number; notes?: string | null }[];
+  }[];
   date?: string;
 }) {
   const controller = new AbortController();

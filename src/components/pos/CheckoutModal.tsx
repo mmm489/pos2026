@@ -15,7 +15,11 @@ import {
 import { broadcastNewOrder } from "@/lib/demo-channel";
 import { Business } from "@/types/pos";
 import { useDatafonoHealth } from "@/hooks/useDatafonoHealth";
-import { getVisibleItemNote } from "@/lib/item-grouping";
+import {
+  getModifierDisplayName,
+  getVisibleItemNote,
+  groupItemsWithModifiers,
+} from "@/lib/item-grouping";
 
 function getNextDemoOrderNumber(): string {
   const key = "pos_demo_order_count";
@@ -136,6 +140,22 @@ export default function CheckoutModal({
     business: business || undefined,
   });
 
+  const buildKitchenItems = () =>
+    groupItemsWithModifiers(
+      items,
+      (item) => item.name,
+      (item) => item.notes
+    ).map(({ base, modifiers }) => ({
+      name: base.name,
+      qty: base.qty,
+      notes: getVisibleItemNote(base.notes),
+      modifiers: modifiers.map((modifier) => ({
+        name: getModifierDisplayName(modifier.name, modifier.notes),
+        qty: modifier.qty,
+        notes: getVisibleItemNote(modifier.notes),
+      })),
+    }));
+
   const handlePrintOrderTicket = async () => {
     if (!pendingTicket) return;
     setPrintingTicket(true);
@@ -198,11 +218,7 @@ export default function CheckoutModal({
       printKitchenTicket({
         orderNumber: order.order_number,
         tableNumber: tableNumber || undefined,
-        items: items.map((i) => ({
-          name: i.name,
-          qty: i.qty,
-          notes: getVisibleItemNote(i.notes),
-        })),
+        items: buildKitchenItems(),
       }).catch(() => {});
 
       setStep("success");
@@ -287,11 +303,7 @@ export default function CheckoutModal({
       printKitchenTicket({
         orderNumber: order.order_number,
         tableNumber: tableNumber || undefined,
-        items: items.map((i) => ({
-          name: i.name,
-          qty: i.qty,
-          notes: getVisibleItemNote(i.notes),
-        })),
+        items: buildKitchenItems(),
       }).catch(() => {});
 
       // Card payments: always print the merchant copy (we need it for our records),

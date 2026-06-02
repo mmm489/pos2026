@@ -39,11 +39,124 @@ function visibleKitchenNote(notes) {
     .filter((line, index) => {
       if (!line) return false;
       if (index === 0 && line.toLowerCase().startsWith("per ")) return false;
-      if (/^HC-(PARENT-)?LINE:/i.test(line)) return false;
+      if (/^HC[-_\s]*(PARENT[-_\s]*)?LINE\s*:?\s*/i.test(line)) return false;
       if (/^nom:/i.test(line)) return false;
       return true;
     });
   return lines.join("\n").trim();
+}
+
+function getKitchenModifierParent(notes) {
+  const firstLine = String(notes || "").split(/\r?\n/, 1)[0]?.trim() || "";
+  if (!firstLine.toLowerCase().startsWith("per ")) return "";
+  return firstLine.slice(4).trim();
+}
+
+function getKitchenMarker(notes, markerPattern) {
+  const line = String(notes || "")
+    .split(/\r?\n/)
+    .map((candidate) => candidate.trim())
+    .find((candidate) => markerPattern.test(candidate));
+  if (!line) return "";
+  return line.replace(markerPattern, "").trim();
+}
+
+function getKitchenLineId(notes) {
+  return getKitchenMarker(notes, /^HC[-_\s]*LINE\s*:?\s*/i);
+}
+
+function getKitchenParentLineId(notes) {
+  return getKitchenMarker(notes, /^HC[-_\s]*PARENT[-_\s]*LINE\s*:?\s*/i);
+}
+
+function kitchenModifierName(item) {
+  const displayLine = String(item.notes || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => /^nom:/i.test(line));
+  return displayLine ? displayLine.replace(/^nom:\s*/i, "").trim() || item.name : item.name;
+}
+
+function normalizeKitchenName(name) {
+  return String(name || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function groupKitchenItems(items) {
+  const normalized = Array.isArray(items) ? items : [];
+  if (normalized.some((item) => Array.isArray(item.modifiers))) {
+    return normalized.map((item) => ({
+      ...item,
+      notes: visibleKitchenNote(item.notes),
+      modifiers: (item.modifiers || []).map((modifier) => ({
+        ...modifier,
+        name: kitchenModifierName(modifier),
+        notes: visibleKitchenNote(modifier.notes),
+      })),
+    }));
+  }
+
+  const groups = [];
+  const modifiers = [];
+  normalized.forEach((item, index) => {
+    const parentName = getKitchenModifierParent(item.notes);
+    if (parentName) {
+      modifiers.push({
+        item,
+        index,
+        parentName,
+        parentLineId: getKitchenParentLineId(item.notes),
+      });
+      return;
+    }
+    groups.push({
+      ...item,
+      notes: visibleKitchenNote(item.notes),
+      modifiers: [],
+      index,
+      lineId: getKitchenLineId(item.notes),
+    });
+  });
+
+  modifiers.forEach((modifier) => {
+    const parentKey = normalizeKitchenName(modifier.parentName);
+    let target = modifier.parentLineId
+      ? [...groups].reverse().find((group) => group.lineId === modifier.parentLineId)
+      : null;
+    if (!target) {
+      target = [...groups]
+        .reverse()
+        .find(
+          (group) =>
+            group.index < modifier.index &&
+            normalizeKitchenName(group.name) === parentKey
+        );
+    }
+    if (!target) {
+      target = [...groups].reverse().find((group) => normalizeKitchenName(group.name) === parentKey);
+    }
+
+    const cleanModifier = {
+      ...modifier.item,
+      name: kitchenModifierName(modifier.item),
+      notes: visibleKitchenNote(modifier.item.notes),
+    };
+    if (target) {
+      target.modifiers.push(cleanModifier);
+    } else {
+      groups.push({
+        ...cleanModifier,
+        modifiers: [],
+        index: modifier.index,
+        lineId: "",
+      });
+    }
+  });
+
+  return groups.sort((a, b) => a.index - b.index);
 }
 
 function getPrinterCharacterSet() {
@@ -581,19 +694,36 @@ async function handlePrintKitchenTicket(req, res) {
     // ========== ITEMS ==========
     printer.alignLeft();
     printer.setTextSize(1, 1);
-    for (const item of items) {
-      if (item.qty === 1) {
+    for (const item of groupKitchenItems(items)) {
+      const qty = Number(item.qty || 0);
+      printer.bold(true);
+      if (qty === 1) {
         printer.println(item.name);
       } else {
-        printer.bold(true);
         printer.print(`${item.qty}x `);
-        printer.bold(false);
         printer.println(item.name);
       }
-      const note = visibleKitchenNote(item.notes);
+      printer.bold(false);
+
+      const note = item.notes || visibleKitchenNote(item.notes);
       if (note) {
-        printer.println(`   ** ${note}`);
+        printer.println(`   NOTA: ${note}`);
       }
+
+      const modifiers = Array.isArray(item.modifiers) ? item.modifiers : [];
+      if (modifiers.length > 0) {
+        printer.println("   Complements:");
+        for (const modifier of modifiers) {
+          const modifierQty = Number(modifier.qty || 0);
+          const prefix = modifierQty > 1 ? `${modifierQty}x ` : "+ ";
+          printer.println(`     ${prefix}${modifier.name}`);
+          const modifierNote = modifier.notes || visibleKitchenNote(modifier.notes);
+          if (modifierNote) {
+            printer.println(`       NOTA: ${modifierNote}`);
+          }
+        }
+      }
+      printer.newLine();
     }
     printer.setTextNormal();
 
