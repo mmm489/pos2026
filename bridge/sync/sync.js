@@ -107,6 +107,7 @@ const TABLES = [
       "synced",
     ],
     orderBy: "id",
+    where: "payment_method <> 'parked'",
   },
   {
     name: "order_items",
@@ -122,11 +123,23 @@ const TABLES = [
       "kds_ready_at",
     ],
     orderBy: "id",
+    where: `EXISTS (
+      SELECT 1
+      FROM pos.orders o
+      WHERE o.id = pos.order_items.order_id
+        AND o.payment_method <> 'parked'
+    )`,
   },
   {
     name: "kds_events",
     columns: ["id", "order_id", "event_type", "timestamp"],
     orderBy: "id",
+    where: `EXISTS (
+      SELECT 1
+      FROM pos.orders o
+      WHERE o.id = pos.kds_events.order_id
+        AND o.payment_method <> 'parked'
+    )`,
   },
   {
     name: "cash_closings",
@@ -650,10 +663,22 @@ async function fetchRows(local, table) {
   const query = `
     SELECT ${columnList(table.columns)}
     FROM pos.${quoteIdent(table.name)}
+    ${table.where ? `WHERE ${table.where}` : ""}
     ORDER BY ${quoteIdent(table.orderBy)}
   `;
   const result = await local.query(query);
   return result.rows;
+}
+
+async function deleteCloudParkedOrders(cloud) {
+  const result = await cloud.query(
+    `DELETE FROM pos.orders WHERE payment_method = 'parked'`
+  );
+  const deleted = result.rowCount || 0;
+  if (deleted > 0) {
+    log(`orders: ${deleted} tickets aparcados eliminados del dashboard cloud`);
+  }
+  return deleted;
 }
 
 async function upsertBatch(cloud, table, rows) {
@@ -723,6 +748,7 @@ async function runSync() {
     await ensureLocalSupplierPaymentSchema(local);
     await ensureCloudSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
+    counts.cloud_parked_orders_deleted = await deleteCloudParkedOrders(cloud);
 
     if (cloud.supportsTransactions) await cloud.query("BEGIN");
     for (const table of TABLES) {
