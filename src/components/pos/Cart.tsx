@@ -14,7 +14,10 @@ interface CartProps {
   onUpdateQty: (lineId: string, delta: number) => void;
   onRemove: (lineId: string) => void;
   onSetNote: (lineId: string, note: string | null) => void;
+  onPark: () => void;
+  onOpenParkedTickets: () => void;
   onCheckout: () => void;
+  parkedCount: number;
 }
 
 function isSingleChoiceCartModifier(name: string, parent: string | null): boolean {
@@ -29,7 +32,10 @@ export default function Cart({
   onUpdateQty,
   onRemove,
   onSetNote,
+  onPark,
+  onOpenParkedTickets,
   onCheckout,
+  parkedCount,
 }: CartProps) {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const [editingNoteFor, setEditingNoteFor] = useState<string | null>(null);
@@ -110,6 +116,22 @@ export default function Cart({
           <span className="text-[48px] font-medium leading-[56px] tracking-[-0.02em] tabular-nums text-[#241f1c]">
             {total.toFixed(2)} &euro;
           </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={onPark}
+            disabled={items.length === 0}
+            className="rounded-xl border border-[#d4cbbb] bg-white py-3 text-[16px] font-medium text-[#241f1c] active:bg-[#f1eee7] disabled:cursor-not-allowed disabled:bg-[#ebe7de] disabled:text-[#9a9184]"
+          >
+            Aparcar
+          </button>
+          <button
+            onClick={onOpenParkedTickets}
+            disabled={parkedCount === 0}
+            className="rounded-xl border border-[#d4cbbb] bg-white py-3 text-[16px] font-medium text-[#241f1c] active:bg-[#f1eee7] disabled:cursor-not-allowed disabled:bg-[#ebe7de] disabled:text-[#9a9184]"
+          >
+            Aparcats ({parkedCount})
+          </button>
         </div>
         <button
           onClick={onCheckout}

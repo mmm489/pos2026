@@ -161,3 +161,15 @@ export interface CartItem {
   qty: number;
   notes: string | null;
 }
+
+export interface ParkedTicket {
+  id: string;
+  business_date: string;
+  created_at: string;
+  employee_id: number | null;
+  employee_name: string | null;
+  items: CartItem[];
+  total: number;
+  item_count: number;
+  summary: string;
+}

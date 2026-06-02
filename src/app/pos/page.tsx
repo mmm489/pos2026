@@ -10,6 +10,7 @@ import PinLogin from "@/components/pos/PinLogin";
 import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
+import ParkedTicketsModal from "@/components/pos/ParkedTicketsModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import {
   buildBaseLineNote,
@@ -21,16 +22,19 @@ import {
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
 import { publishCustomerDisplaySnapshot } from "@/lib/customer-display";
+import type { ParkedTicket } from "@/types/pos";
 
 type CartAction =
   | { type: "ADD"; product: Product; price?: number; note?: string | null; merge?: boolean; lineId?: string }
   | { type: "UPDATE_QTY"; lineId: string; delta: number }
   | { type: "REMOVE"; lineId: string }
   | { type: "SET_NOTE"; lineId: string; note: string | null }
+  | { type: "RESTORE"; items: CartItem[] }
   | { type: "NORMALIZE" }
   | { type: "CLEAR" };
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
+const PARKED_TICKETS_STORAGE_KEY = "hicream_parked_tickets_v1";
 
 // Categories whose name contains any of these keywords are treated as
 // "modifier" categories — their products appear in the long-press popup
@@ -186,6 +190,8 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
           ? { ...i, notes: action.note }
           : i
       ));
+    case "RESTORE":
+      return normalizeCartModifierPrices(action.items.map((item) => ({ ...item })));
     case "NORMALIZE":
       return normalizeCartModifierPrices(state);
     case "CLEAR":
@@ -198,6 +204,72 @@ function makeCartLineId(productId: number) {
     return crypto.randomUUID();
   }
   return `${productId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function makeLocalId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `parked-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function localBusinessDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function cartTotal(items: CartItem[]) {
+  return Math.round(items.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100;
+}
+
+function cartItemCount(items: CartItem[]) {
+  return items.reduce((sum, item) => sum + item.qty, 0);
+}
+
+function summarizeCart(items: CartItem[]) {
+  const grouped = groupItemsWithModifiers(
+    items,
+    (item) => item.name,
+    (item) => item.notes
+  );
+  const names = grouped.slice(0, 3).map(({ base }) => `${base.qty}x ${base.name}`);
+  const remaining = grouped.length - names.length;
+  return remaining > 0 ? `${names.join(", ")} +${remaining} mes` : names.join(", ");
+}
+
+function buildParkedTicket(items: CartItem[], employee: Employee | null): ParkedTicket {
+  const now = new Date();
+  return {
+    id: makeLocalId(),
+    business_date: localBusinessDate(now),
+    created_at: now.toISOString(),
+    employee_id: employee?.id ?? null,
+    employee_name: employee?.name ?? null,
+    items: items.map((item) => ({ ...item })),
+    total: cartTotal(items),
+    item_count: cartItemCount(items),
+    summary: summarizeCart(items) || "Comanda aparcada",
+  };
+}
+
+function readParkedTickets() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(PARKED_TICKETS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as ParkedTicket[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((ticket) => Array.isArray(ticket.items) && ticket.items.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function writeParkedTickets(tickets: ParkedTicket[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PARKED_TICKETS_STORAGE_KEY, JSON.stringify(tickets));
 }
 
 interface Employee {
@@ -216,8 +288,11 @@ export default function PosPage() {
   const [showCashClosing, setShowCashClosing] = useState(false);
   const [showCashlogy, setShowCashlogy] = useState(false);
   const [showSupplierPayments, setShowSupplierPayments] = useState(false);
+  const [showParkedTickets, setShowParkedTickets] = useState(false);
   const [showRecentOrders, setShowRecentOrders] = useState(false);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [parkedTickets, setParkedTickets] = useState<ParkedTicket[]>([]);
+  const [recoveringTicket, setRecoveringTicket] = useState<ParkedTicket | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
@@ -419,6 +494,66 @@ export default function PosPage() {
     setCancelReason("client");
   }, [cancellingId, cancelReason, employee]);
 
+  const saveParkedTickets = useCallback((tickets: ParkedTicket[]) => {
+    const today = localBusinessDate();
+    const todayTickets = tickets.filter((ticket) => ticket.business_date === today);
+    setParkedTickets(todayTickets);
+    writeParkedTickets(todayTickets);
+  }, []);
+
+  const handleParkCurrentTicket = useCallback(() => {
+    if (cart.length === 0) return;
+    const ticket = buildParkedTicket(cart, employee);
+    saveParkedTickets([ticket, ...parkedTickets]);
+    dispatch({ type: "CLEAR" });
+    setShowCheckout(false);
+    setModifiersFor(null);
+  }, [cart, employee, parkedTickets, saveParkedTickets]);
+
+  const restoreParkedTicket = useCallback((ticket: ParkedTicket) => {
+    dispatch({ type: "RESTORE", items: ticket.items });
+    saveParkedTickets(parkedTickets.filter((candidate) => candidate.id !== ticket.id));
+    setShowParkedTickets(false);
+    setRecoveringTicket(null);
+    setShowCheckout(false);
+    setModifiersFor(null);
+  }, [parkedTickets, saveParkedTickets]);
+
+  const handleRecoverParkedTicket = useCallback((ticket: ParkedTicket) => {
+    if (cart.length > 0) {
+      setRecoveringTicket(ticket);
+      return;
+    }
+    restoreParkedTicket(ticket);
+  }, [cart.length, restoreParkedTicket]);
+
+  const handleParkCurrentAndRecover = useCallback(() => {
+    if (!recoveringTicket) return;
+    const currentTicket = cart.length > 0 ? buildParkedTicket(cart, employee) : null;
+    const remaining = parkedTickets.filter((ticket) => ticket.id !== recoveringTicket.id);
+    saveParkedTickets(currentTicket ? [currentTicket, ...remaining] : remaining);
+    dispatch({ type: "RESTORE", items: recoveringTicket.items });
+    setShowParkedTickets(false);
+    setRecoveringTicket(null);
+    setShowCheckout(false);
+    setModifiersFor(null);
+  }, [cart, employee, parkedTickets, recoveringTicket, saveParkedTickets]);
+
+  const handleDiscardCurrentAndRecover = useCallback(() => {
+    if (!recoveringTicket) return;
+    dispatch({ type: "RESTORE", items: recoveringTicket.items });
+    saveParkedTickets(parkedTickets.filter((ticket) => ticket.id !== recoveringTicket.id));
+    setShowParkedTickets(false);
+    setRecoveringTicket(null);
+    setShowCheckout(false);
+    setModifiersFor(null);
+  }, [parkedTickets, recoveringTicket, saveParkedTickets]);
+
+  const handleDeleteParkedTicket = useCallback((ticketId: string) => {
+    saveParkedTickets(parkedTickets.filter((ticket) => ticket.id !== ticketId));
+    setRecoveringTicket((current) => (current?.id === ticketId ? null : current));
+  }, [parkedTickets, saveParkedTickets]);
+
   // Restore session
   useEffect(() => {
     const saved = localStorage.getItem("pos_employee");
@@ -489,6 +624,14 @@ export default function PosPage() {
     };
   }, []);
 
+  // Restore parked tickets for today and discard old ones.
+  useEffect(() => {
+    const today = localBusinessDate();
+    const todayTickets = readParkedTickets().filter((ticket) => ticket.business_date === today);
+    setParkedTickets(todayTickets);
+    writeParkedTickets(todayTickets);
+  }, []);
+
   const handleLogin = (emp: Employee) => {
     setEmployee(emp);
     localStorage.setItem("pos_employee", JSON.stringify(emp));
@@ -507,6 +650,7 @@ export default function PosPage() {
   };
 
   const handleCashClosingComplete = () => {
+    saveParkedTickets([]);
     setShowCashClosing(false);
     handleLogout();
   };
@@ -636,7 +780,10 @@ export default function PosPage() {
             onSetNote={(lineId, note) =>
               dispatch({ type: "SET_NOTE", lineId, note })
             }
+            onPark={handleParkCurrentTicket}
+            onOpenParkedTickets={() => setShowParkedTickets(true)}
             onCheckout={() => setShowCheckout(true)}
+            parkedCount={parkedTickets.length}
           />
         </div>
       </div>
@@ -707,6 +854,59 @@ export default function PosPage() {
           employeeId={employee.id}
           onClose={() => setShowSupplierPayments(false)}
         />
+      )}
+
+      {/* Parked tickets modal */}
+      {showParkedTickets && (
+        <ParkedTicketsModal
+          tickets={parkedTickets}
+          currentCartHasItems={cart.length > 0}
+          onRecover={handleRecoverParkedTicket}
+          onDelete={handleDeleteParkedTicket}
+          onClose={() => {
+            setShowParkedTickets(false);
+            setRecoveringTicket(null);
+          }}
+        />
+      )}
+
+      {/* Recover parked ticket confirmation */}
+      {recoveringTicket && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#10131b]/72 p-3">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-6 text-[#241f1c] shadow-2xl">
+            <h3 className="mb-2 text-2xl font-medium text-[#241f1c]">
+              Recuperar ticket aparcat?
+            </h3>
+            <p className="mb-5 text-sm font-medium leading-6 text-[#6f665c]">
+              Ara tens una comanda oberta. Pots aparcar-la abans de recuperar el ticket de les{" "}
+              {new Date(recoveringTicket.created_at).toLocaleTimeString("ca-ES", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              , descartar-la o tornar enrere.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={handleParkCurrentAndRecover}
+                className="w-full rounded-xl bg-[#2e9e5b] px-4 py-3 text-base font-semibold text-white active:bg-[#27874e]"
+              >
+                Aparcar actual i recuperar
+              </button>
+              <button
+                onClick={handleDiscardCurrentAndRecover}
+                className="w-full rounded-xl bg-[#fdeceb] px-4 py-3 text-base font-semibold text-[#c4423a] active:bg-[#fad6d3]"
+              >
+                Descartar actual i recuperar
+              </button>
+              <button
+                onClick={() => setRecoveringTicket(null)}
+                className="w-full rounded-xl border border-[#d4cbbb] bg-white px-4 py-3 text-base font-medium text-[#6f665c] active:bg-[#f1eee7]"
+              >
+                Cancel.lar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Recent orders modal */}
