@@ -171,6 +171,7 @@ const TABLES = [
       "expected_cash_after_supplier_payments",
       "supplier_payments_snapshot",
     ],
+    jsonColumns: ["vat_breakdown", "business_snapshot", "supplier_payments_snapshot"],
     orderBy: "id",
   },
   {
@@ -188,6 +189,7 @@ const TABLES = [
       "dispensed_at",
       "synced",
     ],
+    jsonColumns: ["cashlogy_result"],
     orderBy: "id",
     optional: true,
   },
@@ -209,6 +211,7 @@ const TABLES = [
       "duration_ms",
       "created_at",
     ],
+    jsonColumns: ["request", "response"],
     orderBy: "id",
     optional: true,
   },
@@ -685,11 +688,19 @@ async function upsertBatch(cloud, table, rows) {
   if (!rows.length) return 0;
 
   const columns = table.columns;
+  const jsonColumns = new Set(table.jsonColumns || []);
   const keyColumns = table.keyColumns || ["id"];
   const values = [];
   const rowPlaceholders = rows.map((row, rowIndex) => {
     const offset = rowIndex * columns.length;
-    for (const column of columns) values.push(row[column]);
+    for (const column of columns) {
+      const value = row[column];
+      if (jsonColumns.has(column) && value != null && typeof value !== "string") {
+        values.push(JSON.stringify(value));
+      } else {
+        values.push(value);
+      }
+    }
     return `(${placeholders(columns, offset)})`;
   });
 
@@ -709,12 +720,17 @@ async function syncTable(local, cloud, table) {
     return 0;
   }
 
-  const rows = await fetchRows(local, table);
-  for (let index = 0; index < rows.length; index += BATCH_SIZE) {
-    await upsertBatch(cloud, table, rows.slice(index, index + BATCH_SIZE));
+  try {
+    const rows = await fetchRows(local, table);
+    for (let index = 0; index < rows.length; index += BATCH_SIZE) {
+      await upsertBatch(cloud, table, rows.slice(index, index + BATCH_SIZE));
+    }
+    log(`${table.name}: ${rows.length} filas sincronizadas`);
+    return rows.length;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${table.name}: ${message}`);
   }
-  log(`${table.name}: ${rows.length} filas sincronizadas`);
-  return rows.length;
 }
 
 async function writeSyncStatus(cloud, ok, message, counts = {}) {
