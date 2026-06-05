@@ -6,10 +6,10 @@ const DEFAULT_BUSINESS = {
   name: "APOLO HOLDINGS 2020, S.L.U.",
   trade_name: "Hi Cream",
   nif: "B55775068",
-  address: "Calle Ejemplo 1",
+  address: "Passeig de Jaume I, 10, Local 01",
   city: "Salou",
   postal_code: "43840",
-  province: "Tarragona",
+  province: "Tarragona, España",
   phone: "640990145",
 };
 

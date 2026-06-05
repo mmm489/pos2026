@@ -204,10 +204,10 @@ VALUES (
   'APOLO HOLDINGS 2020, S.L.U.',
   'Hi Cream',
   'B55775068',
-  'Calle Ejemplo 1',
+  'Passeig de Jaume I, 10, Local 01',
   'Salou',
   '43840',
-  'Tarragona',
+  'Tarragona, España',
   '640990145',
   'S'
 )
