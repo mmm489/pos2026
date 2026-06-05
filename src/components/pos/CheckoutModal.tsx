@@ -233,13 +233,13 @@ export default function CheckoutModal({
       }
 
       if (!order) {
-        order = createDemoOrder("manual");
+        order = createDemoOrder("card");
         broadcastNewOrder(order);
       }
 
       setOrderNumber(order.order_number);
 
-      setPendingTicket(buildTicketData(order, "Manual"));
+      setPendingTicket(buildTicketData(order, "Targeta"));
       setTicketPrinted(false);
       setTicketError("");
 

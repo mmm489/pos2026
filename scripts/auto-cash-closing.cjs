@@ -92,13 +92,13 @@ async function computeSummary(client, since) {
   const totalsRes = await client.query(
     `SELECT
        COALESCE(SUM(CASE WHEN o.payment_method = 'cash' THEN o.total END), 0)::float AS total_cash,
-       COALESCE(SUM(CASE WHEN o.payment_method = 'card' THEN o.total END), 0)::float AS total_card,
+       COALESCE(SUM(CASE WHEN o.payment_method IN ('card', 'manual') THEN o.total END), 0)::float AS total_card,
        COALESCE(SUM(o.total), 0)::float AS total_sales,
        COALESCE(SUM(o.total_base), 0)::float AS total_base,
        COALESCE(SUM(o.total_vat), 0)::float AS total_vat,
        COUNT(*)::int AS ticket_count,
        COUNT(*) FILTER (WHERE o.payment_method = 'cash')::int AS cash_count,
-       COUNT(*) FILTER (WHERE o.payment_method = 'card')::int AS card_count
+       COUNT(*) FILTER (WHERE o.payment_method IN ('card', 'manual'))::int AS card_count
      FROM pos.orders o
      WHERE ${activeWhere}`,
     [since]

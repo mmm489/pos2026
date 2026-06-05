@@ -162,6 +162,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const storedPaymentMethod: "cash" | "card" =
+      payment_method === "cash" ? "cash" : "card";
     const empId = employee_id || null;
     const tblNum = table_number || null;
     const parsedParkedOrderId = Number(parked_order_id);
@@ -169,11 +171,11 @@ export async function POST(request: NextRequest) {
       ? parsedParkedOrderId
       : null;
     const isFinalizingParkedOrder = parkedOrderId !== null;
-    const cardRef = (payment_method === "card" && card_reference) ? String(card_reference).slice(0, 20) : null;
-    const cardAuth = (payment_method === "card" && card_authorization) ? String(card_authorization).slice(0, 20) : null;
+    const cardRef = (storedPaymentMethod === "card" && card_reference) ? String(card_reference).slice(0, 20) : null;
+    const cardAuth = (storedPaymentMethod === "card" && card_authorization) ? String(card_authorization).slice(0, 20) : null;
     // Receipt text from REDSYS DatosRecibo — kept verbatim, can be quite long
     // (multiple lines, multiple kB). Cap at 8 KB to avoid abuse.
-    const cardReceiptText = (payment_method === "card" && card_receipt_text)
+    const cardReceiptText = (storedPaymentMethod === "card" && card_receipt_text)
       ? String(card_receipt_text).slice(0, 8192)
       : null;
 
@@ -230,9 +232,10 @@ export async function POST(request: NextRequest) {
       const year = new Date().getFullYear();
       const invoiceNumber = `${invoice_series}-${year}/${String(invoice_num).padStart(6, "0")}`;
 
-      // All sales — including "manual" — start as "pending" so they go through
+      // All sales start as "pending" so they go through
       // the KDS pending → preparing → ready flow. The Z report counts pending
       // and ready orders alike, so analytics aren't affected.
+      // Manual external card charges are stored as "card" for closings/dashboard.
       const initialStatus = "pending";
       const initialCompletedAt = "NULL";
 
@@ -265,7 +268,7 @@ export async function POST(request: NextRequest) {
                card_receipt_text = $10
            WHERE id = $11
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
-          [invoiceNumber, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText, parkedOrderId]
+          [invoiceNumber, total, totalBase, totalVat, storedPaymentMethod, empId, tblNum, cardRef, cardAuth, cardReceiptText, parkedOrderId]
         );
         order = orderRes.rows[0];
         await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
@@ -274,7 +277,7 @@ export async function POST(request: NextRequest) {
           `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text, completed_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, ${initialCompletedAt})
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
-          [orderNumber, invoiceNumber, initialStatus, total, totalBase, totalVat, payment_method, empId, tblNum, cardRef, cardAuth, cardReceiptText]
+          [orderNumber, invoiceNumber, initialStatus, total, totalBase, totalVat, storedPaymentMethod, empId, tblNum, cardRef, cardAuth, cardReceiptText]
         );
         order = orderRes.rows[0];
       }

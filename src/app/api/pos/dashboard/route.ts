@@ -46,7 +46,7 @@ export async function GET() {
       sql`
         SELECT
           COALESCE(SUM(CASE WHEN payment_method = 'cash' THEN total END), 0)::float AS efectivo,
-          COALESCE(SUM(CASE WHEN payment_method = 'card' THEN total END), 0)::float AS tarjeta
+          COALESCE(SUM(CASE WHEN payment_method IN ('card', 'manual') THEN total END), 0)::float AS tarjeta
         FROM pos.orders
         WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled') AND payment_method <> 'parked'
       `,
