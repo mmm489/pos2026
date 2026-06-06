@@ -876,28 +876,28 @@ export default function PosPage() {
   return (
     <div className="flex h-screen flex-col bg-[#f5f4ef] text-[#241f1c]">
       {/* Top header */}
-      <header className="flex h-[74px] flex-shrink-0 items-center gap-3 border-b border-[#ded6c8] bg-[#faf9f6] px-3 py-1">
-        <div className="flex min-w-[170px] shrink-0 items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#d4cbbb] bg-white text-xs font-medium text-[#241f1c]">
+      <header className="flex h-[64px] flex-shrink-0 items-center gap-1.5 border-b border-[#ded6c8] bg-[#faf9f6] px-2 py-1">
+        <div className="flex w-[138px] shrink-0 items-center gap-1.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d4cbbb] bg-white text-[11px] font-medium text-[#241f1c]">
             HC
           </div>
           <div className="min-w-0">
-            <h1 className="text-[30px] font-medium leading-[32px] tracking-[-0.01em] text-[#241f1c]">Hi Cream</h1>
-            <p className="truncate text-[10px] font-normal leading-[13px] text-[#6f665c]">
+            <h1 className="truncate text-[26px] font-medium leading-[27px] text-[#241f1c]">Hi Cream</h1>
+            <p className="truncate text-[9px] font-normal leading-[11px] text-[#6f665c]">
               {employee.name} - {employee.role === "admin" ? "Admin" : "Empleado"}
             </p>
           </div>
         </div>
-        <div className="pos-menu-scroll flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1.5 overflow-x-auto py-1">
+        <div className="pos-menu-scroll flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1 overflow-x-auto py-1">
           <button
             onClick={() => setShowCashlogy(true)}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Cashlogy
           </button>
           <button
             onClick={() => setShowSupplierPayments(true)}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >
             Pagaments
           </button>
@@ -906,7 +906,7 @@ export default function PosPage() {
               loadRecentOrders();
               setShowRecentOrders(true);
             }}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl bg-[#2e9e5b] px-3 py-2 text-[14px] font-medium text-white active:bg-[#27874e]"
+            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg bg-[#2e9e5b] px-2.5 py-2 text-[13px] font-medium text-white active:bg-[#27874e]"
           >
             Comandes
           </button>
@@ -914,25 +914,25 @@ export default function PosPage() {
             <>
               <a
                 href="/admin/products"
-                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+                className="flex min-h-[38px] shrink-0 items-center whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Productes
               </a>
               <a
                 href="/admin/employees"
-                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+                className="flex min-h-[38px] shrink-0 items-center whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Empleats
               </a>
               <a
                 href="/admin/closings"
-                className="flex min-h-[42px] shrink-0 items-center whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+                className="flex min-h-[38px] shrink-0 items-center whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Tancaments
               </a>
               <button
                 onClick={() => setShowCashClosing(true)}
-                className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-[14px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+                className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >
                 Tancar caixa
               </button>
@@ -941,21 +941,21 @@ export default function PosPage() {
           <button
             onClick={handleShutdown}
             disabled={shuttingDown}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl border border-[#e2c0b8] bg-[#fff4f1] px-3 py-2 text-[14px] font-medium text-[#a33a2c] active:bg-[#f7dfd8] disabled:opacity-60"
+            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg border border-[#e2c0b8] bg-[#fff4f1] px-2 py-2 text-[13px] font-medium text-[#a33a2c] active:bg-[#f7dfd8] disabled:opacity-60"
           >
-            {shuttingDown ? "Tancant..." : "Sortir POS"}
+            {shuttingDown ? "Tancant..." : "Sortir"}
           </button>
           <button
             onClick={() => setShowTimeClock(true)}
-            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl border border-[#d6c8ad] bg-[#fff8e8] px-3 py-2 text-[14px] font-semibold text-[#7b5b12] active:bg-[#f3e6c7]"
+            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg border border-[#d6c8ad] bg-[#fff8e8] px-2 py-2 text-[13px] font-semibold text-[#7b5b12] active:bg-[#f3e6c7]"
           >
             Fichar
           </button>
           <button
             onClick={handleLogout}
-            className="ml-1 min-h-[50px] shrink-0 whitespace-nowrap rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-[14px] font-medium text-[#241f1c] active:bg-[#f1eee7]"
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-lg border border-[#d4cbbb] bg-white px-2.5 py-2 text-[13px] font-medium text-[#241f1c] active:bg-[#f1eee7]"
           >
-            Canviar empleat
+            Canviar
           </button>
         </div>
       </header>
