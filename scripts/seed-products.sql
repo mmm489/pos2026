@@ -179,7 +179,9 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('GRANITZAT FRAMBUESA',  10, 4.90, 10, 2),
   ('GRANITZAT LLIMONA',    10, 4.90, 10, 3),
   ('GRANITZAT MADUIXA',    10, 4.90, 10, 4),
-  ('GRANITZAT MANGO',      10, 4.90, 10, 5);
+  ('GRANITZAT MANGO',      10, 4.90, 10, 5),
+  ('GRANISSAT MARACUIA',   10, 4.90, 10, 9),
+  ('GRANITZAT CAFE',       10, 4.90, 10, 10);
 
 -- HI POP (category 11)
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES

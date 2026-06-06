@@ -122,6 +122,8 @@ export const ITEM_COLORS: Record<string, string> = {
   "Pot L": "#E06AA0",
   Tupper: "#86C9A6",
   "Granitzat coco": "#EDE7DA",
+  "Granitzat cafe": "#7B5436",
+  "Granissat cafe": "#7B5436",
   "Granitzat frambuesa": "#D9577A",
   "Granitzat llimona": "#EBD24A",
   "Granitzat maduixa": "#E36A86",
