@@ -220,7 +220,7 @@ DROP CONSTRAINT IF EXISTS catalog_change_queue_entity_type_check;
 
 ALTER TABLE pos.catalog_change_queue
 ADD CONSTRAINT catalog_change_queue_entity_type_check
-CHECK (entity_type IN ('category', 'product', 'modifier_group'));
+CHECK (entity_type IN ('category', 'product', 'modifier_group', 'employee'));
 
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_created ON pos.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_status ON pos.orders(status);

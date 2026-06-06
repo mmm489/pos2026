@@ -684,10 +684,87 @@ async function applyModifierGroupChange(local, change) {
   throw new Error(`Accion de pagina de toppings no soportada: ${change.action}`);
 }
 
+function cleanEmployeePin(value, required = false) {
+  if (value == null || value === "") {
+    if (required) throw new Error("Empleado sin PIN");
+    return null;
+  }
+  const pin = String(value).trim();
+  if (!/^\d{4}$/.test(pin)) throw new Error("El PIN del empleado debe tener 4 numeros");
+  return pin;
+}
+
+async function assertNotLastActiveAdmin(local, employeeId) {
+  const result = await local.query(
+    `SELECT role, active, (SELECT COUNT(*) FROM pos.employees WHERE role = 'admin' AND active = TRUE) AS active_admins
+     FROM pos.employees
+     WHERE id = $1`,
+    [employeeId],
+  );
+  if (!result.rowCount) throw new Error(`Empleado ${employeeId} no encontrado`);
+  const row = result.rows[0];
+  if (row.role === "admin" && row.active === true && Number(row.active_admins) <= 1) {
+    throw new Error("No se puede quitar el ultimo administrador activo");
+  }
+}
+
+async function applyEmployeeChange(local, change) {
+  const payload = asPayload(change.payload);
+
+  if (change.action === "deactivate") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Empleado sin id");
+    await assertNotLastActiveAdmin(local, id);
+    const result = await local.query(`UPDATE pos.employees SET active = FALSE WHERE id = $1 RETURNING id`, [id]);
+    if (!result.rowCount) throw new Error(`Empleado ${id} no encontrado`);
+    return id;
+  }
+
+  const name = cleanText(payload.name);
+  const role = payload.role === "admin" ? "admin" : "employee";
+  if (!name) throw new Error("Empleado sin nombre");
+
+  if (change.action === "create") {
+    const pin = cleanEmployeePin(payload.pin, true);
+    const result = await local.query(
+      `INSERT INTO pos.employees (name, pin, role, active)
+       VALUES ($1, $2, $3, TRUE)
+       RETURNING id`,
+      [name, pin, role],
+    );
+    return Number(result.rows[0].id);
+  }
+
+  if (change.action === "update") {
+    const id = Number(change.entity_id);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Empleado sin id");
+    const current = await local.query(`SELECT role, active FROM pos.employees WHERE id = $1`, [id]);
+    if (!current.rowCount) throw new Error(`Empleado ${id} no encontrado`);
+    if (current.rows[0].role === "admin" && role !== "admin") {
+      await assertNotLastActiveAdmin(local, id);
+    }
+    const pin = cleanEmployeePin(payload.pin, false);
+    const result = await local.query(
+      `UPDATE pos.employees
+       SET name = $1,
+           role = $2,
+           pin = COALESCE($3, pin)
+       WHERE id = $4
+       RETURNING id`,
+      [name, role, pin, id],
+    );
+    if (!result.rowCount) throw new Error(`Empleado ${id} no encontrado`);
+    return id;
+  }
+
+  throw new Error(`Accion de empleado no soportada: ${change.action}`);
+}
+
 async function applyCatalogChange(local, change) {
   if (change.entity_type === "category") return applyCategoryChange(local, change);
   if (change.entity_type === "product") return applyProductChange(local, change);
   if (change.entity_type === "modifier_group") return applyModifierGroupChange(local, change);
+  if (change.entity_type === "employee") return applyEmployeeChange(local, change);
   throw new Error(`Entidad no soportada: ${change.entity_type}`);
 }
 
