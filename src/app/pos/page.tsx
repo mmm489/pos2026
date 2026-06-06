@@ -7,7 +7,6 @@ import ModifiersModal from "@/components/pos/ModifiersModal";
 import Cart from "@/components/pos/Cart";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import PinLogin from "@/components/pos/PinLogin";
-import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
 import ParkedTicketsModal from "@/components/pos/ParkedTicketsModal";
@@ -295,7 +294,6 @@ export default function PosPage() {
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [cart, dispatch] = useReducer(cartReducer, []);
   const [showCheckout, setShowCheckout] = useState(false);
-  const [showCashClosing, setShowCashClosing] = useState(false);
   const [showCashlogy, setShowCashlogy] = useState(false);
   const [showSupplierPayments, setShowSupplierPayments] = useState(false);
   const [showTimeClock, setShowTimeClock] = useState(false);
@@ -852,12 +850,6 @@ export default function PosPage() {
     setShowCheckout(false);
   };
 
-  const handleCashClosingComplete = () => {
-    saveParkedTickets([]);
-    setShowCashClosing(false);
-    handleLogout();
-  };
-
   // PIN screen
   if (!employee) {
     return <PinLogin onLogin={handleLogin} />;
@@ -918,18 +910,6 @@ export default function PosPage() {
               >
                 Productes
               </a>
-              <a
-                href="/admin/closings"
-                className="flex min-h-[38px] shrink-0 items-center whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
-              >
-                Tancaments
-              </a>
-              <button
-                onClick={() => setShowCashClosing(true)}
-                className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
-              >
-                Tancar caixa
-              </button>
             </>
           )}
           <button
@@ -1042,15 +1022,6 @@ export default function PosPage() {
             }
             setModifiersFor(null);
           }}
-        />
-      )}
-
-      {/* Cash closing modal */}
-      {showCashClosing && (
-        <CashClosingModal
-          employeeId={employee.id}
-          onClose={() => setShowCashClosing(false)}
-          onComplete={handleCashClosingComplete}
         />
       )}
 

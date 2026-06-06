@@ -124,7 +124,7 @@ export default function AdminClosingsPage() {
 
         {!hasTodayZ && month === currentMonth() && (
           <div className="mb-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-            <strong>⚠ Avui encara no hi ha tancament Z.</strong> Fes-lo des del POS amb el botó &quot;Tancar caixa&quot; al final del dia.
+            <strong>Avui encara no hi ha tancament Z.</strong> El tancament es fara automaticament cada dia.
           </div>
         )}
 
