@@ -15,8 +15,9 @@ export async function POST(request: NextRequest) {
     }
 
     const sql = getDb();
+    await ensureEmployeeAccessSchema(sql);
     const [employee] = await sql`
-      SELECT id, name, role
+      SELECT id, name, role, can_access_cashlogy, can_access_supplier_payments, can_access_products
       FROM pos.employees
       WHERE pin = ${pin} AND active = true
     `;
@@ -36,4 +37,26 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+async function ensureEmployeeAccessSchema(sql: ReturnType<typeof getDb>) {
+  await sql`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_access_cashlogy BOOLEAN NOT NULL DEFAULT true
+  `;
+  await sql`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_access_supplier_payments BOOLEAN NOT NULL DEFAULT true
+  `;
+  await sql`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_access_products BOOLEAN NOT NULL DEFAULT false
+  `;
+  await sql`
+    UPDATE pos.employees
+    SET can_access_products = true,
+        can_access_cashlogy = true,
+        can_access_supplier_payments = true
+    WHERE role = 'admin'
+  `;
 }

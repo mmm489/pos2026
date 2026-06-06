@@ -53,7 +53,15 @@ const TABLES = [
   },
   {
     name: "employees",
-    columns: ["id", "name", "role", "active"],
+    columns: [
+      "id",
+      "name",
+      "role",
+      "active",
+      "can_access_cashlogy",
+      "can_access_supplier_payments",
+      "can_access_products",
+    ],
     orderBy: "id",
   },
   {
@@ -330,6 +338,28 @@ async function ensureCloudSchema(cloud) {
   for (const statement of splitSqlStatements(schemaSql)) {
     await cloud.query(statement);
   }
+}
+
+async function ensureEmployeeAccessSchema(db) {
+  await db.query(`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_access_cashlogy BOOLEAN NOT NULL DEFAULT true
+  `);
+  await db.query(`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_access_supplier_payments BOOLEAN NOT NULL DEFAULT true
+  `);
+  await db.query(`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_access_products BOOLEAN NOT NULL DEFAULT false
+  `);
+  await db.query(`
+    UPDATE pos.employees
+    SET can_access_products = true,
+        can_access_cashlogy = true,
+        can_access_supplier_payments = true
+    WHERE role = 'admin'
+  `);
 }
 
 async function ensureLocalModifierSchema(local) {
@@ -694,6 +724,20 @@ function cleanEmployeePin(value, required = false) {
   return pin;
 }
 
+function employeeAccessFromPayload(payload, role) {
+  const isAdmin = role === "admin";
+  return {
+    canAccessCashlogy:
+      payload.can_access_cashlogy == null ? isAdmin : Boolean(payload.can_access_cashlogy),
+    canAccessSupplierPayments:
+      payload.can_access_supplier_payments == null
+        ? isAdmin
+        : Boolean(payload.can_access_supplier_payments),
+    canAccessProducts:
+      payload.can_access_products == null ? isAdmin : Boolean(payload.can_access_products),
+  };
+}
+
 async function assertNotLastActiveAdmin(local, employeeId) {
   const result = await local.query(
     `SELECT role, active, (SELECT COUNT(*) FROM pos.employees WHERE role = 'admin' AND active = TRUE) AS active_admins
@@ -722,15 +766,26 @@ async function applyEmployeeChange(local, change) {
 
   const name = cleanText(payload.name);
   const role = payload.role === "admin" ? "admin" : "employee";
+  const access = employeeAccessFromPayload(payload, role);
   if (!name) throw new Error("Empleado sin nombre");
 
   if (change.action === "create") {
     const pin = cleanEmployeePin(payload.pin, true);
     const result = await local.query(
-      `INSERT INTO pos.employees (name, pin, role, active)
-       VALUES ($1, $2, $3, TRUE)
+      `INSERT INTO pos.employees (
+         name, pin, role, active,
+         can_access_cashlogy, can_access_supplier_payments, can_access_products
+       )
+       VALUES ($1, $2, $3, TRUE, $4, $5, $6)
        RETURNING id`,
-      [name, pin, role],
+      [
+        name,
+        pin,
+        role,
+        access.canAccessCashlogy,
+        access.canAccessSupplierPayments,
+        access.canAccessProducts,
+      ],
     );
     return Number(result.rows[0].id);
   }
@@ -748,10 +803,21 @@ async function applyEmployeeChange(local, change) {
       `UPDATE pos.employees
        SET name = $1,
            role = $2,
-           pin = COALESCE($3, pin)
-       WHERE id = $4
+           pin = COALESCE($3, pin),
+           can_access_cashlogy = $4,
+           can_access_supplier_payments = $5,
+           can_access_products = $6
+       WHERE id = $7
        RETURNING id`,
-      [name, role, pin, id],
+      [
+        name,
+        role,
+        pin,
+        access.canAccessCashlogy,
+        access.canAccessSupplierPayments,
+        access.canAccessProducts,
+        id,
+      ],
     );
     if (!result.rowCount) throw new Error(`Empleado ${id} no encontrado`);
     return id;
@@ -935,6 +1001,8 @@ async function runSync() {
     await ensureLocalSupplierPaymentSchema(local);
     await ensureLocalTimeClockSchema(local);
     await ensureCloudSchema(cloud);
+    await ensureEmployeeAccessSchema(local);
+    await ensureEmployeeAccessSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
     counts.cloud_parked_orders_deleted = await deleteCloudParkedOrders(cloud);
 

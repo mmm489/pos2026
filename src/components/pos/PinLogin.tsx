@@ -4,7 +4,14 @@ import { useState } from "react";
 import DeviceStatusBar from "./DeviceStatusBar";
 
 interface PinLoginProps {
-  onLogin: (employee: { id: number; name: string; role: string }) => void;
+  onLogin: (employee: {
+    id: number;
+    name: string;
+    role: string;
+    can_access_cashlogy?: boolean;
+    can_access_supplier_payments?: boolean;
+    can_access_products?: boolean;
+  }) => void;
 }
 
 export default function PinLogin({ onLogin }: PinLoginProps) {
@@ -30,10 +37,17 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
     setError("");
   };
 
-  const demoPins: Record<string, { id: number; name: string; role: string }> = {
-    "0000": { id: 1, name: "Admin (Demo)", role: "admin" },
-    "1234": { id: 2, name: "María (Demo)", role: "employee" },
-    "5678": { id: 3, name: "Carlos (Demo)", role: "employee" },
+  const demoPins: Record<string, {
+    id: number;
+    name: string;
+    role: string;
+    can_access_cashlogy?: boolean;
+    can_access_supplier_payments?: boolean;
+    can_access_products?: boolean;
+  }> = {
+    "0000": { id: 1, name: "Admin (Demo)", role: "admin", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: true },
+    "1234": { id: 2, name: "María (Demo)", role: "employee", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: false },
+    "5678": { id: 3, name: "Carlos (Demo)", role: "employee", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: false },
   };
 
   const submitPin = async (pinValue: string) => {

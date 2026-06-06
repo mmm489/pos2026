@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS pos.employees (
   name VARCHAR(100) NOT NULL,
   pin VARCHAR(4) NOT NULL UNIQUE,
   role VARCHAR(20) NOT NULL DEFAULT 'employee' CHECK (role IN ('admin', 'employee')),
-  active BOOLEAN NOT NULL DEFAULT true
+  active BOOLEAN NOT NULL DEFAULT true,
+  can_access_cashlogy BOOLEAN NOT NULL DEFAULT true,
+  can_access_supplier_payments BOOLEAN NOT NULL DEFAULT true,
+  can_access_products BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Time clock / labor record keeping
@@ -232,6 +235,12 @@ INSERT INTO pos.employees (name, pin, role) VALUES
   ('María', '1234', 'employee'),
   ('Carlos', '5678', 'employee')
 ON CONFLICT DO NOTHING;
+
+UPDATE pos.employees
+SET can_access_products = true,
+    can_access_cashlogy = true,
+    can_access_supplier_payments = true
+WHERE role = 'admin';
 
 -- Business info (EDITAR CON DATOS REALES)
 INSERT INTO pos.business (name, trade_name, nif, address, city, postal_code, province, phone, invoice_series)

@@ -88,6 +88,9 @@ export interface Employee {
   pin: string;
   role: "admin" | "employee";
   active: boolean;
+  can_access_cashlogy?: boolean;
+  can_access_supplier_payments?: boolean;
+  can_access_products?: boolean;
 }
 
 export interface KdsEvent {

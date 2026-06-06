@@ -285,6 +285,9 @@ interface Employee {
   id: number;
   name: string;
   role: string;
+  can_access_cashlogy?: boolean;
+  can_access_supplier_payments?: boolean;
+  can_access_products?: boolean;
 }
 
 export default function PosPage() {
@@ -865,6 +868,11 @@ export default function PosPage() {
     );
   }
 
+  const canAccessCashlogy = employee.role === "admin" || employee.can_access_cashlogy !== false;
+  const canAccessSupplierPayments =
+    employee.role === "admin" || employee.can_access_supplier_payments !== false;
+  const canAccessProducts = employee.role === "admin" || employee.can_access_products === true;
+
   return (
     <div className="flex h-screen flex-col bg-[#f5f4ef] text-[#241f1c]">
       {/* Top header */}
@@ -881,18 +889,22 @@ export default function PosPage() {
           </div>
         </div>
         <div className="pos-menu-scroll flex min-w-0 flex-1 flex-nowrap items-center justify-start gap-1 overflow-x-auto py-1">
-          <button
-            onClick={() => setShowCashlogy(true)}
-            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
-          >
-            Cashlogy
-          </button>
-          <button
-            onClick={() => setShowSupplierPayments(true)}
-            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
-          >
-            Pagaments
-          </button>
+          {canAccessCashlogy && (
+            <button
+              onClick={() => setShowCashlogy(true)}
+              className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+            >
+              Cashlogy
+            </button>
+          )}
+          {canAccessSupplierPayments && (
+            <button
+              onClick={() => setShowSupplierPayments(true)}
+              className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
+            >
+              Pagaments
+            </button>
+          )}
           <button
             onClick={() => {
               loadRecentOrders();
@@ -902,7 +914,7 @@ export default function PosPage() {
           >
             Comandes
           </button>
-          {employee.role === "admin" && (
+          {canAccessProducts && (
             <>
               <a
                 href="/admin/products"
