@@ -85,7 +85,10 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('NESTEA',                2, 2.95, 10, 19),
   ('FREE DAMM TORRADA',     2, 2.50, 10, 20),
   ('TONICA SWEPPES',        2, 2.95, 10, 21),
-  ('CASA HI CREAM',         2, 0.50, 10, 22);
+  ('CASA HI CREAM',         2, 0.50, 10, 22),
+  ('VOLL-DAMM',             2, 2.95, 10, 23),
+  ('HEINEKEN',              2, 2.95, 10, 24),
+  ('VILADRAU',              2, 3.00, 10, 25);
 
 -- BERLINES (category 3)
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
