@@ -919,12 +919,6 @@ export default function PosPage() {
                 Productes
               </a>
               <a
-                href="/admin/employees"
-                className="flex min-h-[38px] shrink-0 items-center whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
-              >
-                Empleats
-              </a>
-              <a
                 href="/admin/closings"
                 className="flex min-h-[38px] shrink-0 items-center whitespace-nowrap rounded-lg px-2 py-2 text-[13px] font-medium text-[#5f6878] active:bg-[#f1eee7]"
               >

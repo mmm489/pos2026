@@ -213,12 +213,6 @@ export default function AdminOrdersPage() {
             Productes
           </a>
           <a
-            href="/admin/employees"
-            className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
-          >
-            Empleats
-          </a>
-          <a
             href="/admin/closings"
             className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-sm font-medium text-[#5f6878] active:bg-[#f1eee7]"
           >

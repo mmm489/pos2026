@@ -285,12 +285,6 @@ export default function AdminProductsPage() {
             Comandes
           </a>
           <a
-            href="/admin/employees"
-            className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium transition-colors"
-          >
-            Empleats
-          </a>
-          <a
             href="/admin/closings"
             className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm font-medium transition-colors"
           >
