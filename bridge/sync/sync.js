@@ -194,6 +194,42 @@ const TABLES = [
     optional: true,
   },
   {
+    name: "time_clock_sessions",
+    columns: [
+      "id",
+      "employee_id",
+      "business_date",
+      "clock_in_at",
+      "clock_out_at",
+      "status",
+      "source",
+      "device_name",
+      "created_at",
+      "updated_at",
+      "synced",
+    ],
+    orderBy: "id",
+    optional: true,
+  },
+  {
+    name: "time_clock_audit",
+    columns: [
+      "id",
+      "session_id",
+      "employee_id",
+      "action",
+      "previous_data",
+      "new_data",
+      "reason",
+      "changed_by",
+      "created_at",
+      "synced",
+    ],
+    jsonColumns: ["previous_data", "new_data"],
+    orderBy: "id",
+    optional: true,
+  },
+  {
     name: "card_transactions",
     columns: [
       "id",
@@ -376,6 +412,64 @@ async function ensureLocalSupplierPaymentSchema(local) {
   await local.query(`
     ALTER TABLE pos.cash_closings
     ADD COLUMN IF NOT EXISTS supplier_payments_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+}
+
+async function ensureLocalTimeClockSchema(local) {
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.time_clock_sessions (
+      id SERIAL PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES pos.employees(id),
+      business_date DATE NOT NULL,
+      clock_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      clock_out_at TIMESTAMPTZ,
+      status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+      source VARCHAR(40) NOT NULL DEFAULT 'pos',
+      device_name TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      synced BOOLEAN NOT NULL DEFAULT false,
+      CHECK (clock_out_at IS NULL OR clock_out_at >= clock_in_at)
+    )
+  `);
+  await local.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_time_clock_one_open_per_employee
+    ON pos.time_clock_sessions(employee_id)
+    WHERE status = 'open'
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_time_clock_sessions_business_date
+    ON pos.time_clock_sessions(business_date DESC)
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_time_clock_sessions_employee
+    ON pos.time_clock_sessions(employee_id, business_date DESC)
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_time_clock_sessions_synced
+    ON pos.time_clock_sessions(synced)
+  `);
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.time_clock_audit (
+      id SERIAL PRIMARY KEY,
+      session_id INTEGER REFERENCES pos.time_clock_sessions(id) ON DELETE SET NULL,
+      employee_id INTEGER REFERENCES pos.employees(id),
+      action VARCHAR(40) NOT NULL,
+      previous_data JSONB,
+      new_data JSONB,
+      reason TEXT,
+      changed_by INTEGER REFERENCES pos.employees(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      synced BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_time_clock_audit_session
+    ON pos.time_clock_audit(session_id, created_at DESC)
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_time_clock_audit_synced
+    ON pos.time_clock_audit(synced)
   `);
 }
 
@@ -762,6 +856,7 @@ async function runSync() {
 
     await ensureLocalModifierSchema(local);
     await ensureLocalSupplierPaymentSchema(local);
+    await ensureLocalTimeClockSchema(local);
     await ensureCloudSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
     counts.cloud_parked_orders_deleted = await deleteCloudParkedOrders(cloud);

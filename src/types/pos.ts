@@ -177,3 +177,31 @@ export interface ParkedTicket {
   item_count: number;
   summary: string;
 }
+
+export interface TimeClockSession {
+  id: number;
+  employee_id: number;
+  employee_name?: string | null;
+  business_date: string;
+  clock_in_at: string;
+  clock_out_at: string | null;
+  status: "open" | "closed";
+  source: string;
+  device_name: string | null;
+  created_at: string;
+  updated_at: string;
+  synced?: boolean;
+}
+
+export interface TimeClockAudit {
+  id: number;
+  session_id: number | null;
+  employee_id: number | null;
+  action: string;
+  previous_data: Record<string, unknown> | null;
+  new_data: Record<string, unknown> | null;
+  reason: string | null;
+  changed_by: number | null;
+  created_at: string;
+  synced?: boolean;
+}

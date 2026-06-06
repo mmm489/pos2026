@@ -11,6 +11,7 @@ import CashClosingModal from "@/components/pos/CashClosingModal";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
 import ParkedTicketsModal from "@/components/pos/ParkedTicketsModal";
+import TimeClockModal from "@/components/pos/TimeClockModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import {
   buildBaseLineNote,
@@ -297,6 +298,7 @@ export default function PosPage() {
   const [showCashClosing, setShowCashClosing] = useState(false);
   const [showCashlogy, setShowCashlogy] = useState(false);
   const [showSupplierPayments, setShowSupplierPayments] = useState(false);
+  const [showTimeClock, setShowTimeClock] = useState(false);
   const [showParkedTickets, setShowParkedTickets] = useState(false);
   const [showRecentOrders, setShowRecentOrders] = useState(false);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
@@ -944,6 +946,12 @@ export default function PosPage() {
             {shuttingDown ? "Tancant..." : "Sortir POS"}
           </button>
           <button
+            onClick={() => setShowTimeClock(true)}
+            className="min-h-[42px] shrink-0 whitespace-nowrap rounded-xl border border-[#d6c8ad] bg-[#fff8e8] px-3 py-2 text-[14px] font-semibold text-[#7b5b12] active:bg-[#f3e6c7]"
+          >
+            Fichar
+          </button>
+          <button
             onClick={handleLogout}
             className="ml-1 min-h-[50px] shrink-0 whitespace-nowrap rounded-xl border border-[#d4cbbb] bg-white px-4 py-2 text-[14px] font-medium text-[#241f1c] active:bg-[#f1eee7]"
           >
@@ -1063,6 +1071,10 @@ export default function PosPage() {
           employeeId={employee.id}
           onClose={() => setShowSupplierPayments(false)}
         />
+      )}
+
+      {showTimeClock && (
+        <TimeClockModal onClose={() => setShowTimeClock(false)} />
       )}
 
       {/* Parked tickets modal */}

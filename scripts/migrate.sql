@@ -47,6 +47,35 @@ CREATE TABLE IF NOT EXISTS pos.employees (
   active BOOLEAN NOT NULL DEFAULT true
 );
 
+-- Time clock / labor record keeping
+CREATE TABLE IF NOT EXISTS pos.time_clock_sessions (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER NOT NULL REFERENCES pos.employees(id),
+  business_date DATE NOT NULL,
+  clock_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  clock_out_at TIMESTAMPTZ,
+  status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  source VARCHAR(40) NOT NULL DEFAULT 'pos',
+  device_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  synced BOOLEAN NOT NULL DEFAULT false,
+  CHECK (clock_out_at IS NULL OR clock_out_at >= clock_in_at)
+);
+
+CREATE TABLE IF NOT EXISTS pos.time_clock_audit (
+  id SERIAL PRIMARY KEY,
+  session_id INTEGER REFERENCES pos.time_clock_sessions(id) ON DELETE SET NULL,
+  employee_id INTEGER REFERENCES pos.employees(id),
+  action VARCHAR(40) NOT NULL,
+  previous_data JSONB,
+  new_data JSONB,
+  reason TEXT,
+  changed_by INTEGER REFERENCES pos.employees(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  synced BOOLEAN NOT NULL DEFAULT false
+);
+
 -- Orders
 CREATE TABLE IF NOT EXISTS pos.orders (
   id SERIAL PRIMARY KEY,
@@ -124,6 +153,12 @@ CREATE INDEX IF NOT EXISTS idx_cash_closings_synced ON pos.cash_closings(synced)
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_created ON pos.supplier_payments(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_status ON pos.supplier_payments(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_supplier_payments_synced ON pos.supplier_payments(synced);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_time_clock_one_open_per_employee ON pos.time_clock_sessions(employee_id) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS idx_time_clock_sessions_business_date ON pos.time_clock_sessions(business_date DESC);
+CREATE INDEX IF NOT EXISTS idx_time_clock_sessions_employee ON pos.time_clock_sessions(employee_id, business_date DESC);
+CREATE INDEX IF NOT EXISTS idx_time_clock_sessions_synced ON pos.time_clock_sessions(synced);
+CREATE INDEX IF NOT EXISTS idx_time_clock_audit_session ON pos.time_clock_audit(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_time_clock_audit_synced ON pos.time_clock_audit(synced);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON pos.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_kds_events_order ON pos.kds_events(order_id);
 
