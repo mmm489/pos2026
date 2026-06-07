@@ -402,17 +402,17 @@ export default function ModifiersModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-3">
-      <div className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[#ddd4c4] bg-[#faf9f6]">
-        <div className="flex items-start justify-between border-b border-[#ddd4c4] bg-[#faf9f6] px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-2">
+      <div className="flex max-h-[calc(100vh-18px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[#ddd4c4] bg-[#faf9f6]">
+        <div className="flex items-start justify-between border-b border-[#ddd4c4] bg-[#faf9f6] px-4 py-3">
           <div className="min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7b746a]">
               Personalitzar
             </p>
-            <h2 className="mt-1 truncate text-[26px] font-medium leading-8 text-[#241f1c]">
+            <h2 className="mt-0.5 truncate text-[24px] font-medium leading-7 text-[#241f1c]">
               {sentenceCase(baseProduct.name)}
             </h2>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-normal text-[#5f6878]">
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px] font-normal text-[#5f6878]">
               {modifierGroupName && <span>{sentenceCase(modifierGroupName)}</span>}
               <span>Base {formatPrice(Number(baseProduct.price))}</span>
               {hasFlavorSection ? (
@@ -442,7 +442,7 @@ export default function ModifiersModal({
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
           {modifierProducts.length === 0 ? (
             <p className="py-8 text-center font-bold text-[#6f7787]">
               No hi ha extres configurats per aquest producte.
@@ -454,14 +454,14 @@ export default function ModifiersModal({
 
               return (
                 <section key={category.id}>
-                  <h3 className="mb-2 flex items-center gap-2 text-[15px] font-medium text-[#241f1c]">
+                  <h3 className="mb-1.5 flex items-center gap-2 text-[13px] font-medium text-[#241f1c]">
                     <span
                       className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: category.color }}
                     />
                     {sentenceCase(category.name)}
                   </h3>
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                     {items.map((product) => {
                       const qty = selections.get(product.id) || 0;
                       const isSelected = qty > 0;
@@ -527,7 +527,7 @@ export default function ModifiersModal({
                       return (
                         <div
                           key={product.id}
-                          className={`flex min-h-[76px] items-center justify-between rounded-xl border px-3 py-2 active:brightness-95 ${
+                          className={`flex min-h-[54px] items-center justify-between rounded-xl border px-2.5 py-1.5 active:brightness-95 ${
                             maxFlavorReached ? "opacity-50" : ""
                           }`}
                           style={toppingCardStyle(cardColor, isSelected)}
@@ -544,32 +544,32 @@ export default function ModifiersModal({
                             }}
                             className="min-w-0 flex-1 text-left"
                           >
-                            <p className="line-clamp-2 pr-2 text-[17px] font-medium leading-[19px]">
+                            <p className="line-clamp-2 pr-1.5 text-[14px] font-semibold leading-[15px]">
                               {titleCase(product.name)}
                             </p>
                             {status && (
-                              <p className={`mt-1 text-[11px] font-medium leading-3 ${statusColor}`}>
+                              <p className={`mt-0.5 text-[9px] font-semibold leading-[10px] ${statusColor}`}>
                                 {status}
                               </p>
                             )}
                           </button>
 
                           {isSelected ? (
-                            <div className="ml-2 flex shrink-0 items-center gap-1">
+                            <div className="ml-1.5 flex shrink-0 items-center gap-0.5">
                               <button
                                 onClick={() => removeSelection(product.id, qty - 1)}
-                                className="flex h-8 w-8 items-center justify-center rounded-lg border text-base font-medium active:bg-[#f1eee7]"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border text-sm font-bold active:bg-[#f1eee7]"
                                 style={toppingActionStyle(cardColor, true)}
                                 aria-label="Restar"
                               >
                                 &#8722;
                               </button>
-                              <span className="w-5 text-center text-sm font-medium text-current">
+                              <span className="w-4 text-center text-xs font-bold text-current">
                                 {qty}
                               </span>
                             </div>
                           ) : (
-                            <span className="ml-2 h-8 w-8 shrink-0" aria-hidden />
+                            <span className="ml-1.5 h-7 w-1 shrink-0" aria-hidden />
                           )}
                         </div>
                       );
@@ -581,16 +581,16 @@ export default function ModifiersModal({
           )}
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-[#241f1c]">
+            <label className="mb-1.5 block text-sm font-medium text-[#241f1c]">
               Nota especial
             </label>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
               placeholder="Sense lactosa, sense sucre, etc."
-              className="h-16 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm font-normal text-[#241f1c] outline-none placeholder:text-[#8f887c] focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/20"
+              className="h-12 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm font-normal text-[#241f1c] outline-none placeholder:text-[#8f887c] focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/20"
             />
-            <div className="mt-3">
+            <div className="mt-2">
               <TouchKeyboard value={note} onChange={setNote} compact />
             </div>
           </div>
@@ -616,15 +616,15 @@ export default function ModifiersModal({
                   <span className="text-lg">&#10005;</span>
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-3 overflow-y-auto p-5 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              <div className="grid grid-cols-4 gap-2 overflow-y-auto p-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
                 {nestedFlavorProducts.map((flavor) => (
                   <button
                     key={flavor.id}
                     onClick={() => chooseIceCreamBallFlavor(flavor.name)}
-                    className="min-h-[74px] rounded-xl border px-3 py-2 text-left active:brightness-95"
+                    className="min-h-[54px] rounded-xl border px-2.5 py-1.5 text-left active:brightness-95"
                     style={toppingCardStyle(resolveColor({ flavor: flavor.name }), false)}
                   >
-                    <span className="line-clamp-2 text-[17px] font-medium leading-[19px]">
+                    <span className="line-clamp-2 text-[14px] font-semibold leading-[15px]">
                       {titleCase(flavor.name)}
                     </span>
                   </button>
@@ -634,12 +634,12 @@ export default function ModifiersModal({
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-3 border-t border-[#ddd4c4] bg-[#faf9f6] px-5 py-4">
+        <div className="flex items-center justify-between gap-3 border-t border-[#ddd4c4] bg-[#faf9f6] px-4 py-3">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#7b746a]">
               Total amb extres
             </p>
-            <p className="text-[30px] font-medium leading-8 tabular-nums text-[#241f1c]">
+            <p className="text-[28px] font-medium leading-7 tabular-nums text-[#241f1c]">
               {formatPrice(Number(baseProduct.price) + totalExtra)}
             </p>
           </div>
