@@ -876,7 +876,7 @@ export default function PosPage() {
   return (
     <div className="flex h-screen flex-col bg-[#f5f4ef] text-[#241f1c]">
       {/* Top header */}
-      <header className="flex h-[64px] flex-shrink-0 items-center gap-1.5 border-b border-[#ded6c8] bg-[#faf9f6] px-2 py-1">
+      <header className="flex h-[72px] flex-shrink-0 items-center gap-2 border-b border-[#ded6c8] bg-[#faf9f6] px-2.5 py-1">
         <div className="flex w-[138px] shrink-0 items-center gap-1.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#d4cbbb] bg-white text-[11px] font-medium text-[#241f1c]">
             HC
@@ -924,6 +924,8 @@ export default function PosPage() {
               </a>
             </>
           )}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-1.5">
           <button
             onClick={handleShutdown}
             disabled={shuttingDown}
@@ -932,16 +934,16 @@ export default function PosPage() {
             {shuttingDown ? "Tancant..." : "Sortir"}
           </button>
           <button
-            onClick={() => setShowTimeClock(true)}
-            className="min-h-[38px] shrink-0 whitespace-nowrap rounded-lg border border-[#d6c8ad] bg-[#fff8e8] px-2 py-2 text-[13px] font-semibold text-[#7b5b12] active:bg-[#f3e6c7]"
-          >
-            Fichar
-          </button>
-          <button
             onClick={handleLogout}
             className="min-h-[42px] shrink-0 whitespace-nowrap rounded-lg border border-[#d4cbbb] bg-white px-2.5 py-2 text-[13px] font-medium text-[#241f1c] active:bg-[#f1eee7]"
           >
             Canviar
+          </button>
+          <button
+            onClick={() => setShowTimeClock(true)}
+            className="min-h-[50px] shrink-0 whitespace-nowrap rounded-xl border border-[#1864c9] bg-[#2563eb] px-5 py-3 text-[16px] font-bold text-white shadow-[0_8px_18px_rgba(37,99,235,0.25)] active:bg-[#1d4ed8]"
+          >
+            Fichar
           </button>
         </div>
       </header>
