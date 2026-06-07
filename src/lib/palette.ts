@@ -22,6 +22,8 @@ export const FLAVOR_COLORS: Record<string, string> = {
   "Menta xoco": "#86C9A6",
   "Menta xoc": "#86C9A6",
   Nata: "#F0E8D6",
+  "Sin nata": "#F8F2E6",
+  "Sense nata": "#F8F2E6",
   Nutella: "#6E4327",
   Oreo: "#4B4A4D",
   Pistatxo: "#A0BC68",

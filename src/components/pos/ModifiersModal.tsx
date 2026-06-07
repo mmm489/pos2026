@@ -26,6 +26,7 @@ interface ModifiersModalProps {
 
 const MAX_ICE_CREAM_BALLS = 2;
 const SECOND_ICE_CREAM_BALL_PRICE = 2;
+const NO_CREAM_ICE_CREAM_FLAVOR = "SIN NATA";
 
 function formatPrice(value: number) {
   return `${value.toFixed(2).replace(".", ",")} €`;
@@ -52,6 +53,18 @@ function isSizeCategoryName(name: string) {
 function isIceCreamBallProductName(name: string) {
   const lower = name.toLowerCase();
   return lower.includes("bola") && (lower.includes("gelat") || lower.includes("helado"));
+}
+
+function isHiPopName(name: string | null | undefined) {
+  const compact = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  return compact.includes("hipop");
+}
+
+function isNoCreamFlavorName(name: string) {
+  const lower = name.toLowerCase();
+  return lower.includes("sin nata") || lower.includes("sense nata");
 }
 
 function toppingCardStyle(color: string, selected: boolean): CSSProperties {
@@ -152,6 +165,15 @@ export default function ModifiersModal({
         ? modifierProducts.filter((product) => flavorCategoryIds.has(product.category_id))
         : [],
     [flavorCategoryIds, hasNestedFlavorPicker, modifierProducts]
+  );
+  const showNoCreamIceCreamOption = useMemo(
+    () =>
+      hasNestedFlavorPicker &&
+      (isHiPopName(baseProduct.name) ||
+        isHiPopName(baseProduct.category_name) ||
+        isHiPopName(modifierGroupName)) &&
+      !nestedFlavorProducts.some((product) => isNoCreamFlavorName(product.name)),
+    [baseProduct.category_name, baseProduct.name, hasNestedFlavorPicker, modifierGroupName, nestedFlavorProducts]
   );
   const hasPaidSection = displayedModifierCategories.some(
     (category) => !flavorCategoryIds.has(category.id)
@@ -658,6 +680,17 @@ export default function ModifiersModal({
                 </button>
               </div>
               <div className="grid grid-cols-4 gap-2 overflow-y-auto p-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                {showNoCreamIceCreamOption && (
+                  <button
+                    onClick={() => chooseIceCreamBallFlavor(NO_CREAM_ICE_CREAM_FLAVOR)}
+                    className="min-h-[54px] rounded-xl border px-2.5 py-1.5 text-left active:brightness-95"
+                    style={toppingCardStyle(resolveColor({ flavor: NO_CREAM_ICE_CREAM_FLAVOR }), false)}
+                  >
+                    <span className="line-clamp-2 text-[14px] font-semibold leading-[15px]">
+                      {titleCase(NO_CREAM_ICE_CREAM_FLAVOR)}
+                    </span>
+                  </button>
+                )}
                 {nestedFlavorProducts.map((flavor) => (
                   <button
                     key={flavor.id}
