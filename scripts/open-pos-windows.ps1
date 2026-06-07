@@ -89,9 +89,9 @@ $clientArgs = @(
 
 $posArgs = @(
   "--new-window",
-  "--start-fullscreen",
-  "--app=$PosUrl"
+  "--kiosk"
 ) + $noTranslateArgs + @(
+  $PosUrl,
   "--user-data-dir=$posProfile",
   "--no-first-run",
   "--disable-session-crashed-bubble",
