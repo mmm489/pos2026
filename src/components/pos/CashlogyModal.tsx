@@ -134,11 +134,22 @@ export default function CashlogyModal({ onClose }: CashlogyModalProps) {
   const hasDenominations = coins.length > 0 || bills.length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-3xl p-8 w-full max-w-lg mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">
-          Cashlogy — Inventari
-        </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3">
+      <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-100 px-6 py-4">
+          <h2 className="text-2xl font-bold text-gray-800">
+            Cashlogy - Inventari
+          </h2>
+          <button
+            onClick={onClose}
+            className="flex h-12 w-12 items-center justify-center rounded-2xl border border-gray-200 bg-white text-3xl leading-none text-gray-700 shadow-sm transition-colors hover:bg-gray-50 active:bg-gray-100"
+            aria-label="Tancar Cashlogy"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
 
         {loading && (
           <div className="text-center py-8">
@@ -306,6 +317,7 @@ export default function CashlogyModal({ onClose }: CashlogyModalProps) {
         >
           Tancar
         </button>
+        </div>
       </div>
     </div>
   );
