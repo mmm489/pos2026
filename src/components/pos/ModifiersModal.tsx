@@ -51,6 +51,10 @@ function isSizeCategoryName(name: string) {
   return lower.includes("mida") || lower.includes("tamany") || lower.includes("size");
 }
 
+function usesCatalogPriceCategoryName(name: string) {
+  return name.trim().toLowerCase() === "varios";
+}
+
 function isIceCreamBallProductName(name: string) {
   const lower = name.toLowerCase();
   return lower.includes("bola") && (lower.includes("gelat") || lower.includes("helado"));
@@ -156,8 +160,18 @@ export default function ModifiersModal({
       ),
     [modifierCategories]
   );
+  const catalogPriceCategoryIds = useMemo(
+    () =>
+      new Set(
+        modifierCategories
+          .filter((category) => usesCatalogPriceCategoryName(category.name))
+          .map((category) => category.id)
+      ),
+    [modifierCategories]
+  );
   const hasTemperatureSection = temperatureCategoryIds.size > 0;
   const hasSizeSection = sizeCategoryIds.size > 0;
+  const hasCatalogPriceSection = catalogPriceCategoryIds.size > 0;
   const sizeUnitPrice = extraUnitPrice > 0 ? extraUnitPrice : 1;
   const hasNestedFlavorPicker = useMemo(
     () =>
@@ -307,6 +321,11 @@ export default function ModifiersModal({
         continue;
       }
 
+      if (product && catalogPriceCategoryIds.has(product.category_id)) {
+        map.set(id, { included: Number(product.price) <= 0 ? qty : 0, extra: Number(product.price) > 0 ? qty : 0 });
+        continue;
+      }
+
       let included = 0;
       let extra = 0;
       for (let index = 0; index < qty; index += 1) {
@@ -326,6 +345,7 @@ export default function ModifiersModal({
     flavorCategoryIds,
     temperatureCategoryIds,
     sizeCategoryIds,
+    catalogPriceCategoryIds,
     includedLimit,
   ]);
 
@@ -383,6 +403,12 @@ export default function ModifiersModal({
         continue;
       }
 
+      if (catalogPriceCategoryIds.has(product.category_id)) {
+        const unitPrice = Math.max(0, Number(product.price) || 0);
+        addPricedSelection(product, qty, unitPrice, unitPrice <= 0);
+        continue;
+      }
+
       for (let index = 0; index < qty; index += 1) {
         const included = consumedIncluded < includedLimit;
         const isIceCreamBall = isIceCreamBallProductName(product.name);
@@ -417,6 +443,7 @@ export default function ModifiersModal({
     flavorCategoryIds,
     temperatureCategoryIds,
     sizeCategoryIds,
+    catalogPriceCategoryIds,
     includedLimit,
     extraUnitPrice,
     sizeUnitPrice,
@@ -505,6 +532,10 @@ export default function ModifiersModal({
                   {hasTemperatureSection && hasSizeSection ? ", " : ""}
                   {hasSizeSection ? `XL +${formatPrice(sizeUnitPrice)}` : ""}
                 </span>
+              ) : hasCatalogPriceSection ? (
+                <span className="font-black text-[#169b68]">
+                  Extres amb preu propi
+                </span>
               ) : (
                 <span className="font-black text-[#169b68]">
                   {includedLimit} gratis, extres +{formatPrice(extraUnitPrice)}
@@ -564,6 +595,8 @@ export default function ModifiersModal({
                       const isFlavor = flavorCategoryIds.has(product.category_id);
                       const isTemperature = temperatureCategoryIds.has(product.category_id);
                       const isSize = sizeCategoryIds.has(product.category_id);
+                      const usesCatalogPrice = catalogPriceCategoryIds.has(product.category_id);
+                      const catalogUnitPrice = Math.max(0, Number(product.price) || 0);
                       const cardColor = resolveColor({
                         flavor: product.name,
                         category: category.name,
@@ -609,6 +642,12 @@ export default function ModifiersModal({
                           ? isSelected
                             ? `+${formatPrice(sizeUnitPrice)}`
                             : `+${formatPrice(sizeUnitPrice)}`
+                        : usesCatalogPrice
+                          ? catalogUnitPrice > 0
+                            ? `+${formatPrice(catalogUnitPrice)}`
+                            : isSelected
+                              ? "Afegit"
+                              : "Gratis"
                         : hasFlavorSection && isFlavor
                           ? isSelected
                             ? "Sabor escollit"
