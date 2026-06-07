@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withTransaction } from "@/lib/db";
+import { allocateOrderNumber } from "@/lib/order-number";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
 
 export const dynamic = "force-dynamic";
@@ -283,10 +284,7 @@ export async function POST(request: NextRequest) {
         order = orderRes.rows[0];
         await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
       } else {
-        const countRes = await client.query(
-          `SELECT COUNT(*)::int AS count FROM pos.orders WHERE created_at::date = CURRENT_DATE`
-        );
-        const orderNumber = `#${String((countRes.rows[0].count as number) + 1).padStart(3, "0")}`;
+        const orderNumber = await allocateOrderNumber(client);
 
         const orderRes = await client.query(
           `INSERT INTO pos.orders

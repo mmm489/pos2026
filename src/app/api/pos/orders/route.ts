@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, withTransaction } from "@/lib/db";
+import { allocateOrderNumber } from "@/lib/order-number";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
 
 export const dynamic = "force-dynamic";
@@ -216,11 +217,7 @@ export async function POST(request: NextRequest) {
       totalBase = Math.round(totalBase * 100) / 100;
       totalVat = Math.round(totalVat * 100) / 100;
 
-      // Generate daily order number
-      const countRes = await client.query(
-        `SELECT COUNT(*)::int AS count FROM pos.orders WHERE created_at::date = CURRENT_DATE`
-      );
-      const orderNumber = `#${String((countRes.rows[0].count as number) + 1).padStart(3, "0")}`;
+      const orderNumber = await allocateOrderNumber(client);
 
       // Atomic invoice number: lock row, read, increment
       const bizRes = await client.query(
