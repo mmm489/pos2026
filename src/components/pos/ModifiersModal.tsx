@@ -24,6 +24,9 @@ interface ModifiersModalProps {
   onCancel: () => void;
 }
 
+const MAX_ICE_CREAM_BALLS = 2;
+const SECOND_ICE_CREAM_BALL_PRICE = 2;
+
 function formatPrice(value: number) {
   return `${value.toFixed(2).replace(".", ",")} €`;
 }
@@ -79,7 +82,7 @@ export default function ModifiersModal({
   onCancel,
 }: ModifiersModalProps) {
   const [selections, setSelections] = useState<Map<number, number>>(new Map());
-  const [iceCreamBallFlavors, setIceCreamBallFlavors] = useState<Map<number, string>>(new Map());
+  const [iceCreamBallFlavors, setIceCreamBallFlavors] = useState<Map<number, string[]>>(new Map());
   const [flavorPickerFor, setFlavorPickerFor] = useState<Product | null>(null);
   const [note, setNote] = useState("");
   const includedLimit = Math.max(0, Math.floor(Number(includedCount ?? 0)));
@@ -170,15 +173,19 @@ export default function ModifiersModal({
       const isFlavor = Boolean(product && flavorCategoryIds.has(product.category_id));
       const isTemperature = Boolean(product && temperatureCategoryIds.has(product.category_id));
       const isSize = Boolean(product && sizeCategoryIds.has(product.category_id));
+      const isIceCreamBall = Boolean(product && isIceCreamBallProductName(product.name));
       const isSingleChoiceExtra = Boolean(
         product &&
           (singleChoiceExtraCategoryIds.has(product.category_id) ||
-            isIceCreamBallProductName(product.name) ||
             isTemperature ||
             isSize)
       );
       const normalizedQty =
-        isFlavor || isSingleChoiceExtra ? Math.min(Math.max(qty, 0), 1) : qty;
+        isFlavor || isSingleChoiceExtra
+          ? Math.min(Math.max(qty, 0), 1)
+          : isIceCreamBall
+            ? Math.min(Math.max(qty, 0), MAX_ICE_CREAM_BALLS)
+            : qty;
 
       if (isFlavor && normalizedQty > (prev.get(productId) || 0)) {
         const currentFlavorQty = Array.from(prev.entries()).reduce((sum, [id, itemQty]) => {
@@ -285,10 +292,11 @@ export default function ModifiersModal({
       qty: number,
       unitPrice: number,
       included: boolean,
-      displayName?: string
+      displayName?: string,
+      keySuffix?: string
     ) => {
       const pricedProduct = displayName ? { ...product, name: displayName } : product;
-      const key = `${product.id}-${unitPrice}-${included ? "included" : "extra"}-${displayName ?? product.name}`;
+      const key = `${product.id}-${unitPrice}-${included ? "included" : "extra"}-${keySuffix ?? displayName ?? product.name}`;
       const current = groupedSelections.get(key);
       if (current) current.qty += qty;
       else groupedSelections.set(key, { product: pricedProduct, qty, unitPrice, included });
@@ -333,16 +341,23 @@ export default function ModifiersModal({
         const included = consumedIncluded < includedLimit;
         const isIceCreamBall = isIceCreamBallProductName(product.name);
         const unitPrice = isIceCreamBall
-          ? included
+          ? index === 0 && included
             ? extraUnitPrice
-            : extraUnitPrice * 2
+            : SECOND_ICE_CREAM_BALL_PRICE
           : included
             ? 0
             : extraUnitPrice;
-        const selectedFlavor = iceCreamBallFlavors.get(product.id);
+        const selectedFlavor = iceCreamBallFlavors.get(product.id)?.[index];
         const displayName =
           isIceCreamBall && selectedFlavor ? `${product.name} ${selectedFlavor}` : undefined;
-        addPricedSelection(product, 1, unitPrice, included, displayName);
+        addPricedSelection(
+          product,
+          1,
+          unitPrice,
+          included,
+          displayName,
+          isIceCreamBall ? `bola-${index}` : undefined
+        );
         consumedIncluded += 1;
       }
     }
@@ -370,7 +385,8 @@ export default function ModifiersModal({
   const handleConfirm = () => {
     for (const [id, qty] of Array.from(selections.entries())) {
       const product = productById.get(id);
-      if (product && qty > 0 && isIceCreamBallProductName(product.name) && !iceCreamBallFlavors.get(id)) {
+      const flavors = iceCreamBallFlavors.get(id) ?? [];
+      if (product && qty > 0 && isIceCreamBallProductName(product.name) && flavors.length < qty) {
         setFlavorPickerFor(product);
         return;
       }
@@ -379,6 +395,21 @@ export default function ModifiersModal({
   };
 
   const removeSelection = (productId: number, nextQty: number) => {
+    const product = productById.get(productId);
+    if (product && isIceCreamBallProductName(product.name)) {
+      const normalizedQty = Math.max(0, Math.min(nextQty, MAX_ICE_CREAM_BALLS));
+      setQty(productId, normalizedQty);
+      setIceCreamBallFlavors((prev) => {
+        const current = prev.get(productId) ?? [];
+        const nextFlavors = current.slice(0, normalizedQty);
+        const next = new Map(prev);
+        if (nextFlavors.length === 0) next.delete(productId);
+        else next.set(productId, nextFlavors);
+        return next;
+      });
+      return;
+    }
+
     setQty(productId, nextQty);
     if (nextQty <= 0) {
       setIceCreamBallFlavors((prev) => {
@@ -392,12 +423,14 @@ export default function ModifiersModal({
 
   const chooseIceCreamBallFlavor = (flavorName: string) => {
     if (!flavorPickerFor) return;
-    setQty(flavorPickerFor.id, 1);
+    const currentFlavors = iceCreamBallFlavors.get(flavorPickerFor.id) ?? [];
+    const nextFlavors = [...currentFlavors, flavorName].slice(0, MAX_ICE_CREAM_BALLS);
     setIceCreamBallFlavors((prev) => {
       const next = new Map(prev);
-      next.set(flavorPickerFor.id, flavorName);
+      next.set(flavorPickerFor.id, nextFlavors);
       return next;
     });
+    setQty(flavorPickerFor.id, nextFlavors.length);
     setFlavorPickerFor(null);
   };
 
@@ -476,17 +509,24 @@ export default function ModifiersModal({
                       const isSingleChoiceExtra = singleChoiceExtraCategoryIds.has(
                         product.category_id
                       ) || isIceCreamBall || isTemperature || isSize;
-                      const selectedIceCreamBallFlavor = iceCreamBallFlavors.get(product.id);
+                      const selectedIceCreamBallFlavors = iceCreamBallFlavors.get(product.id) ?? [];
                       const selectedPricing = pricingByProduct.get(product.id);
                       const nextIceCreamBallPrice =
-                        (selectedPricing?.included ?? 0) > 0 || selectedQty < includedLimit
+                        qty >= 1
+                          ? SECOND_ICE_CREAM_BALL_PRICE
+                        : selectedQty < includedLimit
                           ? extraUnitPrice
-                          : extraUnitPrice * 2;
+                          : SECOND_ICE_CREAM_BALL_PRICE;
+                      const iceCreamFlavorLabel = selectedIceCreamBallFlavors
+                        .map((flavor) => titleCase(flavor))
+                        .join(" + ");
                       const iceCreamBallStatus = isSelected
-                        ? selectedIceCreamBallFlavor
-                          ? `${titleCase(selectedIceCreamBallFlavor)} +${formatPrice(nextIceCreamBallPrice)}`
-                          : `Escull sabor +${formatPrice(nextIceCreamBallPrice)}`
-                        : `+${formatPrice(selectedQty < includedLimit ? extraUnitPrice : extraUnitPrice * 2)} sabor`;
+                        ? `${qty}/${MAX_ICE_CREAM_BALLS} ${iceCreamFlavorLabel || "Escull sabor"}${
+                            qty < MAX_ICE_CREAM_BALLS
+                              ? ` · 2a +${formatPrice(SECOND_ICE_CREAM_BALL_PRICE)}`
+                              : ""
+                          }`
+                        : `0/${MAX_ICE_CREAM_BALLS} +${formatPrice(nextIceCreamBallPrice)} sabor`;
                       const regularSelectedStatus = [
                         selectedPricing?.included ? `${selectedPricing.included} gratis` : null,
                         selectedPricing?.extra ? `${selectedPricing.extra} extra` : null,
@@ -495,6 +535,7 @@ export default function ModifiersModal({
                         .join(" + ");
                       const maxFlavorReached =
                         hasFlavorSection && isFlavor && !isSelected && selectedFlavorQty >= includedLimit;
+                      const maxIceCreamBallsReached = isIceCreamBall && qty >= MAX_ICE_CREAM_BALLS;
                       const status = isIceCreamBall
                         ? iceCreamBallStatus
                         : isTemperature
@@ -536,7 +577,7 @@ export default function ModifiersModal({
                             onClick={() => {
                               if (maxFlavorReached) return;
                               if (isIceCreamBall) {
-                                if (!isSelected) setQty(product.id, 1);
+                                if (maxIceCreamBallsReached) return;
                                 setFlavorPickerFor(product);
                                 return;
                               }
@@ -605,7 +646,7 @@ export default function ModifiersModal({
                     Sabor bola gelat
                   </p>
                   <h3 className="text-[24px] font-medium leading-7 text-[#241f1c]">
-                    {titleCase(flavorPickerFor.name)}
+                    {titleCase(flavorPickerFor.name)} {(iceCreamBallFlavors.get(flavorPickerFor.id)?.length ?? 0) + 1}/{MAX_ICE_CREAM_BALLS}
                   </h3>
                 </div>
                 <button

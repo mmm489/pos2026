@@ -64,7 +64,6 @@ function isIceCreamBallName(name: string): boolean {
 function isSingleChoiceCartModifier(item: CartItem): boolean {
   const parent = getModifierParent(item.notes);
   if (!parent) return false;
-  if (isIceCreamBallName(item.name)) return true;
   return item.name.trim().toLowerCase() === "nata" && parent.trim().toLowerCase() === "batut";
 }
 
@@ -93,10 +92,10 @@ function normalizeCartModifierPrices(items: CartItem[]): CartItem[] {
   for (const group of Array.from(groups.values())) {
     if (group.balls.length === 0) continue;
     const hasOtherTopping = group.others.some((item) => item.qty > 0);
-    const price = hasOtherTopping ? 2 : 1;
-    for (const ball of group.balls) {
+    group.balls.forEach((ball, index) => {
+      const price = index === 0 && !hasOtherTopping ? 1 : 2;
       ballPriceByLineId.set(ball.line_id, price);
-    }
+    });
   }
 
   const pricedItems = normalizedQtyItems.map((item) => {
@@ -1026,11 +1025,14 @@ export default function PosPage() {
             });
             for (const { product, qty, unitPrice } of extras) {
               for (let i = 0; i < qty; i++) {
+                const isIceCreamBall = isIceCreamBallName(product.name);
                 dispatch({
                   type: "ADD",
                   product,
                   price: unitPrice,
                   note: buildModifierNote(modifiersFor.name, product.name, baseLineId),
+                  merge: isIceCreamBall ? false : undefined,
+                  lineId: isIceCreamBall ? makeCartLineId(product.id) : undefined,
                 });
               }
             }
