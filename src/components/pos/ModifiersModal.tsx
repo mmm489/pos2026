@@ -27,6 +27,7 @@ interface ModifiersModalProps {
 const MAX_ICE_CREAM_BALLS = 2;
 const SECOND_ICE_CREAM_BALL_PRICE = 2;
 const NO_CREAM_ICE_CREAM_FLAVOR = "SIN NATA";
+const NO_CREAM_NOTE = "Sin nata";
 
 function formatPrice(value: number) {
   return `${value.toFixed(2).replace(".", ",")} €`;
@@ -65,6 +66,19 @@ function isHiPopName(name: string | null | undefined) {
 function isNoCreamFlavorName(name: string) {
   const lower = name.toLowerCase();
   return lower.includes("sin nata") || lower.includes("sense nata");
+}
+
+function toggleNoCreamInNote(value: string) {
+  const parts = value
+    .split(/\s*[,;\n]\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.some((part) => isNoCreamFlavorName(part))) {
+    return parts.filter((part) => !isNoCreamFlavorName(part)).join(", ");
+  }
+
+  return [...parts, NO_CREAM_NOTE].join(", ");
 }
 
 function toppingCardStyle(color: string, selected: boolean): CSSProperties {
@@ -175,6 +189,16 @@ export default function ModifiersModal({
       !nestedFlavorProducts.some((product) => isNoCreamFlavorName(product.name)),
     [baseProduct.category_name, baseProduct.name, hasNestedFlavorPicker, modifierGroupName, nestedFlavorProducts]
   );
+  const showNoCreamMainFlavorOption = useMemo(
+    () =>
+      hasFlavorSection &&
+      (isHiPopName(baseProduct.name) ||
+        isHiPopName(baseProduct.category_name) ||
+        isHiPopName(modifierGroupName)) &&
+      !modifierProducts.some((product) => isNoCreamFlavorName(product.name)),
+    [baseProduct.category_name, baseProduct.name, hasFlavorSection, modifierGroupName, modifierProducts]
+  );
+  const hasNoCreamNote = isNoCreamFlavorName(note);
   const hasPaidSection = displayedModifierCategories.some(
     (category) => !flavorCategoryIds.has(category.id)
   );
@@ -517,6 +541,23 @@ export default function ModifiersModal({
                     {sentenceCase(category.name)}
                   </h3>
                   <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7">
+                    {showNoCreamMainFlavorOption && flavorCategoryIds.has(category.id) && (
+                      <button
+                        onClick={() => setNote((current) => toggleNoCreamInNote(current))}
+                        className="flex min-h-[54px] flex-col justify-center rounded-xl border px-2.5 py-1.5 text-left active:brightness-95"
+                        style={toppingCardStyle(
+                          resolveColor({ flavor: NO_CREAM_ICE_CREAM_FLAVOR }),
+                          hasNoCreamNote
+                        )}
+                      >
+                        <span className="line-clamp-2 text-[14px] font-semibold leading-[15px]">
+                          {titleCase(NO_CREAM_NOTE)}
+                        </span>
+                        <span className="mt-0.5 text-[9px] font-semibold leading-[10px] opacity-80">
+                          {hasNoCreamNote ? "Nota activa" : "Afegir nota"}
+                        </span>
+                      </button>
+                    )}
                     {items.map((product) => {
                       const qty = selections.get(product.id) || 0;
                       const isSelected = qty > 0;
