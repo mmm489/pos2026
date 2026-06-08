@@ -100,6 +100,7 @@ const TABLES = [
       "total_base",
       "total_vat",
       "payment_method",
+      "business_unit",
       "employee_id",
       "table_number",
       "created_at",
@@ -359,6 +360,17 @@ async function ensureEmployeeAccessSchema(db) {
         can_access_cashlogy = true,
         can_access_supplier_payments = true
     WHERE role = 'admin'
+  `);
+}
+
+async function ensureOrderBusinessUnitSchema(db) {
+  await db.query(`
+    ALTER TABLE pos.orders
+    ADD COLUMN IF NOT EXISTS business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream'
+  `);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_orders_business_unit
+    ON pos.orders(business_unit)
   `);
 }
 
@@ -1001,6 +1013,8 @@ async function runSync() {
     await ensureLocalSupplierPaymentSchema(local);
     await ensureLocalTimeClockSchema(local);
     await ensureCloudSchema(cloud);
+    await ensureOrderBusinessUnitSchema(local);
+    await ensureOrderBusinessUnitSchema(cloud);
     await ensureEmployeeAccessSchema(local);
     await ensureEmployeeAccessSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);

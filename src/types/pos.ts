@@ -40,6 +40,7 @@ export interface Order {
   total_base?: number;
   total_vat?: number;
   payment_method: "cash" | "card" | "manual" | "parked";
+  business_unit?: "hicream" | "cookies";
   employee_id: number | null;
   table_number?: string;
   created_at: string;

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { ensureOrderBusinessUnitSchema } from "@/lib/business-unit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const sql = getDb();
+    await ensureOrderBusinessUnitSchema();
 
     const [
       [salesToday],
@@ -19,6 +21,7 @@ export async function GET() {
         SELECT COALESCE(SUM(total), 0)::float AS total, COUNT(*)::int AS count
         FROM pos.orders
         WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled') AND payment_method <> 'parked'
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
       `,
       // Sales by hour
       sql`
@@ -27,6 +30,7 @@ export async function GET() {
                COUNT(*)::int AS count
         FROM pos.orders
         WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled') AND payment_method <> 'parked'
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
         GROUP BY hour
         ORDER BY hour
       `,
@@ -38,6 +42,7 @@ export async function GET() {
         JOIN pos.products p ON p.id = oi.product_id
         JOIN pos.orders o ON o.id = oi.order_id
         WHERE o.created_at::date = CURRENT_DATE AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked'
+          AND COALESCE(o.business_unit, 'hicream') = 'hicream'
         GROUP BY p.name
         ORDER BY qty DESC
         LIMIT 10
@@ -49,6 +54,7 @@ export async function GET() {
           COALESCE(SUM(CASE WHEN payment_method IN ('card', 'manual') THEN total END), 0)::float AS tarjeta
         FROM pos.orders
         WHERE created_at::date = CURRENT_DATE AND status NOT IN ('pending', 'cancelled') AND payment_method <> 'parked'
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
       `,
       // Active orders count
       sql`

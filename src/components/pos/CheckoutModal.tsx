@@ -33,12 +33,15 @@ interface CheckoutModalProps {
   items: CartItem[];
   total: number;
   employeeId?: number;
+  canUseCookies?: boolean;
   parkedOrderId?: number | null;
   onClose: () => void;
   onComplete: () => void;
 }
 
 type Step = "select" | "processing" | "success" | "error";
+type CheckoutMethod = "cash" | "card" | "manual" | "cookies";
+type BusinessUnit = "hicream" | "cookies";
 type TicketPrintData = Parameters<typeof printTicket>[0];
 type KitchenPrintResult = { success?: boolean; error?: string };
 type OrderWithKitchenPrint = Order & { kitchen_print?: KitchenPrintResult };
@@ -47,12 +50,13 @@ export default function CheckoutModal({
   items,
   total,
   employeeId,
+  canUseCookies = false,
   parkedOrderId,
   onClose,
   onComplete,
 }: CheckoutModalProps) {
   const [step, setStep] = useState<Step>("select");
-  const [method, setMethod] = useState<"cash" | "card" | "manual" | null>(null);
+  const [method, setMethod] = useState<CheckoutMethod | null>(null);
   const [orderNumber, setOrderNumber] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [change, setChange] = useState<number | null>(null);
@@ -86,7 +90,7 @@ export default function CheckoutModal({
 
   // Poll cashlogy charge status while processing cash
   useEffect(() => {
-    if (step === "processing" && method === "cash") {
+    if (step === "processing" && (method === "cash" || method === "cookies")) {
       pollRef.current = setInterval(async () => {
         const st = await getCashlogyChargeStatus();
         if (st.active || st.status) {
@@ -106,7 +110,10 @@ export default function CheckoutModal({
     };
   }, [step, method]);
 
-  const createDemoOrder = (paymentMethod: "cash" | "card" | "manual"): Order => {
+  const createDemoOrder = (
+    paymentMethod: "cash" | "card" | "manual",
+    businessUnit: BusinessUnit = "hicream"
+  ): Order => {
     const num = getNextDemoOrderNumber();
     const id = demoIdRef.current++;
     return {
@@ -115,6 +122,7 @@ export default function CheckoutModal({
       status: "pending",
       total,
       payment_method: paymentMethod,
+      business_unit: businessUnit,
       employee_id: employeeId || null,
       table_number: tableNumber || undefined,
       created_at: new Date().toISOString(),
@@ -196,7 +204,7 @@ export default function CheckoutModal({
   };
 
   const handleCancel = async () => {
-    if (method === "cash" && step === "processing") {
+    if ((method === "cash" || method === "cookies") && step === "processing") {
       await cancelCashlogy();
     }
     if (pollRef.current) {
@@ -254,8 +262,14 @@ export default function CheckoutModal({
     }
   };
 
-  const processPayment = async (paymentMethod: "cash" | "card") => {
-    setMethod(paymentMethod);
+  const processPayment = async (
+    paymentMethod: "cash" | "card",
+    businessUnit: BusinessUnit = "hicream"
+  ) => {
+    const displayMethod: CheckoutMethod = paymentMethod === "cash" && businessUnit === "cookies"
+      ? "cookies"
+      : paymentMethod;
+    setMethod(displayMethod);
     setStep("processing");
     setKitchenPrintError("");
     setDepositedEur(0);
@@ -302,6 +316,7 @@ export default function CheckoutModal({
           body: JSON.stringify({
             items,
             payment_method: paymentMethod,
+            business_unit: businessUnit,
             employee_id: employeeId,
             table_number: tableNumber || null,
             parked_order_id: parkedOrderId || null,
@@ -318,13 +333,16 @@ export default function CheckoutModal({
       }
 
       if (!order) {
-        order = createDemoOrder(paymentMethod);
+        order = createDemoOrder(paymentMethod, businessUnit);
         broadcastNewOrder(order);
       }
 
       setOrderNumber(order.order_number);
 
-      setPendingTicket(buildTicketData(order, paymentMethod === "cash" ? "Efectiu" : "Targeta"));
+      setPendingTicket(buildTicketData(
+        order,
+        businessUnit === "cookies" ? "Cookies - Efectiu" : paymentMethod === "cash" ? "Efectiu" : "Targeta"
+      ));
       setTicketPrinted(false);
       setTicketError("");
 
@@ -504,6 +522,16 @@ export default function CheckoutModal({
               </button>
             </div>
 
+            {canUseCookies && (
+              <button
+                onClick={() => processPayment("cash", "cookies")}
+                className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-[#d9b27c] bg-[#fff2d7] px-5 py-4 font-semibold text-[#7a4818] transition-transform active:scale-[0.99]"
+              >
+                <span className="text-2xl" aria-hidden="true">&#127850;</span>
+                <span>Cookies · cobrar amb Cashlogy</span>
+              </button>
+            )}
+
             <button
               onClick={onClose}
               className="w-full rounded-xl py-3 font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7]"
@@ -514,10 +542,10 @@ export default function CheckoutModal({
         )}
 
         {/* PROCESSING — CASH (real-time Cashlogy display) */}
-        {step === "processing" && method === "cash" && (
+        {step === "processing" && (method === "cash" || method === "cookies") && (
           <div className="py-4">
             <h2 className="mb-6 text-center text-xl font-medium text-[#241f1c]">
-              Processant pagament en efectiu
+              {method === "cookies" ? "Cobro Cookies amb Cashlogy" : "Processant pagament en efectiu"}
             </h2>
 
             <div className="mb-5 rounded-2xl border border-[#b8dec2] bg-[#dff5e6] px-5 py-4 text-center">
@@ -633,7 +661,7 @@ export default function CheckoutModal({
               <span className="text-4xl text-[#2e9e5b]">&#10004;</span>
             </div>
             <h2 className="mb-2 text-2xl font-medium text-[#1e6b3a]">
-              Pagament completat
+              {method === "cookies" ? "Cobrat Cookies" : "Pagament completat"}
             </h2>
             <p className="mb-2 text-5xl font-semibold text-[#241f1c]">
               {orderNumber}

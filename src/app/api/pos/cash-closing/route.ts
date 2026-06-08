@@ -3,6 +3,7 @@ import { getDb, rawQuery, withTransaction } from "@/lib/db";
 import { ensureSupplierPaymentsSchema } from "@/lib/supplier-payments";
 import type { PoolClient } from "pg";
 import type { VatBreakdown } from "@/types/pos";
+import { ensureOrderBusinessUnitSchema } from "@/lib/business-unit";
 
 export const dynamic = "force-dynamic";
 
@@ -48,8 +49,8 @@ async function computeSummary(
     return rawQuery<T>(text, values);
   };
 
-  // Active orders only (exclude pending and cancelled).
-  const activeWhere = `o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked'`;
+  // Active Hi Cream orders only (exclude pending, cancelled, parked and other business units).
+  const activeWhere = `o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked' AND COALESCE(o.business_unit, 'hicream') = 'hicream'`;
 
   const [totals] = await exec<{
     total_cash: number;
@@ -103,7 +104,8 @@ async function computeSummary(
        COUNT(*) FILTER (WHERE o.status = 'cancelled')::int AS cancelled_count,
        COALESCE(SUM(CASE WHEN o.refund_reference IS NOT NULL THEN o.total END), 0)::float AS total_refunded
      FROM pos.orders o
-     WHERE o.created_at >= $1::timestamptz AND o.status = 'cancelled'`,
+     WHERE o.created_at >= $1::timestamptz AND o.status = 'cancelled'
+       AND COALESCE(o.business_unit, 'hicream') = 'hicream'`,
     [since]
   );
 
@@ -111,9 +113,11 @@ async function computeSummary(
     `SELECT
        (SELECT invoice_number FROM pos.orders
         WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
         ORDER BY created_at ASC LIMIT 1) AS first_invoice,
        (SELECT invoice_number FROM pos.orders
         WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
         ORDER BY created_at DESC LIMIT 1) AS last_invoice`,
     [since]
   );
@@ -189,6 +193,7 @@ export async function GET() {
   try {
     const sql = getDb();
     await ensureSupplierPaymentsSchema();
+    await ensureOrderBusinessUnitSchema();
 
     const [lastClosing] = await sql`
       SELECT closed_at FROM pos.cash_closings
@@ -230,6 +235,7 @@ export async function POST(request: NextRequest) {
 
     const closing = await withTransaction(async (client) => {
       await ensureSupplierPaymentsSchema(client);
+      await ensureOrderBusinessUnitSchema(client);
 
       // Find the cutoff: last closing or start-of-day fallback.
       const lastRes = await client.query(

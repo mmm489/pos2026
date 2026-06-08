@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   total_base NUMERIC(10,2),
   total_vat NUMERIC(10,2),
   payment_method VARCHAR(10) NOT NULL,
+  business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream',
   employee_id INTEGER REFERENCES pos.employees(id),
   table_number VARCHAR(10),
   created_at TIMESTAMPTZ NOT NULL,
@@ -98,6 +99,8 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   refund_at TIMESTAMPTZ,
   synced BOOLEAN NOT NULL DEFAULT true
 );
+
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream';
 
 CREATE TABLE IF NOT EXISTS pos.order_items (
   id INTEGER PRIMARY KEY,
@@ -237,6 +240,7 @@ CHECK (entity_type IN ('category', 'product', 'modifier_group', 'employee'));
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_created ON pos.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_status ON pos.orders(status);
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_payment ON pos.orders(payment_method);
+CREATE INDEX IF NOT EXISTS idx_cloud_orders_business_unit ON pos.orders(business_unit);
 CREATE INDEX IF NOT EXISTS idx_cloud_order_items_order ON pos.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_cloud_order_items_product ON pos.order_items(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group ON pos.product_modifier_groups(group_id);

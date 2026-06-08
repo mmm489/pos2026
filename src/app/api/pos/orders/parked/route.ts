@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withTransaction } from "@/lib/db";
 import { allocateOrderNumber } from "@/lib/order-number";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
+import { ensureOrderBusinessUnitSchema } from "@/lib/business-unit";
 
 export const dynamic = "force-dynamic";
 
@@ -183,6 +184,8 @@ export async function POST(request: NextRequest) {
     const tableNumber = body.table_number || null;
 
     const parkedOrder = await withTransaction(async (client) => {
+      await ensureOrderBusinessUnitSchema(client);
+
       const productIds = Array.from(new Set(items.map((item) => Number(item.product_id))));
       const prodRes = await client.query(
         `SELECT id, vat_rate FROM pos.products WHERE id = ANY($1::int[])`,
@@ -278,7 +281,7 @@ export async function POST(request: NextRequest) {
                completed_at = NULL
            WHERE id = $6
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat,
-                     payment_method, employee_id, table_number, created_at, completed_at`,
+                     payment_method, business_unit, employee_id, table_number, created_at, completed_at`,
           [total, totalBase, totalVat, employeeId, tableNumber, parkedOrderId]
         );
         order = orderRes.rows[0];
@@ -289,10 +292,10 @@ export async function POST(request: NextRequest) {
         const orderRes = await client.query(
           `INSERT INTO pos.orders
              (order_number, invoice_number, status, total, total_base, total_vat,
-              payment_method, employee_id, table_number, completed_at)
-           VALUES ($1, NULL, 'pending', $2, $3, $4, 'parked', $5, $6, NULL)
+              payment_method, business_unit, employee_id, table_number, completed_at)
+           VALUES ($1, NULL, 'pending', $2, $3, $4, 'parked', 'hicream', $5, $6, NULL)
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat,
-                     payment_method, employee_id, table_number, created_at, completed_at`,
+                     payment_method, business_unit, employee_id, table_number, created_at, completed_at`,
           [orderNumber, total, totalBase, totalVat, employeeId, tableNumber]
         );
         order = orderRes.rows[0];

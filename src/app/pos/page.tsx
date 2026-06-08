@@ -997,6 +997,7 @@ export default function PosPage() {
           items={cart}
           total={cart.reduce((sum, i) => sum + i.price * i.qty, 0)}
           employeeId={employee.id}
+          canUseCookies={employee.role === "admin"}
           parkedOrderId={activeParkedOrderId}
           onClose={() => setShowCheckout(false)}
           onComplete={handleCheckoutComplete}

@@ -51,6 +51,8 @@ function roundMoney(value) {
 
 async function ensureSchema(client) {
   await client.query(`ALTER TABLE pos.business ADD COLUMN IF NOT EXISTS next_z_number INTEGER NOT NULL DEFAULT 1`);
+  await client.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream'`);
+  await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_business_unit ON pos.orders(business_unit)`);
   await client.query(`
     CREATE TABLE IF NOT EXISTS pos.supplier_payments (
       id SERIAL PRIMARY KEY,
@@ -87,7 +89,7 @@ async function ensureSchema(client) {
 
 async function computeSummary(client, since) {
   const activeWhere =
-    "o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked'";
+    "o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked' AND COALESCE(o.business_unit, 'hicream') = 'hicream'";
 
   const totalsRes = await client.query(
     `SELECT
@@ -132,7 +134,8 @@ async function computeSummary(client, since) {
        COUNT(*) FILTER (WHERE o.status = 'cancelled')::int AS cancelled_count,
        COALESCE(SUM(CASE WHEN o.refund_reference IS NOT NULL THEN o.total END), 0)::float AS total_refunded
      FROM pos.orders o
-     WHERE o.created_at >= $1::timestamptz AND o.status = 'cancelled'`,
+     WHERE o.created_at >= $1::timestamptz AND o.status = 'cancelled'
+       AND COALESCE(o.business_unit, 'hicream') = 'hicream'`,
     [since]
   );
   const cancelledStats = cancelledStatsRes.rows[0];
@@ -141,9 +144,11 @@ async function computeSummary(client, since) {
     `SELECT
        (SELECT invoice_number FROM pos.orders
         WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
         ORDER BY created_at ASC LIMIT 1) AS first_invoice,
        (SELECT invoice_number FROM pos.orders
         WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
+          AND COALESCE(business_unit, 'hicream') = 'hicream'
         ORDER BY created_at DESC LIMIT 1) AS last_invoice`,
     [since]
   );
