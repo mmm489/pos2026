@@ -396,10 +396,20 @@ export default function CheckoutModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-3">
-      <div className="mx-4 w-full max-w-lg rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-7 text-[#241f1c]">
+      <div className="relative mx-4 w-full max-w-lg rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-7 text-[#241f1c]">
         {/* SELECT PAYMENT METHOD */}
         {step === "select" && (
           <>
+            {canUseCookies && (
+              <button
+                onClick={() => processPayment("cash", "cookies")}
+                className="absolute right-5 top-5 flex h-11 w-11 items-center justify-center text-3xl leading-none transition-transform active:scale-90"
+                aria-label="Cobrar Cookies amb Cashlogy"
+                title="Cobrar Cookies amb Cashlogy"
+              >
+                <span aria-hidden="true">&#127850;</span>
+              </button>
+            )}
             <h2 className="mb-2 text-center text-2xl font-medium text-[#241f1c]">
               Cobrar
             </h2>
@@ -522,7 +532,7 @@ export default function CheckoutModal({
               </button>
             </div>
 
-            {canUseCookies && (
+            {false && canUseCookies && (
               <button
                 onClick={() => processPayment("cash", "cookies")}
                 className="mb-6 flex w-full items-center justify-center gap-3 rounded-2xl border border-[#d9b27c] bg-[#fff2d7] px-5 py-4 font-semibold text-[#7a4818] transition-transform active:scale-[0.99]"
