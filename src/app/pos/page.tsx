@@ -867,10 +867,11 @@ export default function PosPage() {
     );
   }
 
-  const canAccessCashlogy = employee.role === "admin" || employee.can_access_cashlogy !== false;
+  const isAdminEmployee = employee.role?.toLowerCase() === "admin";
+  const canAccessCashlogy = isAdminEmployee || employee.can_access_cashlogy !== false;
   const canAccessSupplierPayments =
-    employee.role === "admin" || employee.can_access_supplier_payments !== false;
-  const canAccessProducts = employee.role === "admin" || employee.can_access_products === true;
+    isAdminEmployee || employee.can_access_supplier_payments !== false;
+  const canAccessProducts = isAdminEmployee || employee.can_access_products === true;
 
   return (
     <div className="flex h-screen flex-col bg-[#f5f4ef] text-[#241f1c]">
@@ -883,7 +884,7 @@ export default function PosPage() {
           <div className="min-w-0">
             <h1 className="truncate text-[26px] font-medium leading-[27px] text-[#241f1c]">Hi Cream</h1>
             <p className="truncate text-[9px] font-normal leading-[11px] text-[#6f665c]">
-              {employee.name} - {employee.role === "admin" ? "Admin" : "Empleado"}
+              {employee.name} - {isAdminEmployee ? "Admin" : "Empleado"}
             </p>
           </div>
         </div>
@@ -997,7 +998,7 @@ export default function PosPage() {
           items={cart}
           total={cart.reduce((sum, i) => sum + i.price * i.qty, 0)}
           employeeId={employee.id}
-          canUseCookies={employee.role === "admin"}
+          canUseCookies={isAdminEmployee}
           parkedOrderId={activeParkedOrderId}
           onClose={() => setShowCheckout(false)}
           onComplete={handleCheckoutComplete}
