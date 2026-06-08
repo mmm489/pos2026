@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb, withTransaction } from "@/lib/db";
+import { getDb, rawQuery, withTransaction } from "@/lib/db";
 import { allocateOrderNumber } from "@/lib/order-number";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
 import { ensureOrderBusinessUnitSchema, normalizeBusinessUnit } from "@/lib/business-unit";
@@ -94,23 +94,30 @@ export async function GET(request: NextRequest) {
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
+    const businessUnitParam = searchParams.get("business_unit") || "hicream";
+    const businessUnit =
+      businessUnitParam === "all" ? null : normalizeBusinessUnit(businessUnitParam);
 
     let orders;
     if (statusFilter) {
       const statuses = statusFilter.split(",");
-      orders = await sql`
-        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, refund_reference, refund_at
-        FROM pos.orders
-        WHERE status = ANY(${statuses})
-        ORDER BY created_at DESC
-      `;
+      orders = await rawQuery(
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, refund_reference, refund_at
+         FROM pos.orders
+         WHERE status = ANY($1)
+           AND ($2::text IS NULL OR COALESCE(business_unit, 'hicream') = $2)
+         ORDER BY created_at DESC`,
+        [statuses, businessUnit]
+      );
     } else {
-      orders = await sql`
-        SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, refund_reference, refund_at
-        FROM pos.orders
-        ORDER BY created_at DESC
-        LIMIT 500
-      `;
+      orders = await rawQuery(
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, refund_reference, refund_at
+         FROM pos.orders
+         WHERE ($1::text IS NULL OR COALESCE(business_unit, 'hicream') = $1)
+         ORDER BY created_at DESC
+         LIMIT 500`,
+        [businessUnit]
+      );
     }
 
     // Fetch items for each order
