@@ -22,7 +22,7 @@ import {
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
 import { publishCustomerDisplaySnapshot } from "@/lib/customer-display";
-import { initCashlogy, printTicket } from "@/lib/bridge";
+import { closeCashlogy, initCashlogy, printTicket } from "@/lib/bridge";
 import type { Business, ParkedTicket } from "@/types/pos";
 
 type CartAction =
@@ -904,12 +904,23 @@ export default function PosPage() {
 
   const handleShutdown = useCallback(async () => {
     const confirmed = window.confirm(
-      "Tancar el POS, la pantalla client i els serveis de HiCream?"
+      "Estas seguro que deseas salir? Se cerrara la comunicacion con Cashlogy y despues el POS."
     );
     if (!confirmed) return;
 
     setShuttingDown(true);
     try {
+      const closeResult = await closeCashlogy();
+      if (closeResult.error || closeResult.success === false) {
+        const continueClosing = window.confirm(
+          "No se ha podido cerrar la comunicacion con Cashlogy. Compruebe la maquina si es necesario. Quieres cerrar el POS igualmente?"
+        );
+        if (!continueClosing) {
+          setShuttingDown(false);
+          return;
+        }
+      }
+
       const res = await fetch("/api/pos/shutdown", { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
