@@ -39,6 +39,17 @@ const PARKED_TICKETS_STORAGE_KEY = "hicream_parked_tickets_v1";
 const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
   "No se puede establecer una conexion con la maquina. Compruebe que la maquina este encendida y correctamente conectada/configurada.";
 
+function getCashlogyDeviceMessage(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const summary = (data as { deviceSummary?: { message?: unknown; multipleTransactionsAvailable?: unknown } }).deviceSummary;
+  if (!summary || typeof summary.message !== "string") return null;
+  const multiple =
+    summary.multipleTransactionsAvailable === true
+      ? " Transacciones multiples disponibles."
+      : " Transacciones multiples no disponibles.";
+  return `${summary.message}${multiple}`;
+}
+
 // Categories whose name contains any of these keywords are treated as
 // "modifier" categories — their products appear in the long-press popup
 // instead of being eligible to trigger their own modifier popup.
@@ -781,12 +792,16 @@ export default function PosPage() {
           return;
         }
 
+        const deviceMessage = getCashlogyDeviceMessage(result);
+        const successMessage = deviceMessage
+          ? `La inicializacion de Cashlogy se ha completado con exito.\n\n${deviceMessage}`
+          : "La inicializacion de Cashlogy se ha completado con exito.";
         setCashlogyStartupInit({
           status: "success",
-          message: "La inicializacion de Cashlogy se ha completado con exito.",
+          message: successMessage,
           data: result,
         });
-        window.alert("La inicializacion de Cashlogy se ha completado con exito.");
+        window.alert(successMessage);
       })
       .catch(() => {
         if (cancelled) return;

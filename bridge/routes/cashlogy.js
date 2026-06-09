@@ -260,10 +260,46 @@ function isChargeActive() {
   );
 }
 
-async function getPrimaryCashPeripheral() {
-  const peripherals = await cashlogyRequest("/peripherals", "GET", null, 8_000);
+function getPrimaryCashPeripheralFrom(peripherals) {
   const cash = Array.isArray(peripherals.cash) ? peripherals.cash : [];
   return cash.find((p) => p.isPrimary) || cash[0] || null;
+}
+
+async function getCashlogyPeripherals() {
+  return cashlogyRequest("/peripherals", "GET", null, 8_000);
+}
+
+async function getPrimaryCashPeripheral() {
+  const peripherals = await getCashlogyPeripherals();
+  return getPrimaryCashPeripheralFrom(peripherals);
+}
+
+function summarizeCashlogyPeripherals(peripherals) {
+  const cash = Array.isArray(peripherals?.cash) ? peripherals.cash : [];
+  const cashless = Array.isArray(peripherals?.cashless) ? peripherals.cashless : [];
+  const cashCount = cash.length;
+  const cashlessCount = cashless.length;
+  let scenario = "no_cash_device";
+  let message = "No se ha detectado ninguna maquina Cashlogy de efectivo.";
+
+  if (cashCount > 0 && cashlessCount === 0) {
+    scenario = "cash_only";
+    message = "Se ha detectado solo un dispositivo de pago en efectivo Cashlogy.";
+  } else if (cashCount > 0 && cashlessCount === 1) {
+    scenario = "cash_plus_one_snext";
+    message = "Se ha detectado una maquina Cashlogy de efectivo y un lector de tarjetas SNEXT.";
+  } else if (cashCount > 0 && cashlessCount > 1) {
+    scenario = "cash_plus_multiple_snext";
+    message = `Se ha detectado una maquina Cashlogy de efectivo y ${cashlessCount} lectores de tarjetas SNEXT.`;
+  }
+
+  return {
+    cashCount,
+    cashlessCount,
+    scenario,
+    multipleTransactionsAvailable: cashCount > 0 && cashlessCount > 0,
+    message,
+  };
 }
 
 async function waitForInit() {
@@ -289,8 +325,18 @@ async function runStartupInit() {
   }
 
   const status = await waitForInit();
-  const refreshedPeripheral = await getPrimaryCashPeripheral().catch(() => null);
-  return { initialized: true, alreadyAvailable: false, status, peripheral: refreshedPeripheral };
+  const peripherals = await getCashlogyPeripherals();
+  const deviceSummary = summarizeCashlogyPeripherals(peripherals);
+  const refreshedPeripheral = getPrimaryCashPeripheralFrom(peripherals);
+  return {
+    initialized: true,
+    alreadyAvailable: false,
+    status,
+    peripherals,
+    peripheral: refreshedPeripheral,
+    deviceSummary,
+    multipleTransactionsAvailable: deviceSummary.multipleTransactionsAvailable,
+  };
 }
 
 async function requireCashlogyReady() {
