@@ -97,6 +97,10 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   cancelled_at TIMESTAMPTZ,
   cancellation_reason TEXT,
   cancelled_by INTEGER REFERENCES pos.employees(id),
+  cashless_peripheral_id VARCHAR(120),
+  cashless_operation_id VARCHAR(120),
+  cashless_transaction_number VARCHAR(120),
+  cashless_amount NUMERIC(10,2),
   synced BOOLEAN NOT NULL DEFAULT false
 );
 

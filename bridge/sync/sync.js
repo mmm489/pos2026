@@ -113,6 +113,10 @@ const TABLES = [
       "card_reference",
       "card_authorization",
       "card_receipt_text",
+      "cashless_peripheral_id",
+      "cashless_operation_id",
+      "cashless_transaction_number",
+      "cashless_amount",
       "refund_reference",
       "refund_at",
       "synced",
@@ -382,6 +386,10 @@ async function ensureOrderBusinessUnitSchema(db) {
     ALTER TABLE pos.business
     ADD COLUMN IF NOT EXISTS next_cookies_invoice_number INTEGER NOT NULL DEFAULT 1
   `);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_peripheral_id VARCHAR(120)`);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_operation_id VARCHAR(120)`);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_transaction_number VARCHAR(120)`);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_amount NUMERIC(10,2)`);
 }
 
 async function ensureLocalModifierSchema(local) {

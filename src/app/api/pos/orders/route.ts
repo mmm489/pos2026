@@ -8,6 +8,7 @@ import { ensureOrderBusinessUnitSchema, normalizeBusinessUnit } from "@/lib/busi
 export const dynamic = "force-dynamic";
 
 let kdsReadyColumnsEnsured = false;
+let cashlessAuditColumnsEnsured = false;
 
 type KitchenOrderItem = {
   product_name?: string | null;
@@ -88,10 +89,25 @@ async function ensureKdsReadyColumns() {
   kdsReadyColumnsEnsured = true;
 }
 
+async function ensureCashlessAuditColumns(client?: { query: (sql: string) => Promise<unknown> }) {
+  if (cashlessAuditColumnsEnsured && !client) return;
+  const runner = client || {
+    query: async (sql: string) => {
+      await rawQuery(sql);
+    },
+  };
+  await runner.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_peripheral_id VARCHAR(120)`);
+  await runner.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_operation_id VARCHAR(120)`);
+  await runner.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_transaction_number VARCHAR(120)`);
+  await runner.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_amount NUMERIC(10,2)`);
+  if (!client) cashlessAuditColumnsEnsured = true;
+}
+
 export async function GET(request: NextRequest) {
   try {
     await ensureOrderBusinessUnitSchema();
     await ensureKdsReadyColumns();
+    await ensureCashlessAuditColumns();
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
@@ -103,7 +119,7 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       const statuses = statusFilter.split(",");
       orders = await rawQuery(
-        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, refund_reference, refund_at
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
          FROM pos.orders
          WHERE status = ANY($1)
            AND ($2::text IS NULL OR COALESCE(business_unit, 'hicream') = $2)
@@ -112,7 +128,7 @@ export async function GET(request: NextRequest) {
       );
     } else {
       orders = await rawQuery(
-        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, refund_reference, refund_at
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
          FROM pos.orders
          WHERE ($1::text IS NULL OR COALESCE(business_unit, 'hicream') = $1)
          ORDER BY created_at DESC
@@ -158,7 +174,20 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { items, payment_method, employee_id, table_number, card_reference, card_authorization, card_receipt_text, parked_order_id } = body;
+    const {
+      items,
+      payment_method,
+      employee_id,
+      table_number,
+      card_reference,
+      card_authorization,
+      card_receipt_text,
+      cashless_peripheral_id,
+      cashless_operation_id,
+      cashless_transaction_number,
+      cashless_amount,
+      parked_order_id,
+    } = body;
     const businessUnit = normalizeBusinessUnit(body.business_unit);
 
     if (!items || items.length === 0 || !payment_method) {
@@ -196,9 +225,23 @@ export async function POST(request: NextRequest) {
     const cardReceiptText = (storedPaymentMethod === "card" && card_receipt_text)
       ? String(card_receipt_text).slice(0, 8192)
       : null;
+    const cashlessPeripheralId = (storedPaymentMethod === "card" && cashless_peripheral_id)
+      ? String(cashless_peripheral_id).slice(0, 120)
+      : null;
+    const cashlessOperationId = (storedPaymentMethod === "card" && cashless_operation_id)
+      ? String(cashless_operation_id).slice(0, 120)
+      : null;
+    const cashlessTransactionNumber = (storedPaymentMethod === "card" && cashless_transaction_number)
+      ? String(cashless_transaction_number).slice(0, 120)
+      : null;
+    const parsedCashlessAmount = Number(cashless_amount);
+    const cashlessAmount = (storedPaymentMethod === "card" && Number.isFinite(parsedCashlessAmount))
+      ? Math.round(parsedCashlessAmount * 100) / 100
+      : null;
 
     const completeOrder = await withTransaction(async (client) => {
       await ensureOrderBusinessUnitSchema(client);
+      await ensureCashlessAuditColumns(client);
 
       // Fetch actual VAT rate per product from DB (don't trust client)
       const productIds = Array.from(new Set((items as { product_id: number }[]).map((i) => i.product_id)));
@@ -274,19 +317,60 @@ export async function POST(request: NextRequest) {
                card_reference = $9,
                card_authorization = $10,
                card_receipt_text = $11,
-               order_number = CASE WHEN $13 = 'cookies' THEN $14 ELSE order_number END
-           WHERE id = $12
-           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
-          [invoiceNumber, total, totalBase, totalVat, storedPaymentMethod, businessUnit, empId, tblNum, cardRef, cardAuth, cardReceiptText, parkedOrderId, businessUnit, orderNumber]
+               cashless_peripheral_id = $12,
+               cashless_operation_id = $13,
+               cashless_transaction_number = $14,
+               cashless_amount = $15,
+               order_number = CASE WHEN $17 = 'cookies' THEN $18 ELSE order_number END
+           WHERE id = $16
+           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount`,
+          [
+            invoiceNumber,
+            total,
+            totalBase,
+            totalVat,
+            storedPaymentMethod,
+            businessUnit,
+            empId,
+            tblNum,
+            cardRef,
+            cardAuth,
+            cardReceiptText,
+            cashlessPeripheralId,
+            cashlessOperationId,
+            cashlessTransactionNumber,
+            cashlessAmount,
+            parkedOrderId,
+            businessUnit,
+            orderNumber,
+          ]
         );
         order = orderRes.rows[0];
         await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
       } else {
         const orderRes = await client.query(
-          `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, card_reference, card_authorization, card_receipt_text, completed_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, ${initialCompletedAt})
-           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
-          [orderNumber, invoiceNumber, initialStatus, total, totalBase, totalVat, storedPaymentMethod, businessUnit, empId, tblNum, cardRef, cardAuth, cardReceiptText]
+          `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, completed_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, ${initialCompletedAt})
+           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount`,
+          [
+            orderNumber,
+            invoiceNumber,
+            initialStatus,
+            total,
+            totalBase,
+            totalVat,
+            storedPaymentMethod,
+            businessUnit,
+            empId,
+            tblNum,
+            cardRef,
+            cardAuth,
+            cardReceiptText,
+            cashlessPeripheralId,
+            cashlessOperationId,
+            cashlessTransactionNumber,
+            cashlessAmount,
+          ]
         );
         order = orderRes.rows[0];
       }

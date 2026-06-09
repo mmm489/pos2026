@@ -316,6 +316,22 @@ export default function CheckoutModal({
         paymentMethod === "card" && "receipt" in paymentResult
           ? (paymentResult as { receipt?: string }).receipt || null
           : null;
+      const cashlessPeripheralId =
+        paymentMethod === "card" && "cashlessPeripheralId" in paymentResult
+          ? (paymentResult as { cashlessPeripheralId?: string | null }).cashlessPeripheralId || null
+          : null;
+      const cashlessOperationId =
+        paymentMethod === "card" && "cashlessOperationId" in paymentResult
+          ? (paymentResult as { cashlessOperationId?: string | null }).cashlessOperationId || null
+          : null;
+      const cashlessTransactionNumber =
+        paymentMethod === "card" && "cashlessTransactionNumber" in paymentResult
+          ? (paymentResult as { cashlessTransactionNumber?: string | null }).cashlessTransactionNumber || null
+          : null;
+      const cashlessAmount =
+        paymentMethod === "card" && "cashlessAmount" in paymentResult
+          ? (paymentResult as { cashlessAmount?: number | null }).cashlessAmount ?? null
+          : null;
 
       // Create order via API
       let order: OrderWithKitchenPrint | null = null;
@@ -333,6 +349,10 @@ export default function CheckoutModal({
             card_reference: cardReference,
             card_authorization: cardAuthorization,
             card_receipt_text: cardReceiptText,
+            cashless_peripheral_id: cashlessPeripheralId,
+            cashless_operation_id: cashlessOperationId,
+            cashless_transaction_number: cashlessTransactionNumber,
+            cashless_amount: cashlessAmount,
           }),
         });
         if (orderRes.ok) {

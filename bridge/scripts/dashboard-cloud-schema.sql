@@ -97,12 +97,20 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   card_reference VARCHAR(20),
   card_authorization VARCHAR(20),
   card_receipt_text TEXT,
+  cashless_peripheral_id VARCHAR(120),
+  cashless_operation_id VARCHAR(120),
+  cashless_transaction_number VARCHAR(120),
+  cashless_amount NUMERIC(10,2),
   refund_reference VARCHAR(20),
   refund_at TIMESTAMPTZ,
   synced BOOLEAN NOT NULL DEFAULT true
 );
 
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream';
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_peripheral_id VARCHAR(120);
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_operation_id VARCHAR(120);
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_transaction_number VARCHAR(120);
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_amount NUMERIC(10,2);
 
 CREATE TABLE IF NOT EXISTS pos.order_items (
   id INTEGER PRIMARY KEY,

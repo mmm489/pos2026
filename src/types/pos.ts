@@ -52,6 +52,10 @@ export interface Order {
   card_reference?: string | null; // REDSYS factura, used as originalReference for refund/cancel
   card_authorization?: string | null; // Authorization code from datafono
   card_receipt_text?: string | null; // Raw DatosRecibo text — used to re-print the bank receipt
+  cashless_peripheral_id?: string | null;
+  cashless_operation_id?: string | null;
+  cashless_transaction_number?: string | null;
+  cashless_amount?: number | null;
   refund_reference?: string | null; // REDSYS factura returned by refund/cancel op
   refund_at?: string | null;
   items?: OrderItem[];

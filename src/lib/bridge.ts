@@ -14,6 +14,10 @@ export type CashlogyChargeResult = {
   connectorStatus?: string | null;
   connectorResult?: string | null;
   connectorType?: string | null;
+  cashlessPeripheralId?: string | null;
+  cashlessOperationId?: string | null;
+  cashlessTransactionNumber?: string | null;
+  cashlessAmount?: number | null;
   cancelled?: boolean;
   warning?: string | null;
   error?: string;
@@ -274,6 +278,10 @@ export interface CashlogyChargeStatus {
   change?: number | null;
   pendingDispense?: number | null;
   cashless?: number | null;
+  cashlessPeripheralId?: string | null;
+  cashlessOperationId?: string | null;
+  cashlessTransactionNumber?: string | null;
+  cashlessAmount?: number | null;
   error?: string | null;
   warning?: string | null;
   chargeId?: string | null;

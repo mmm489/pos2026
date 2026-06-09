@@ -396,6 +396,12 @@ function updateCurrentChargeFromConnector(op) {
   currentCharge.connectorType = mapped.connectorType;
   currentCharge.error = mapped.error;
   currentCharge.warning = mapped.warning;
+  currentCharge.cashlessPeripheralId = op?.peripheral?.id || currentCharge.cashlessPeripheralId || null;
+  currentCharge.cashlessOperationId = op?.id || currentCharge.cashlessOperationId || null;
+  currentCharge.cashlessTransactionNumber =
+    op?.cashlessInfo?.transactionNumber || currentCharge.cashlessTransactionNumber || null;
+  currentCharge.cashlessAmountCents =
+    parseCents(op?.cashlessInfo?.amount) || currentCharge.cashlessAmountCents || 0;
   currentCharge.finishedAt = op?.finishedAt || currentCharge.finishedAt || null;
   currentCharge.raw = op || currentCharge.raw || null;
   currentCharge.change = mapped.dispensedCents / 100;
@@ -547,6 +553,10 @@ function handleCashlogyChargeStatus(_req, res) {
     warning: currentCharge.warning || null,
     chargeId: currentCharge.chargeId || null,
     depositId: currentCharge.chargeId || null,
+    cashlessPeripheralId: currentCharge.cashlessPeripheralId || null,
+    cashlessOperationId: currentCharge.cashlessOperationId || null,
+    cashlessTransactionNumber: currentCharge.cashlessTransactionNumber || null,
+    cashlessAmount: currentCharge.cashlessAmountCents || 0,
   });
 }
 
@@ -586,6 +596,10 @@ async function handleCashlogyCharge(req, res) {
     change: 0,
     error: null,
     warning: null,
+    cashlessPeripheralId: null,
+    cashlessOperationId: null,
+    cashlessTransactionNumber: null,
+    cashlessAmountCents: 0,
     cancelRequested: false,
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -661,6 +675,10 @@ async function handleCashlogyCharge(req, res) {
         connectorResult: currentCharge.connectorResult,
         connectorType: currentCharge.connectorType,
         warning: currentCharge.warning || null,
+        cashlessPeripheralId: currentCharge.cashlessPeripheralId || null,
+        cashlessOperationId: currentCharge.cashlessOperationId || null,
+        cashlessTransactionNumber: currentCharge.cashlessTransactionNumber || null,
+        cashlessAmount: currentCharge.cashlessAmountCents || 0,
       });
     }
 
