@@ -283,7 +283,11 @@ export default function CheckoutModal({
         paymentResult = await chargeIngenico(total);
       }
       if (!paymentResult.success) {
-        if (paymentMethod === "cash" && "cancelled" in paymentResult && paymentResult.cancelled) {
+        if (
+          (paymentMethod === "cash" || paymentMethod === "card") &&
+          "cancelled" in paymentResult &&
+          paymentResult.cancelled
+        ) {
           const message = paymentResult.error || "El cliente ha cancelado la transaccion";
           window.alert(message);
           setErrorMsg(message);

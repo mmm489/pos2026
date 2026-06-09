@@ -14,6 +14,8 @@ const CERT_TRAFFIC_LIMIT = Number(process.env.CASHLOGY_CERT_TRAFFIC_LIMIT) || 25
 const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
   "No se puede establecer una conexion con la maquina. Compruebe que la maquina este encendida y correctamente conectada/configurada.";
 const CASHLOGY_CHARGE_CANCELLED_MESSAGE = "El cliente ha cancelado la transaccion";
+const CASHLOGY_CASHLESS_CANCELLED_MESSAGE =
+  "El pago con tarjeta ha sido cancelado por el usuario";
 const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
   "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
 const CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE =
@@ -242,6 +244,20 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
       };
     }
     if (connectorResult === "CANCELLED") {
+      if (expectedConnectorType === "CASHLESS") {
+        return {
+          depositedCents,
+          dispensedCents,
+          pendingDispenseCents,
+          cashlessCents,
+          status: "cancelled",
+          connectorStatus,
+          connectorResult,
+          connectorType,
+          error: CASHLOGY_CASHLESS_CANCELLED_MESSAGE,
+          finished: true,
+        };
+      }
       if (noPaymentProcessed) {
         return {
           depositedCents,
