@@ -16,6 +16,8 @@ const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
 const CASHLOGY_CHARGE_CANCELLED_MESSAGE = "El cliente ha cancelado la transaccion";
 const CASHLOGY_CASHLESS_CANCELLED_MESSAGE =
   "El pago con tarjeta ha sido cancelado por el usuario";
+const CASHLOGY_CASHLESS_FAILED_MESSAGE =
+  "Se ha producido un error durante el pago con tarjeta. Intentelo de nuevo";
 const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
   "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
 const CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE =
@@ -296,6 +298,20 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         connectorResult,
         connectorType,
         error: CASHLOGY_CHARGE_CANCELLED_MESSAGE,
+        finished: true,
+      };
+    }
+    if (connectorResult === "FAILED" && expectedConnectorType === "CASHLESS") {
+      return {
+        depositedCents,
+        dispensedCents,
+        pendingDispenseCents,
+        cashlessCents,
+        status: "cancelled",
+        connectorStatus,
+        connectorResult,
+        connectorType,
+        error: CASHLOGY_CASHLESS_FAILED_MESSAGE,
         finished: true,
       };
     }
