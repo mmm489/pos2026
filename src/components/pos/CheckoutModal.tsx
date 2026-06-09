@@ -297,6 +297,9 @@ export default function CheckoutModal({
       if (paymentMethod === "cash" && "change" in paymentResult) {
         setChange(paymentResult.change ?? null);
       }
+      if (paymentMethod === "cash" && "warning" in paymentResult && paymentResult.warning) {
+        window.alert(paymentResult.warning);
+      }
 
       // For card payments, capture REDSYS reference + authorization code so we can
       // later refund/cancel through the same datafono (and so it shows on Comercia portal).

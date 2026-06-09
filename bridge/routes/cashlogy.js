@@ -18,6 +18,8 @@ const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
   "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
 const CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE =
   "El usuario ha cancelado la transaccion, pero no se ha podido reembolsar el dinero introducido hasta el momento";
+const CASHLOGY_PENDING_CHANGE_WARNING_MESSAGE =
+  "La transaccion se ha cobrado, pero no se ha podido dispensar parte del cambio. Por favor, compruebe sus niveles de monedas y billetes";
 
 let currentCharge = null;
 const certTraffic = [];
@@ -170,6 +172,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
       connectorResult: null,
       connectorType: null,
       error: null,
+      warning: null,
       finished: false,
     };
   }
@@ -190,6 +193,8 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
       pendingDispenseCents > 0 &&
       depositedCents < expectedAmountCents &&
       depositedCents >= dispensedCents;
+    const paidWithPendingChange =
+      pendingDispenseCents > 0 && depositedCents > expectedAmountCents;
 
     if (expectedId && connectorId !== expectedId) {
       return {
@@ -227,6 +232,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         connectorResult,
         connectorType,
         error: null,
+        warning: null,
         finished: true,
       };
     }
@@ -295,6 +301,20 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         finished: true,
       };
     }
+    if (connectorResult === "FAILED" && paidWithPendingChange) {
+      return {
+        depositedCents,
+        dispensedCents,
+        pendingDispenseCents,
+        status: "done",
+        connectorStatus,
+        connectorResult,
+        connectorType,
+        error: null,
+        warning: CASHLOGY_PENDING_CHANGE_WARNING_MESSAGE,
+        finished: true,
+      };
+    }
     return {
       depositedCents,
       dispensedCents,
@@ -338,6 +358,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
     connectorResult,
     connectorType,
     error: null,
+    warning: null,
     finished: false,
   };
 }
@@ -359,6 +380,7 @@ function updateCurrentChargeFromConnector(op) {
   currentCharge.connectorResult = mapped.connectorResult;
   currentCharge.connectorType = mapped.connectorType;
   currentCharge.error = mapped.error;
+  currentCharge.warning = mapped.warning;
   currentCharge.finishedAt = op?.finishedAt || currentCharge.finishedAt || null;
   currentCharge.raw = op || currentCharge.raw || null;
   currentCharge.change = mapped.dispensedCents / 100;
@@ -504,6 +526,7 @@ function handleCashlogyChargeStatus(_req, res) {
     change: dispensedCents / 100,
     pendingDispense: pendingDispenseCents / 100,
     error: currentCharge.error || null,
+    warning: currentCharge.warning || null,
     chargeId: currentCharge.chargeId || null,
     depositId: currentCharge.chargeId || null,
   });
@@ -543,6 +566,7 @@ async function handleCashlogyCharge(req, res) {
     expectedType: requestedType,
     change: 0,
     error: null,
+    warning: null,
     cancelRequested: false,
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -616,6 +640,7 @@ async function handleCashlogyCharge(req, res) {
         connectorStatus: currentCharge.connectorStatus,
         connectorResult: currentCharge.connectorResult,
         connectorType: currentCharge.connectorType,
+        warning: currentCharge.warning || null,
       });
     }
 
