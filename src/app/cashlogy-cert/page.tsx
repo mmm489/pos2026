@@ -37,9 +37,23 @@ type TrafficEntry = {
 
 type BridgeCallResponse = {
   success?: boolean;
+  items?: MultiChargeItem[];
   amountRefunded?: number;
   amountRefundedCents?: number;
   [key: string]: unknown;
+};
+
+type MultiChargeItem = {
+  chargeId?: string | null;
+  ticketNumber?: string | null;
+  amount?: number;
+  status?: string;
+  connectorStatus?: string | null;
+  connectorResult?: string | null;
+  connectorType?: string | null;
+  expectedType?: string | null;
+  active?: boolean;
+  error?: string | null;
 };
 
 type BridgeCallOptions = {
@@ -58,6 +72,7 @@ export default function CashlogyCertPage() {
   const [amount, setAmount] = useState("0.10");
   const [cashlessPeripheralId, setCashlessPeripheralId] = useState("");
   const [refundTransactionNumber, setRefundTransactionNumber] = useState("");
+  const [multiChargeItems, setMultiChargeItems] = useState<MultiChargeItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -199,6 +214,7 @@ export default function CashlogyCertPage() {
             : options.errorMessage;
         window.alert(message);
       }
+      return data;
     } catch (error) {
       addLog({
         source: "ui",
@@ -206,10 +222,21 @@ export default function CashlogyCertPage() {
         ok: false,
         data: (error as Error).name === "AbortError" ? "Timeout" : String((error as Error).message || error),
       });
+      return null;
     } finally {
       window.clearTimeout(timeout);
       setBusy(null);
       loadTraffic();
+    }
+  }
+
+  async function loadMultiCharges() {
+    const data = await callBridge("Consultar tickets multiples", "/cashlogy/charges/status", {
+      method: "GET",
+      timeoutMs: 20_000,
+    });
+    if (data && Array.isArray(data.items)) {
+      setMultiChargeItems(data.items);
     }
   }
 
@@ -393,6 +420,103 @@ export default function CashlogyCertPage() {
                 >
                   Cancel
                 </button>
+
+                <div className="mt-3 rounded-2xl border border-[#e7dac6] bg-[#fbfaf7] p-4">
+                  <h3 className="text-base font-black">Transacciones multiples</h3>
+                  <p className="mt-1 text-xs font-bold text-[#7b6b5a]">
+                    Inicia un ticket, vuelve al menu principal y consulta varios cobros abiertos por id.
+                  </p>
+                  <div className="mt-3 grid gap-2">
+                    <button
+                      disabled={!canCharge}
+                      onClick={async () => {
+                        const data = await callBridge("Iniciar ticket multiple CASH", "/cashlogy/charge/start", {
+                          body: {
+                            amount: parsedAmount,
+                            ticketNumber: `MULTI-CASH-${Date.now()}`,
+                            machineCode: config?.machineCode || "hicream-pos",
+                            screenVisible: true,
+                            topMost: true,
+                            type: "CASH",
+                          },
+                          timeoutMs: 30_000,
+                          successMessage: "Cobro iniciado. Puedes volver al menu principal e iniciar otro ticket.",
+                        });
+                        if (data?.success) await loadMultiCharges();
+                      }}
+                      className="rounded-xl bg-[#0f766e] px-4 py-3 text-sm font-black text-white shadow-sm disabled:opacity-50"
+                    >
+                      Iniciar ticket multiple CASH
+                    </button>
+                    <button
+                      disabled={!canCharge}
+                      onClick={async () => {
+                        const data = await callBridge("Iniciar ticket multiple CASHLESS", "/cashlogy/charge/start", {
+                          body: {
+                            amount: parsedAmount,
+                            ticketNumber: `MULTI-SNEXT-${Date.now()}`,
+                            machineCode: config?.machineCode || "hicream-pos",
+                            screenVisible: true,
+                            topMost: true,
+                            type: "CASHLESS",
+                            peripheralId: cashlessPeripheralId.trim(),
+                          },
+                          timeoutMs: 30_000,
+                          successMessage: "Cobro SNEXT iniciado. Puedes volver al menu principal e iniciar otro ticket.",
+                        });
+                        if (data?.success) await loadMultiCharges();
+                      }}
+                      className="rounded-xl bg-[#6d28d9] px-4 py-3 text-sm font-black text-white shadow-sm disabled:opacity-50"
+                    >
+                      Iniciar ticket multiple CASHLESS
+                    </button>
+                    <button
+                      disabled={Boolean(busy)}
+                      onClick={() => {
+                        addLog({
+                          source: "ui",
+                          label: "Volver al menu principal",
+                          ok: true,
+                          data: "El cobro queda abierto en ConnectorPlus y el TPV puede abrir otro ticket.",
+                        });
+                        window.alert("Puedes volver al menu principal. El cobro queda abierto en ConnectorPlus.");
+                      }}
+                      className="rounded-xl border border-[#dccfbb] bg-white px-4 py-3 text-sm font-black disabled:opacity-50"
+                    >
+                      Volver al menu principal
+                    </button>
+                    <button
+                      disabled={Boolean(busy)}
+                      onClick={loadMultiCharges}
+                      className="rounded-xl border border-[#dccfbb] bg-white px-4 py-3 text-sm font-black disabled:opacity-50"
+                    >
+                      Actualizar tickets abiertos
+                    </button>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {multiChargeItems.length === 0 ? (
+                      <p className="rounded-xl bg-white p-3 text-xs font-bold text-[#7b6b5a]">
+                        No hay tickets multiples registrados en esta sesion.
+                      </p>
+                    ) : (
+                      multiChargeItems.map((item, index) => (
+                        <div key={item.chargeId || item.ticketNumber || index} className="rounded-xl border border-[#eadfce] bg-white p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-black">{item.ticketNumber || item.chargeId}</p>
+                            <span className={`rounded-full px-2 py-1 text-[11px] font-black ${item.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                              {item.status || "pendent"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs font-bold text-[#7b6b5a]">
+                            id: {item.chargeId || "-"} · tipo: {item.connectorType || item.expectedType || "-"} · result: {item.connectorResult || "-"}
+                          </p>
+                          {item.error && <p className="mt-1 text-xs font-bold text-rose-700">{item.error}</p>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

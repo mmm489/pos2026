@@ -31,6 +31,7 @@ const CASHLOGY_PENDING_CHANGE_WARNING_MESSAGE =
 
 let currentCharge = null;
 let currentRefund = null;
+const multiCharges = new Map();
 const certTraffic = [];
 
 function sleep(ms) {
@@ -414,36 +415,108 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
   };
 }
 
-function updateCurrentChargeFromConnector(op) {
-  if (!currentCharge) return null;
-
+function applyChargeRecordFromConnector(charge, op) {
+  if (!charge) return null;
   const mapped = connectorChargeToState(
     op,
-    currentCharge.chargeId,
-    currentCharge.expectedType || "CASH",
-    currentCharge.amountCents || 0
+    charge.chargeId,
+    charge.expectedType || "CASH",
+    charge.amountCents || 0
   );
-  currentCharge.depositedCents = mapped.depositedCents;
-  currentCharge.dispensedCents = mapped.dispensedCents;
-  currentCharge.pendingDispenseCents = mapped.pendingDispenseCents;
-  currentCharge.cashlessCents = mapped.cashlessCents;
-  currentCharge.status = mapped.status;
-  currentCharge.connectorStatus = mapped.connectorStatus;
-  currentCharge.connectorResult = mapped.connectorResult;
-  currentCharge.connectorType = mapped.connectorType;
-  currentCharge.error = mapped.error;
-  currentCharge.warning = mapped.warning;
-  currentCharge.cashlessPeripheralId = op?.peripheral?.id || currentCharge.cashlessPeripheralId || null;
-  currentCharge.cashlessOperationId = op?.id || currentCharge.cashlessOperationId || null;
-  currentCharge.cashlessTransactionNumber =
-    op?.cashlessInfo?.transactionNumber || currentCharge.cashlessTransactionNumber || null;
-  currentCharge.cashlessAmountCents =
-    parseCents(op?.cashlessInfo?.amount) || currentCharge.cashlessAmountCents || 0;
-  currentCharge.finishedAt = op?.finishedAt || currentCharge.finishedAt || null;
-  currentCharge.raw = op || currentCharge.raw || null;
-  currentCharge.change = mapped.dispensedCents / 100;
+  charge.depositedCents = mapped.depositedCents;
+  charge.dispensedCents = mapped.dispensedCents;
+  charge.pendingDispenseCents = mapped.pendingDispenseCents;
+  charge.cashlessCents = mapped.cashlessCents;
+  charge.status = mapped.status;
+  charge.connectorStatus = mapped.connectorStatus;
+  charge.connectorResult = mapped.connectorResult;
+  charge.connectorType = mapped.connectorType;
+  charge.error = mapped.error;
+  charge.warning = mapped.warning;
+  charge.cashlessPeripheralId = op?.peripheral?.id || charge.cashlessPeripheralId || null;
+  charge.cashlessOperationId = op?.id || charge.cashlessOperationId || null;
+  charge.cashlessTransactionNumber =
+    op?.cashlessInfo?.transactionNumber || charge.cashlessTransactionNumber || null;
+  charge.cashlessAmountCents =
+    parseCents(op?.cashlessInfo?.amount) || charge.cashlessAmountCents || 0;
+  charge.finishedAt = op?.finishedAt || charge.finishedAt || null;
+  charge.raw = op || charge.raw || null;
+  charge.change = mapped.dispensedCents / 100;
 
   return mapped;
+}
+
+function updateCurrentChargeFromConnector(op) {
+  if (!currentCharge) return null;
+  return applyChargeRecordFromConnector(currentCharge, op);
+}
+
+function createChargeRecord({ amountCents, requestedType, ticketNumber, peripheralId }) {
+  return {
+    chargeId: null,
+    ticketNumber,
+    amountCents,
+    depositedCents: 0,
+    dispensedCents: 0,
+    pendingDispenseCents: 0,
+    cashlessCents: 0,
+    status: "initializing",
+    connectorStatus: null,
+    connectorResult: null,
+    connectorType: null,
+    expectedType: requestedType,
+    change: 0,
+    error: null,
+    warning: null,
+    cashlessPeripheralId: peripheralId || null,
+    cashlessOperationId: null,
+    cashlessTransactionNumber: null,
+    cashlessAmountCents: 0,
+    cancelRequested: false,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    raw: null,
+  };
+}
+
+function serializeChargeRecord(charge) {
+  const amountCents = charge.amountCents || 0;
+  const depositedCents = charge.depositedCents || 0;
+  const dispensedCents = charge.dispensedCents || 0;
+  const pendingDispenseCents = charge.pendingDispenseCents || 0;
+  const cashlessCents = charge.cashlessCents || 0;
+  const active = !["done", "error", "cancelled"].includes(charge.status);
+
+  return {
+    active,
+    ticketNumber: charge.ticketNumber || null,
+    amountCents,
+    amount: amountCents / 100,
+    depositedCents,
+    deposited: depositedCents / 100,
+    dispensedCents,
+    dispensed: dispensedCents / 100,
+    pendingDispenseCents,
+    pendingDispense: pendingDispenseCents / 100,
+    cashlessCents,
+    cashless: cashlessCents / 100,
+    status: charge.status,
+    connectorStatus: charge.connectorStatus || null,
+    connectorResult: charge.connectorResult || null,
+    connectorType: charge.connectorType || null,
+    change: dispensedCents / 100,
+    error: charge.error || null,
+    warning: charge.warning || null,
+    chargeId: charge.chargeId || null,
+    depositId: charge.chargeId || null,
+    expectedType: charge.expectedType || "CASH",
+    cashlessPeripheralId: charge.cashlessPeripheralId || null,
+    cashlessOperationId: charge.cashlessOperationId || null,
+    cashlessTransactionNumber: charge.cashlessTransactionNumber || null,
+    cashlessAmount: charge.cashlessAmountCents || 0,
+    startedAt: charge.startedAt || null,
+    finishedAt: charge.finishedAt || null,
+  };
 }
 
 function connectorRefundToState(op, expectedId = null, expectedAmountCents = 0) {
@@ -938,6 +1011,113 @@ async function handleCashlogyCharge(req, res) {
   }
 }
 
+async function handleCashlogyChargeStart(req, res) {
+  const amountCents = parseAmountCents(req.body?.amountCents, req.body?.amount);
+
+  if (!amountCents) {
+    return res.status(400).json({ success: false, error: "Import invalid" });
+  }
+
+  const ticketNumber =
+    req.body?.ticketNumber ||
+    req.body?.orderId ||
+    `multi-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+  const requestedType = String(req.body?.type || "CASH").toUpperCase();
+  const peripheralId = req.body?.peripheralId || "";
+  const charge = createChargeRecord({ amountCents, requestedType, ticketNumber, peripheralId });
+
+  try {
+    console.log(`[Cashlogy] Multi charge start ${amountCents} cents (${ticketNumber})`);
+    await requireCashlogyReady();
+
+    charge.status = "depositing";
+    const start = await cashlogyRequest(
+      "/charge",
+      "POST",
+      {
+        price: amountCents,
+        ticketNumber,
+        machineCode: req.body?.machineCode || MACHINE_CODE,
+        secondScreen: Boolean(req.body?.secondScreen),
+        processManually: Boolean(req.body?.processManually),
+        screenVisible: parseBoolean(req.body?.screenVisible, CHARGE_SCREEN_VISIBLE),
+        topMost: parseBoolean(req.body?.topMost, CHARGE_TOP_MOST),
+        type: requestedType,
+        peripheralId,
+      },
+      15_000
+    );
+
+    if (start.result !== "SUCCESS" || !start.id) {
+      throw new Error(`No se ha podido iniciar el cobro multiple: ${start.result || "FAILED"}`);
+    }
+
+    charge.chargeId = start.id;
+    charge.startedAt = start.startedAt || charge.startedAt;
+    multiCharges.set(charge.chargeId, charge);
+
+    return res.json({
+      success: true,
+      multiple: true,
+      returnedToMenuAllowed: true,
+      message: "Cobro iniciado. Puede volver al menu principal y abrir otro ticket.",
+      ...serializeChargeRecord(charge),
+    });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    console.error("[Cashlogy] Multi charge start error:", message);
+    charge.status = "error";
+    charge.error = message;
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyChargesStatus(_req, res) {
+  try {
+    const connectorStatus = await cashlogyRequest("/charge/status", "GET", null, 8_000);
+
+    for (const [chargeId, charge] of multiCharges.entries()) {
+      const op = connectorStatus?.[chargeId] || null;
+      if (op) applyChargeRecordFromConnector(charge, op);
+    }
+
+    const items = Array.from(multiCharges.values())
+      .map(serializeChargeRecord)
+      .sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
+
+    return res.json({
+      success: true,
+      count: items.length,
+      activeCount: items.filter((item) => item.active).length,
+      items,
+    });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyChargeCancelById(req, res) {
+  const chargeId = String(req.params?.chargeId || "").trim();
+  if (!chargeId) {
+    return res.status(400).json({ success: false, error: "Falta chargeId" });
+  }
+
+  try {
+    const charge = multiCharges.get(chargeId);
+    const result = await cashlogyRequest(`/charge/${chargeId}/cancel`, "POST", {}, 10_000);
+    if (charge) {
+      charge.cancelRequested = true;
+      charge.status = "cancelled";
+      charge.error = "Operacio cancel.lada";
+    }
+    return res.json({ success: true, chargeId, ...result });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    return res.status(502).json({ success: false, error: message, chargeId });
+  }
+}
+
 async function handleCashlogyRefund(req, res) {
   const amountCents = parseAmountCents(req.body?.amountCents, req.body?.amount);
   const transactionNumber = String(req.body?.transactionNumber || "").trim();
@@ -1303,6 +1483,9 @@ module.exports = {
   handleCashlogyCharge,
   handleCashlogyChargeStatus,
   handleCashlogyCancel,
+  handleCashlogyChargeStart,
+  handleCashlogyChargesStatus,
+  handleCashlogyChargeCancelById,
   handleCashlogyRefund,
   handleCashlogyState,
   handleCashlogyBackOffice,

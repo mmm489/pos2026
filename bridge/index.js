@@ -7,6 +7,9 @@ const {
   handleCashlogyCharge,
   handleCashlogyChargeStatus,
   handleCashlogyCancel,
+  handleCashlogyChargeStart,
+  handleCashlogyChargesStatus,
+  handleCashlogyChargeCancelById,
   handleCashlogyRefund,
   handleCashlogyState,
   handleCashlogyBackOffice,
@@ -67,6 +70,9 @@ app.post("/cashlogy/close", handleCashlogyClose);
 app.post("/cashlogy/charge", handleCashlogyCharge);
 app.get("/cashlogy/charge/status", handleCashlogyChargeStatus);
 app.post("/cashlogy/cancel", handleCashlogyCancel);
+app.post("/cashlogy/charge/start", handleCashlogyChargeStart);
+app.get("/cashlogy/charges/status", handleCashlogyChargesStatus);
+app.post("/cashlogy/charge/:chargeId/cancel", handleCashlogyChargeCancelById);
 app.post("/cashlogy/refund", handleCashlogyRefund);
 app.get("/cashlogy/state", handleCashlogyState);
 app.post("/cashlogy/backoffice", handleCashlogyBackOffice);
