@@ -17,6 +17,9 @@ const {
   handleCashlogyAddChange,
   handleCashlogyAddChangeStatus,
   handleCashlogyAddChangeEnd,
+  handleCashlogyCertConfig,
+  handleCashlogyCertTraffic,
+  handleCashlogyCertTrafficClear,
 } = require("./routes/cashlogy");
 const {
   handleIngenicoCharge,
@@ -73,6 +76,9 @@ app.post("/cashlogy/dispense/cancel", handleCashlogyDispenseCancel);
 app.post("/cashlogy/add-change", handleCashlogyAddChange);
 app.get("/cashlogy/add-change/status", handleCashlogyAddChangeStatus);
 app.post("/cashlogy/add-change/end", handleCashlogyAddChangeEnd);
+app.get("/cashlogy/cert/config", handleCashlogyCertConfig);
+app.get("/cashlogy/cert/traffic", handleCashlogyCertTraffic);
+app.post("/cashlogy/cert/traffic/clear", handleCashlogyCertTrafficClear);
 app.post("/ingenico/charge", handleIngenicoCharge);
 app.post("/ingenico/refund", handleIngenicoRefund);
 app.post("/ingenico/cancel", handleIngenicoCancel);

@@ -10,8 +10,10 @@ const OPERATION_TIMEOUT_MS = Number(process.env.CASHLOGY_OPERATION_TIMEOUT_MS) |
 const MACHINE_CODE = process.env.CASHLOGY_MACHINE_CODE || "hicream-pos";
 const CHARGE_SCREEN_VISIBLE = parseBoolean(process.env.CASHLOGY_CHARGE_SCREEN_VISIBLE, false);
 const CHARGE_TOP_MOST = parseBoolean(process.env.CASHLOGY_CHARGE_TOP_MOST, false);
+const CERT_TRAFFIC_LIMIT = Number(process.env.CASHLOGY_CERT_TRAFFIC_LIMIT) || 250;
 
 let currentCharge = null;
+const certTraffic = [];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,6 +65,20 @@ async function cashlogyRequest(pathname, method = "GET", body = null, timeoutMs 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const apiKey = getCashlogyApiKey();
+  const startedAt = Date.now();
+  const trafficEntry = {
+    id: `${startedAt}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: new Date(startedAt).toISOString(),
+    method,
+    path: pathname,
+    request: body,
+    timeoutMs,
+    ok: false,
+    status: null,
+    durationMs: null,
+    response: null,
+    error: null,
+  };
 
   const headers = { "Content-Type": "application/json" };
   if (apiKey) headers["x-api-key"] = apiKey;
@@ -85,11 +101,26 @@ async function cashlogyRequest(pathname, method = "GET", body = null, timeoutMs 
 
     if (!response.ok) {
       const detail = text || response.statusText;
+      trafficEntry.ok = false;
+      trafficEntry.status = response.status;
+      trafficEntry.response = data;
+      trafficEntry.durationMs = Date.now() - startedAt;
+      pushCertTraffic(trafficEntry);
       throw new Error(`Cashlogy HTTP ${response.status}: ${detail}`);
     }
 
+    trafficEntry.ok = true;
+    trafficEntry.status = response.status;
+    trafficEntry.response = data;
+    trafficEntry.durationMs = Date.now() - startedAt;
+    pushCertTraffic(trafficEntry);
     return data;
   } catch (err) {
+    if (!trafficEntry.durationMs) {
+      trafficEntry.durationMs = Date.now() - startedAt;
+      trafficEntry.error = normalizeErrorMessage(err);
+      pushCertTraffic(trafficEntry);
+    }
     if (err.name === "AbortError") {
       throw new Error(`Cashlogy timeout (${timeoutMs}ms) on ${pathname}`);
     }
@@ -97,6 +128,11 @@ async function cashlogyRequest(pathname, method = "GET", body = null, timeoutMs 
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function pushCertTraffic(entry) {
+  certTraffic.unshift(entry);
+  if (certTraffic.length > CERT_TRAFFIC_LIMIT) certTraffic.length = CERT_TRAFFIC_LIMIT;
 }
 
 function parseAmountCents(amountCents, amountEuros) {
@@ -628,6 +664,31 @@ async function handleCashlogyAddChangeEnd(_req, res) {
   }
 }
 
+function handleCashlogyCertConfig(_req, res) {
+  const cashlogyUrl = new URL(CASHLOGY_BASE);
+  const protocol = cashlogyUrl.protocol === "https:" ? "wss:" : "ws:";
+  const notificationsUrl = `${protocol}//${cashlogyUrl.host}/notifications`;
+  res.json({
+    cashlogyBase: CASHLOGY_BASE,
+    notificationsUrl,
+    apiKeyConfigured: Boolean(getCashlogyApiKey()),
+    machineCode: MACHINE_CODE,
+    trafficLimit: CERT_TRAFFIC_LIMIT,
+  });
+}
+
+function handleCashlogyCertTraffic(_req, res) {
+  res.json({
+    count: certTraffic.length,
+    items: certTraffic,
+  });
+}
+
+function handleCashlogyCertTrafficClear(_req, res) {
+  certTraffic.length = 0;
+  res.json({ success: true });
+}
+
 module.exports = {
   handleCashlogyInit,
   handleCashlogyClose,
@@ -644,4 +705,7 @@ module.exports = {
   handleCashlogyAddChange,
   handleCashlogyAddChangeStatus,
   handleCashlogyAddChangeEnd,
+  handleCashlogyCertConfig,
+  handleCashlogyCertTraffic,
+  handleCashlogyCertTrafficClear,
 };
