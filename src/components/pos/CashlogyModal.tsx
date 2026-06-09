@@ -7,7 +7,6 @@ import {
   endCashlogyAddChange,
   exitCashlogyBackOffice,
   getCashlogyState,
-  initCashlogy,
   openCashlogyBackOffice,
   startCashlogyAddChange,
 } from "@/lib/bridge";
@@ -185,13 +184,6 @@ export default function CashlogyModal({ onClose }: CashlogyModalProps) {
             <div className="mb-6">
               <h3 className="text-sm font-bold text-gray-500 uppercase mb-2">Operacions</h3>
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <button
-                  onClick={() => runAction("Iniciar", initCashlogy)}
-                  disabled={!!actionLoading}
-                  className="py-2 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-semibold transition-colors disabled:opacity-50"
-                >
-                  Iniciar
-                </button>
                 <button
                   onClick={() => runAction("Tancar", closeCashlogy)}
                   disabled={!!actionLoading}

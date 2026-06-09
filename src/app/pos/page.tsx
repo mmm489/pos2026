@@ -22,7 +22,7 @@ import {
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
 import { publishCustomerDisplaySnapshot } from "@/lib/customer-display";
-import { printTicket } from "@/lib/bridge";
+import { initCashlogy, printTicket } from "@/lib/bridge";
 import type { Business, ParkedTicket } from "@/types/pos";
 
 type CartAction =
@@ -289,6 +289,12 @@ interface Employee {
   can_access_products?: boolean;
 }
 
+type CashlogyStartupInitState = {
+  status: "idle" | "initializing" | "success" | "error" | "dismissed";
+  message?: string;
+  data?: unknown;
+};
+
 export default function PosPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -313,6 +319,9 @@ export default function PosPage() {
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
   const [modifiersFor, setModifiersFor] = useState<Product | null>(null);
+  const [cashlogyStartupInit, setCashlogyStartupInit] = useState<CashlogyStartupInitState>({
+    status: "idle",
+  });
 
   useEffect(() => {
     dispatch({ type: "NORMALIZE" });
@@ -744,6 +753,51 @@ export default function PosPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!employee) {
+      setCashlogyStartupInit({ status: "idle" });
+      return;
+    }
+    if (cashlogyStartupInit.status !== "idle") return;
+
+    let cancelled = false;
+    setCashlogyStartupInit({
+      status: "initializing",
+      message: "Inicializando Cashlogy...",
+    });
+
+    initCashlogy()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.error || result.success === false) {
+          setCashlogyStartupInit({
+            status: "error",
+            message: result.error || "No se ha podido inicializar Cashlogy",
+            data: result,
+          });
+          return;
+        }
+
+        setCashlogyStartupInit({
+          status: "success",
+          message: "La inicializacion de Cashlogy se ha completado con exito.",
+          data: result,
+        });
+        window.alert("La inicializacion de Cashlogy se ha completado con exito.");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCashlogyStartupInit({
+          status: "error",
+          message: (error as Error).message || "No se ha podido inicializar Cashlogy",
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [employee, cashlogyStartupInit.status]);
+
   // Load products (fallback to mock data if API unavailable)
   useEffect(() => {
     if (!employee) return;
@@ -815,6 +869,7 @@ export default function PosPage() {
   }, []);
 
   const handleLogin = (emp: Employee) => {
+    setCashlogyStartupInit({ status: "idle" });
     setEmployee(emp);
     localStorage.setItem("pos_employee", JSON.stringify(emp));
   };
@@ -824,6 +879,7 @@ export default function PosPage() {
     localStorage.removeItem("pos_employee");
     dispatch({ type: "CLEAR" });
     setActiveParkedOrderId(null);
+    setCashlogyStartupInit({ status: "idle" });
     setLoading(true);
   };
 
@@ -855,6 +911,20 @@ export default function PosPage() {
   // PIN screen
   if (!employee) {
     return <PinLogin onLogin={handleLogin} />;
+  }
+
+  if (
+    cashlogyStartupInit.status === "idle" ||
+    cashlogyStartupInit.status === "initializing" ||
+    cashlogyStartupInit.status === "error"
+  ) {
+    return (
+      <CashlogyStartupInitScreen
+        state={cashlogyStartupInit}
+        onRetry={() => setCashlogyStartupInit({ status: "idle" })}
+        onContinue={() => setCashlogyStartupInit({ status: "dismissed" })}
+      />
+    );
   }
 
   if (loading) {
@@ -1227,6 +1297,74 @@ export default function PosPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function CashlogyStartupInitScreen({
+  state,
+  onRetry,
+  onContinue,
+}: {
+  state: CashlogyStartupInitState;
+  onRetry: () => void;
+  onContinue: () => void;
+}) {
+  const isError = state.status === "error";
+  const isWaiting = state.status === "idle" || state.status === "initializing";
+
+  return (
+    <div className="flex h-screen items-center justify-center bg-[#f5f4ef] px-4 text-[#241f1c]">
+      <div className="w-full max-w-md rounded-3xl border border-[#ddd4c4] bg-[#faf9f6] p-7 text-center shadow-2xl">
+        <div className={`mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full ${
+          isError ? "bg-[#fdeceb] text-[#c4423a]" : "bg-[#dff5e6] text-[#1e6b3a]"
+        }`}>
+          {isError ? (
+            <span className="text-3xl font-black">!</span>
+          ) : (
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#b7dcc2] border-t-[#2e9e5b]" />
+          )}
+        </div>
+
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8a8276]">
+          Inicializacion Cashlogy
+        </p>
+        <h1 className="mt-2 text-3xl font-black tracking-tight">
+          {isError ? "No se ha podido inicializar" : "Inicializando maquina"}
+        </h1>
+        <p className="mt-3 text-sm font-semibold text-[#6f665c]">
+          {state.message || "Enviando POST /init a ConnectorPlus..."}
+        </p>
+
+        {isWaiting && (
+          <div className="mt-6 rounded-2xl border border-[#eadfce] bg-white px-4 py-3 text-left text-sm font-semibold text-[#6f665c]">
+            <p>Estado: INITIALIZING</p>
+            <p>Resultado: IN_PROGRESS</p>
+          </div>
+        )}
+
+        {isError && (
+          <>
+            <div className="mt-6 rounded-2xl border border-[#f3c8c4] bg-[#fff7f6] px-4 py-3 text-left text-sm font-semibold text-[#9a302a]">
+              {state.message}
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                onClick={onRetry}
+                className="rounded-xl bg-[#2e9e5b] px-4 py-3 text-sm font-black text-white"
+              >
+                Reintentar
+              </button>
+              <button
+                onClick={onContinue}
+                className="rounded-xl border border-[#d4cbbb] bg-white px-4 py-3 text-sm font-black text-[#6f665c]"
+              >
+                Continuar POS
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

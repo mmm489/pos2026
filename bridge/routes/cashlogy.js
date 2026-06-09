@@ -280,12 +280,7 @@ async function waitForInit() {
   throw new Error(`Timeout inicialitzant Cashlogy (${INIT_TIMEOUT_MS}ms)`);
 }
 
-async function ensureInitialized() {
-  const peripheral = await getPrimaryCashPeripheral().catch(() => null);
-  if (peripheral?.status === "AVAILABLE") {
-    return { initialized: true, alreadyAvailable: true, peripheral };
-  }
-
+async function runStartupInit() {
   const init = await cashlogyRequest("/init", "POST", {}, 15_000);
   if (init.result !== "SUCCESS") {
     throw new Error(`No s'ha pogut iniciar Cashlogy: ${init.result || "FAILED"}`);
@@ -294,6 +289,17 @@ async function ensureInitialized() {
   const status = await waitForInit();
   const refreshedPeripheral = await getPrimaryCashPeripheral().catch(() => null);
   return { initialized: true, alreadyAvailable: false, status, peripheral: refreshedPeripheral };
+}
+
+async function requireCashlogyReady() {
+  const peripheral = await getPrimaryCashPeripheral().catch(() => null);
+  if (peripheral?.status === "AVAILABLE") {
+    return { ready: true, peripheral };
+  }
+
+  throw new Error(
+    "Cashlogy no esta inicialitzada o no esta disponible. Reinicia el POS per executar la inicialitzacio inicial."
+  );
 }
 
 async function getChargeOperation(chargeId) {
@@ -375,8 +381,8 @@ async function handleCashlogyCharge(req, res) {
   };
 
   try {
-    console.log(`[Cashlogy] Init/charge ${amountCents} cents (${ticketNumber})`);
-    await ensureInitialized();
+    console.log(`[Cashlogy] Charge ${amountCents} cents (${ticketNumber})`);
+    await requireCashlogyReady();
 
     currentCharge.status = "depositing";
     const start = await cashlogyRequest(
@@ -474,7 +480,7 @@ async function handleCashlogyCancel(_req, res) {
 
 async function handleCashlogyInit(_req, res) {
   try {
-    const data = await ensureInitialized();
+    const data = await runStartupInit();
     return res.json({ success: true, ...data });
   } catch (err) {
     const message = normalizeErrorMessage(err);
@@ -532,7 +538,7 @@ async function handleCashlogyState(_req, res) {
 
 async function handleCashlogyBackOffice(req, res) {
   try {
-    await ensureInitialized();
+    await requireCashlogyReady();
     const body = {
       operations: {
         addChange: true,
@@ -583,7 +589,7 @@ async function handleCashlogyDispense(req, res) {
   if (!amountCents) return res.status(400).json({ success: false, error: "Import invalid" });
 
   try {
-    await ensureInitialized();
+    await requireCashlogyReady();
     const data = await cashlogyRequest(
       "/dispense",
       "POST",
@@ -624,7 +630,7 @@ async function handleCashlogyDispenseCancel(_req, res) {
 
 async function handleCashlogyAddChange(req, res) {
   try {
-    await ensureInitialized();
+    await requireCashlogyReady();
     const data = await cashlogyRequest(
       "/addChange",
       "POST",
