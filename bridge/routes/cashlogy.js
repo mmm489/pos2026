@@ -446,12 +446,13 @@ function updateCurrentChargeFromConnector(op) {
   return mapped;
 }
 
-function connectorRefundToState(op, expectedId = null) {
+function connectorRefundToState(op, expectedId = null, expectedAmountCents = 0) {
   if (!op) {
     return {
       status: "refunding",
       connectorStatus: null,
       connectorResult: null,
+      cashlessType: null,
       amountRefundedCents: 0,
       cashlessPeripheralId: null,
       cashlessOperationId: null,
@@ -467,6 +468,7 @@ function connectorRefundToState(op, expectedId = null) {
   const connectorId = op.id || null;
   const amountRefundedCents = parseCents(op.amountRefunded);
   const cashlessInfo = op.cashlessInfo || {};
+  const cashlessType = cashlessInfo?.type || null;
   const cashlessPeripheralId = cashlessInfo?.peripheral?.id || op?.peripheral?.id || null;
   const cashlessOperationId = connectorId;
   const cashlessTransactionNumber = cashlessInfo?.transactionNumber || null;
@@ -478,6 +480,7 @@ function connectorRefundToState(op, expectedId = null) {
         status: "error",
         connectorStatus,
         connectorResult,
+        cashlessType,
         amountRefundedCents,
         cashlessPeripheralId,
         cashlessOperationId,
@@ -489,10 +492,41 @@ function connectorRefundToState(op, expectedId = null) {
     }
 
     if (connectorResult === "SUCCESS") {
+      if (cashlessType !== "refund") {
+        return {
+          status: "error",
+          connectorStatus,
+          connectorResult,
+          cashlessType,
+          amountRefundedCents,
+          cashlessPeripheralId,
+          cashlessOperationId,
+          cashlessTransactionNumber,
+          cashlessAmountCents,
+          error: "El tipo de operacion devuelto por Cashlogy no es refund",
+          finished: true,
+        };
+      }
+      if (expectedAmountCents && amountRefundedCents !== expectedAmountCents) {
+        return {
+          status: "error",
+          connectorStatus,
+          connectorResult,
+          cashlessType,
+          amountRefundedCents,
+          cashlessPeripheralId,
+          cashlessOperationId,
+          cashlessTransactionNumber,
+          cashlessAmountCents,
+          error: "El importe reembolsado por Cashlogy no coincide con el solicitado",
+          finished: true,
+        };
+      }
       return {
         status: "done",
         connectorStatus,
         connectorResult,
+        cashlessType,
         amountRefundedCents,
         cashlessPeripheralId,
         cashlessOperationId,
@@ -508,6 +542,7 @@ function connectorRefundToState(op, expectedId = null) {
         status: "cancelled",
         connectorStatus,
         connectorResult,
+        cashlessType,
         amountRefundedCents,
         cashlessPeripheralId,
         cashlessOperationId,
@@ -523,6 +558,7 @@ function connectorRefundToState(op, expectedId = null) {
         status: "error",
         connectorStatus,
         connectorResult,
+        cashlessType,
         amountRefundedCents,
         cashlessPeripheralId,
         cashlessOperationId,
@@ -537,6 +573,7 @@ function connectorRefundToState(op, expectedId = null) {
       status: "error",
       connectorStatus,
       connectorResult,
+      cashlessType,
       amountRefundedCents,
       cashlessPeripheralId,
       cashlessOperationId,
@@ -551,6 +588,7 @@ function connectorRefundToState(op, expectedId = null) {
     status: "refunding",
     connectorStatus,
     connectorResult,
+    cashlessType,
     amountRefundedCents,
     cashlessPeripheralId,
     cashlessOperationId,
@@ -564,10 +602,11 @@ function connectorRefundToState(op, expectedId = null) {
 function updateCurrentRefundFromConnector(op) {
   if (!currentRefund) return null;
 
-  const mapped = connectorRefundToState(op, currentRefund.refundId);
+  const mapped = connectorRefundToState(op, currentRefund.refundId, currentRefund.amountCents || 0);
   currentRefund.status = mapped.status;
   currentRefund.connectorStatus = mapped.connectorStatus;
   currentRefund.connectorResult = mapped.connectorResult;
+  currentRefund.cashlessType = mapped.cashlessType;
   currentRefund.amountRefundedCents = mapped.amountRefundedCents;
   currentRefund.error = mapped.error;
   currentRefund.cashlessPeripheralId =
@@ -906,6 +945,7 @@ async function handleCashlogyRefund(req, res) {
     status: "initializing",
     connectorStatus: null,
     connectorResult: null,
+    cashlessType: null,
     error: null,
     cashlessPeripheralId: req.body?.peripheralId || null,
     cashlessOperationId: null,
@@ -978,6 +1018,7 @@ async function handleCashlogyRefund(req, res) {
         amountRefundedCents: currentRefund.amountRefundedCents,
         connectorStatus: currentRefund.connectorStatus,
         connectorResult: currentRefund.connectorResult,
+        cashlessType: currentRefund.cashlessType || null,
         cashlessPeripheralId: currentRefund.cashlessPeripheralId || null,
         cashlessOperationId: currentRefund.cashlessOperationId || null,
         cashlessTransactionNumber: currentRefund.cashlessTransactionNumber || transactionNumber,
@@ -994,6 +1035,7 @@ async function handleCashlogyRefund(req, res) {
       amountRefundedCents: currentRefund.amountRefundedCents,
       connectorStatus: currentRefund.connectorStatus,
       connectorResult: currentRefund.connectorResult,
+      cashlessType: currentRefund.cashlessType || null,
       cashlessPeripheralId: currentRefund.cashlessPeripheralId || null,
       cashlessOperationId: currentRefund.cashlessOperationId || null,
       cashlessTransactionNumber: currentRefund.cashlessTransactionNumber || transactionNumber,

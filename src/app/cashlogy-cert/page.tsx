@@ -35,6 +35,20 @@ type TrafficEntry = {
   error: string | null;
 };
 
+type BridgeCallResponse = {
+  success?: boolean;
+  amountRefunded?: number;
+  amountRefundedCents?: number;
+  [key: string]: unknown;
+};
+
+type BridgeCallOptions = {
+  method?: string;
+  body?: unknown;
+  timeoutMs?: number;
+  successMessage?: string | ((data: BridgeCallResponse) => string);
+};
+
 export default function CashlogyCertPage() {
   const [config, setConfig] = useState<CertConfig | null>(null);
   const [wsState, setWsState] = useState<"disconnected" | "connecting" | "connected" | "error">("disconnected");
@@ -154,7 +168,7 @@ export default function CashlogyCertPage() {
     cashlogyTraffic: traffic,
   }), [config, logs, traffic]);
 
-  async function callBridge(label: string, path: string, options?: { method?: string; body?: unknown; timeoutMs?: number }) {
+  async function callBridge(label: string, path: string, options?: BridgeCallOptions) {
     const method = options?.method || "POST";
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), options?.timeoutMs || 90_000);
@@ -168,8 +182,15 @@ export default function CashlogyCertPage() {
         body: method === "GET" ? undefined : JSON.stringify(options?.body || {}),
         signal: controller.signal,
       });
-      const data = await res.json().catch(() => ({ raw: "Respuesta no JSON" }));
+      const data = (await res.json().catch(() => ({ raw: "Respuesta no JSON" }))) as BridgeCallResponse;
       addLog({ source: "ui", label: `${label}: respuesta recibida`, ok: res.ok, data });
+      if (res.ok && data.success === true && options?.successMessage) {
+        const message =
+          typeof options.successMessage === "function"
+            ? options.successMessage(data)
+            : options.successMessage;
+        window.alert(message);
+      }
     } catch (error) {
       addLog({
         source: "ui",
@@ -336,6 +357,13 @@ export default function CashlogyCertPage() {
                         peripheralId: cashlessPeripheralId.trim(),
                       },
                       timeoutMs: 150_000,
+                      successMessage: (data) => {
+                        const refunded =
+                          typeof data.amountRefunded === "number"
+                            ? ` (${data.amountRefunded.toFixed(2)} €)`
+                            : "";
+                        return `El reembolso mediante Cashlogy SNEXT se ha procesado correctamente${refunded}`;
+                      },
                     })
                   }
                   className="rounded-xl bg-[#b45309] px-4 py-3 text-base font-black text-white shadow-sm disabled:opacity-50"
