@@ -1,6 +1,24 @@
 const BRIDGE_URL =
   process.env.NEXT_PUBLIC_BRIDGE_URL || "http://localhost:3006";
 
+export type CashlogyChargeResult = {
+  success: boolean;
+  change?: number;
+  deposited?: number;
+  dispensed?: number;
+  pendingDispense?: number;
+  cashless?: number;
+  changeOwed?: number;
+  depositId?: string;
+  chargeId?: string;
+  connectorStatus?: string | null;
+  connectorResult?: string | null;
+  connectorType?: string | null;
+  cancelled?: boolean;
+  warning?: string | null;
+  error?: string;
+};
+
 export async function chargeCashlogy(amount: number) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 180_000);
@@ -13,18 +31,7 @@ export async function chargeCashlogy(amount: number) {
       signal: controller.signal,
     });
     // Parse even on HTTP errors — bridge returns JSON with error details
-    let data: {
-      success: boolean;
-      change?: number;
-      deposited?: number;
-      dispensed?: number;
-      pendingDispense?: number;
-      changeOwed?: number;
-      depositId?: string;
-      cancelled?: boolean;
-      warning?: string | null;
-      error?: string;
-    };
+    let data: CashlogyChargeResult;
     try {
       data = await res.json();
     } catch {
@@ -36,6 +43,40 @@ export async function chargeCashlogy(amount: number) {
       return { success: false, error: "Timeout: la Cashlogy no respondió" };
     }
     return { success: false, error: "Error de conexión con la Cashlogy" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function chargeCashlogyCashless(amount: number, peripheralId = "") {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180_000);
+
+  try {
+    const res = await fetch(`${BRIDGE_URL}/cashlogy/charge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount,
+        screenVisible: true,
+        topMost: true,
+        type: "CASHLESS",
+        peripheralId,
+      }),
+      signal: controller.signal,
+    });
+    let data: CashlogyChargeResult;
+    try {
+      data = await res.json();
+    } catch {
+      return { success: false, error: `HTTP ${res.status}: respuesta invalida de Cashlogy SNEXT` };
+    }
+    return data;
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      return { success: false, error: "Timeout: SNEXT no respondio" };
+    }
+    return { success: false, error: "Error de conexion con SNEXT" };
   } finally {
     clearTimeout(timeout);
   }
@@ -224,11 +265,17 @@ export interface CashlogyChargeStatus {
   amountCents?: number;
   depositedCents?: number;
   dispensedCents?: number;
+  pendingDispenseCents?: number;
+  cashlessCents?: number;
   status?: string;
   connectorStatus?: string | null;
   connectorResult?: string | null;
+  connectorType?: string | null;
   change?: number | null;
+  pendingDispense?: number | null;
+  cashless?: number | null;
   error?: string | null;
+  warning?: string | null;
   chargeId?: string | null;
   depositId?: string | null;
 }

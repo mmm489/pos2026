@@ -41,6 +41,7 @@ export default function CashlogyCertPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [traffic, setTraffic] = useState<TrafficEntry[]>([]);
   const [amount, setAmount] = useState("0.10");
+  const [cashlessPeripheralId, setCashlessPeripheralId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -257,6 +258,16 @@ export default function CashlogyCertPage() {
                   />
                 </label>
 
+                <label className="text-sm font-black text-[#6f6255]">
+                  PeripheralId SNEXT opcional
+                  <input
+                    value={cashlessPeripheralId}
+                    onChange={(event) => setCashlessPeripheralId(event.target.value)}
+                    placeholder="Vacío: ConnectorPlus muestra selector si hay varios"
+                    className="mt-2 w-full rounded-xl border border-[#dccfbb] bg-white px-4 py-3 text-sm font-bold outline-none focus:border-[#7c3aed]"
+                  />
+                </label>
+
                 <button
                   disabled={!canCharge}
                   onClick={() =>
@@ -274,7 +285,28 @@ export default function CashlogyCertPage() {
                   }
                   className="rounded-xl bg-[#2563eb] px-4 py-3 text-base font-black text-white shadow-sm disabled:opacity-50"
                 >
-                  Charge prueba
+                  Charge CASH prueba
+                </button>
+
+                <button
+                  disabled={!canCharge}
+                  onClick={() =>
+                    callBridge("Charge CASHLESS SNEXT", "/cashlogy/charge", {
+                      body: {
+                        amount: parsedAmount,
+                        ticketNumber: `CERT-SNEXT-${Date.now()}`,
+                        machineCode: config?.machineCode || "hicream-pos",
+                        screenVisible: true,
+                        topMost: true,
+                        type: "CASHLESS",
+                        peripheralId: cashlessPeripheralId.trim(),
+                      },
+                      timeoutMs: 210_000,
+                    })
+                  }
+                  className="rounded-xl bg-[#7c3aed] px-4 py-3 text-base font-black text-white shadow-sm disabled:opacity-50"
+                >
+                  Charge CASHLESS SNEXT
                 </button>
 
                 <button

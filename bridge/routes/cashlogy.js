@@ -167,6 +167,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
       depositedCents: 0,
       dispensedCents: 0,
       pendingDispenseCents: 0,
+      cashlessCents: 0,
       status: "depositing",
       connectorStatus: null,
       connectorResult: null,
@@ -180,6 +181,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
   const depositedCents = parseCents(op.amount?.deposited);
   const dispensedCents = parseCents(op.amount?.dispensed);
   const pendingDispenseCents = parseCents(op.amount?.pendingDispense);
+  const cashlessCents = parseCents(op.amount?.cashless);
   const connectorStatus = op.status || null;
   const connectorResult = op.result || null;
   const connectorType = op.type || null;
@@ -201,6 +203,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "error",
         connectorStatus,
         connectorResult,
@@ -214,6 +217,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "error",
         connectorStatus,
         connectorResult,
@@ -227,6 +231,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "done",
         connectorStatus,
         connectorResult,
@@ -242,6 +247,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
           depositedCents,
           dispensedCents,
           pendingDispenseCents,
+          cashlessCents,
           status: "cancelled",
           connectorStatus,
           connectorResult,
@@ -255,6 +261,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
           depositedCents,
           dispensedCents,
           pendingDispenseCents,
+          cashlessCents,
           status: "error",
           connectorStatus,
           connectorResult,
@@ -267,6 +274,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "cancelled",
         connectorStatus,
         connectorResult,
@@ -280,6 +288,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "cancelled",
         connectorStatus,
         connectorResult,
@@ -293,6 +302,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "cancelled",
         connectorStatus,
         connectorResult,
@@ -306,6 +316,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
         depositedCents,
         dispensedCents,
         pendingDispenseCents,
+        cashlessCents,
         status: "done",
         connectorStatus,
         connectorResult,
@@ -319,6 +330,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
       depositedCents,
       dispensedCents,
       pendingDispenseCents,
+      cashlessCents,
       status: "error",
       connectorStatus,
       connectorResult,
@@ -333,6 +345,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
       depositedCents,
       dispensedCents,
       pendingDispenseCents,
+      cashlessCents,
       status: "error",
       connectorStatus,
       connectorResult,
@@ -353,6 +366,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH", ex
     depositedCents,
     dispensedCents,
     pendingDispenseCents,
+    cashlessCents,
     status,
     connectorStatus,
     connectorResult,
@@ -375,6 +389,7 @@ function updateCurrentChargeFromConnector(op) {
   currentCharge.depositedCents = mapped.depositedCents;
   currentCharge.dispensedCents = mapped.dispensedCents;
   currentCharge.pendingDispenseCents = mapped.pendingDispenseCents;
+  currentCharge.cashlessCents = mapped.cashlessCents;
   currentCharge.status = mapped.status;
   currentCharge.connectorStatus = mapped.connectorStatus;
   currentCharge.connectorResult = mapped.connectorResult;
@@ -511,6 +526,7 @@ function handleCashlogyChargeStatus(_req, res) {
   const depositedCents = currentCharge.depositedCents || 0;
   const dispensedCents = currentCharge.dispensedCents || 0;
   const pendingDispenseCents = currentCharge.pendingDispenseCents || 0;
+  const cashlessCents = currentCharge.cashlessCents || 0;
   const active = !["done", "error", "cancelled"].includes(currentCharge.status);
 
   return res.json({
@@ -519,12 +535,14 @@ function handleCashlogyChargeStatus(_req, res) {
     depositedCents,
     dispensedCents,
     pendingDispenseCents,
+    cashlessCents,
     status: currentCharge.status,
     connectorStatus: currentCharge.connectorStatus || null,
     connectorResult: currentCharge.connectorResult || null,
     connectorType: currentCharge.connectorType || null,
     change: dispensedCents / 100,
     pendingDispense: pendingDispenseCents / 100,
+    cashless: cashlessCents / 100,
     error: currentCharge.error || null,
     warning: currentCharge.warning || null,
     chargeId: currentCharge.chargeId || null,
@@ -559,6 +577,7 @@ async function handleCashlogyCharge(req, res) {
     depositedCents: 0,
     dispensedCents: 0,
     pendingDispenseCents: 0,
+    cashlessCents: 0,
     status: "initializing",
     connectorStatus: null,
     connectorResult: null,
@@ -635,6 +654,7 @@ async function handleCashlogyCharge(req, res) {
         success: true,
         change: currentCharge.dispensedCents / 100,
         deposited: currentCharge.depositedCents / 100,
+        cashless: currentCharge.cashlessCents / 100,
         chargeId: currentCharge.chargeId,
         depositId: currentCharge.chargeId,
         connectorStatus: currentCharge.connectorStatus,
