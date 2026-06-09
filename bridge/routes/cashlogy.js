@@ -16,6 +16,8 @@ const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
 const CASHLOGY_CHARGE_CANCELLED_MESSAGE = "El cliente ha cancelado la transaccion";
 const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
   "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
+const CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE =
+  "El usuario ha cancelado la transaccion, pero no se ha podido reembolsar el dinero introducido hasta el momento";
 
 let currentCharge = null;
 const certTraffic = [];
@@ -157,7 +159,7 @@ function parseCents(value) {
   return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
 }
 
-function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
+function connectorChargeToState(op, expectedId = null, expectedType = "CASH", expectedAmountCents = 0) {
   if (!op) {
     return {
       depositedCents: 0,
@@ -184,6 +186,10 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
   if (connectorStatus === "FINISHED") {
     const noPaymentProcessed =
       depositedCents === 0 && dispensedCents === 0 && pendingDispenseCents === 0;
+    const partialPaymentNotRefunded =
+      pendingDispenseCents > 0 &&
+      depositedCents < expectedAmountCents &&
+      depositedCents >= dispensedCents;
 
     if (expectedId && connectorId !== expectedId) {
       return {
@@ -276,6 +282,19 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
         finished: true,
       };
     }
+    if (connectorResult === "FAILED" && partialPaymentNotRefunded) {
+      return {
+        depositedCents,
+        dispensedCents,
+        pendingDispenseCents,
+        status: "cancelled",
+        connectorStatus,
+        connectorResult,
+        connectorType,
+        error: CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE,
+        finished: true,
+      };
+    }
     return {
       depositedCents,
       dispensedCents,
@@ -326,7 +345,12 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
 function updateCurrentChargeFromConnector(op) {
   if (!currentCharge) return null;
 
-  const mapped = connectorChargeToState(op, currentCharge.chargeId, currentCharge.expectedType || "CASH");
+  const mapped = connectorChargeToState(
+    op,
+    currentCharge.chargeId,
+    currentCharge.expectedType || "CASH",
+    currentCharge.amountCents || 0
+  );
   currentCharge.depositedCents = mapped.depositedCents;
   currentCharge.dispensedCents = mapped.dispensedCents;
   currentCharge.pendingDispenseCents = mapped.pendingDispenseCents;
