@@ -18,6 +18,7 @@ export async function chargeCashlogy(amount: number) {
       change?: number;
       deposited?: number;
       dispensed?: number;
+      pendingDispense?: number;
       changeOwed?: number;
       depositId?: string;
       cancelled?: boolean;

@@ -14,6 +14,8 @@ const CERT_TRAFFIC_LIMIT = Number(process.env.CASHLOGY_CERT_TRAFFIC_LIMIT) || 25
 const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
   "No se puede establecer una conexion con la maquina. Compruebe que la maquina este encendida y correctamente conectada/configurada.";
 const CASHLOGY_CHARGE_CANCELLED_MESSAGE = "El cliente ha cancelado la transaccion";
+const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
+  "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
 
 let currentCharge = null;
 const certTraffic = [];
@@ -160,6 +162,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
     return {
       depositedCents: 0,
       dispensedCents: 0,
+      pendingDispenseCents: 0,
       status: "depositing",
       connectorStatus: null,
       connectorResult: null,
@@ -171,6 +174,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
 
   const depositedCents = parseCents(op.amount?.deposited);
   const dispensedCents = parseCents(op.amount?.dispensed);
+  const pendingDispenseCents = parseCents(op.amount?.pendingDispense);
   const connectorStatus = op.status || null;
   const connectorResult = op.result || null;
   const connectorType = op.type || null;
@@ -178,10 +182,14 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
   const expectedConnectorType = expectedType || "CASH";
 
   if (connectorStatus === "FINISHED") {
+    const noPaymentProcessed =
+      depositedCents === 0 && dispensedCents === 0 && pendingDispenseCents === 0;
+
     if (expectedId && connectorId !== expectedId) {
       return {
         depositedCents,
         dispensedCents,
+        pendingDispenseCents,
         status: "error",
         connectorStatus,
         connectorResult,
@@ -194,6 +202,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
       return {
         depositedCents,
         dispensedCents,
+        pendingDispenseCents,
         status: "error",
         connectorStatus,
         connectorResult,
@@ -206,6 +215,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
       return {
         depositedCents,
         dispensedCents,
+        pendingDispenseCents,
         status: "done",
         connectorStatus,
         connectorResult,
@@ -215,10 +225,24 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
       };
     }
     if (connectorResult === "CANCELLED") {
+      if (noPaymentProcessed) {
+        return {
+          depositedCents,
+          dispensedCents,
+          pendingDispenseCents,
+          status: "cancelled",
+          connectorStatus,
+          connectorResult,
+          connectorType,
+          error: CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE,
+          finished: true,
+        };
+      }
       if (depositedCents !== dispensedCents) {
         return {
           depositedCents,
           dispensedCents,
+          pendingDispenseCents,
           status: "error",
           connectorStatus,
           connectorResult,
@@ -230,6 +254,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
       return {
         depositedCents,
         dispensedCents,
+        pendingDispenseCents,
         status: "cancelled",
         connectorStatus,
         connectorResult,
@@ -238,9 +263,23 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
         finished: true,
       };
     }
+    if (connectorResult === "FAILED" && noPaymentProcessed) {
+      return {
+        depositedCents,
+        dispensedCents,
+        pendingDispenseCents,
+        status: "cancelled",
+        connectorStatus,
+        connectorResult,
+        connectorType,
+        error: CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE,
+        finished: true,
+      };
+    }
     return {
       depositedCents,
       dispensedCents,
+      pendingDispenseCents,
       status: "error",
       connectorStatus,
       connectorResult,
@@ -254,6 +293,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
     return {
       depositedCents,
       dispensedCents,
+      pendingDispenseCents,
       status: "error",
       connectorStatus,
       connectorResult,
@@ -273,6 +313,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
   return {
     depositedCents,
     dispensedCents,
+    pendingDispenseCents,
     status,
     connectorStatus,
     connectorResult,
@@ -288,6 +329,7 @@ function updateCurrentChargeFromConnector(op) {
   const mapped = connectorChargeToState(op, currentCharge.chargeId, currentCharge.expectedType || "CASH");
   currentCharge.depositedCents = mapped.depositedCents;
   currentCharge.dispensedCents = mapped.dispensedCents;
+  currentCharge.pendingDispenseCents = mapped.pendingDispenseCents;
   currentCharge.status = mapped.status;
   currentCharge.connectorStatus = mapped.connectorStatus;
   currentCharge.connectorResult = mapped.connectorResult;
@@ -422,6 +464,7 @@ function handleCashlogyChargeStatus(_req, res) {
   const amountCents = currentCharge.amountCents || 0;
   const depositedCents = currentCharge.depositedCents || 0;
   const dispensedCents = currentCharge.dispensedCents || 0;
+  const pendingDispenseCents = currentCharge.pendingDispenseCents || 0;
   const active = !["done", "error", "cancelled"].includes(currentCharge.status);
 
   return res.json({
@@ -429,11 +472,13 @@ function handleCashlogyChargeStatus(_req, res) {
     amountCents,
     depositedCents,
     dispensedCents,
+    pendingDispenseCents,
     status: currentCharge.status,
     connectorStatus: currentCharge.connectorStatus || null,
     connectorResult: currentCharge.connectorResult || null,
     connectorType: currentCharge.connectorType || null,
     change: dispensedCents / 100,
+    pendingDispense: pendingDispenseCents / 100,
     error: currentCharge.error || null,
     chargeId: currentCharge.chargeId || null,
     depositId: currentCharge.chargeId || null,
@@ -466,6 +511,7 @@ async function handleCashlogyCharge(req, res) {
     amountCents,
     depositedCents: 0,
     dispensedCents: 0,
+    pendingDispenseCents: 0,
     status: "initializing",
     connectorStatus: null,
     connectorResult: null,
@@ -556,6 +602,7 @@ async function handleCashlogyCharge(req, res) {
       chargeId: currentCharge.chargeId,
       deposited: currentCharge.depositedCents / 100,
       dispensed: currentCharge.dispensedCents / 100,
+      pendingDispense: currentCharge.pendingDispenseCents / 100,
       changeOwed: Math.max(0, amountCents - currentCharge.dispensedCents) / 100,
       connectorStatus: currentCharge.connectorStatus,
       connectorResult: currentCharge.connectorResult,
