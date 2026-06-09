@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS pos.business (
   phone VARCHAR(20),
   invoice_series VARCHAR(10) NOT NULL DEFAULT 'S',
   next_invoice_number INTEGER NOT NULL DEFAULT 1,
+  cookies_invoice_series VARCHAR(10) NOT NULL DEFAULT 'C',
+  next_cookies_invoice_number INTEGER NOT NULL DEFAULT 1,
   next_z_number INTEGER NOT NULL DEFAULT 1
 );
 

@@ -1,8 +1,13 @@
 import type { PoolClient } from "pg";
 
+import type { BusinessUnit } from "@/lib/business-unit";
+
 const ORDER_NUMBER_LOCK_KEY = 2026060701;
 
-export async function allocateOrderNumber(client: PoolClient): Promise<string> {
+export async function allocateOrderNumber(
+  client: PoolClient,
+  businessUnit: BusinessUnit = "hicream",
+): Promise<string> {
   await client.query("SELECT pg_advisory_xact_lock($1)", [ORDER_NUMBER_LOCK_KEY]);
 
   const sessionRes = await client.query(
@@ -16,10 +21,12 @@ export async function allocateOrderNumber(client: PoolClient): Promise<string> {
   const countRes = await client.query(
     `SELECT COUNT(*)::int AS count
      FROM pos.orders
-     WHERE created_at >= $1::timestamptz`,
-    [since]
+     WHERE created_at >= $1::timestamptz
+       AND COALESCE(business_unit, 'hicream') = $2`,
+    [since, businessUnit]
   );
   const next = Number(countRes.rows[0]?.count || 0) + 1;
 
-  return `#${String(next).padStart(3, "0")}`;
+  const prefix = businessUnit === "cookies" ? "C#" : "#";
+  return `${prefix}${String(next).padStart(3, "0")}`;
 }

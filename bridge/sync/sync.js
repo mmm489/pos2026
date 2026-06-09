@@ -47,6 +47,8 @@ const TABLES = [
       "phone",
       "invoice_series",
       "next_invoice_number",
+      "cookies_invoice_series",
+      "next_cookies_invoice_number",
       "next_z_number",
     ],
     orderBy: "id",
@@ -371,6 +373,14 @@ async function ensureOrderBusinessUnitSchema(db) {
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_business_unit
     ON pos.orders(business_unit)
+  `);
+  await db.query(`
+    ALTER TABLE pos.business
+    ADD COLUMN IF NOT EXISTS cookies_invoice_series VARCHAR(10) NOT NULL DEFAULT 'C'
+  `);
+  await db.query(`
+    ALTER TABLE pos.business
+    ADD COLUMN IF NOT EXISTS next_cookies_invoice_number INTEGER NOT NULL DEFAULT 1
   `);
 }
 

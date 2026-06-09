@@ -25,6 +25,14 @@ export async function ensureOrderBusinessUnitSchema(client?: PoolClient | null) 
       CREATE INDEX IF NOT EXISTS idx_orders_business_unit
       ON pos.orders(business_unit)
     `,
+    `
+      ALTER TABLE pos.business
+      ADD COLUMN IF NOT EXISTS cookies_invoice_series VARCHAR(10) NOT NULL DEFAULT 'C'
+    `,
+    `
+      ALTER TABLE pos.business
+      ADD COLUMN IF NOT EXISTS next_cookies_invoice_number INTEGER NOT NULL DEFAULT 1
+    `,
   ];
 
   if (client) {

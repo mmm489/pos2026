@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, rawQuery, withTransaction } from "@/lib/db";
 import { allocateOrderNumber } from "@/lib/order-number";
+import { allocateInvoiceNumber } from "@/lib/invoice-number";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
 import { ensureOrderBusinessUnitSchema, normalizeBusinessUnit } from "@/lib/business-unit";
 
@@ -235,17 +236,8 @@ export async function POST(request: NextRequest) {
       totalBase = Math.round(totalBase * 100) / 100;
       totalVat = Math.round(totalVat * 100) / 100;
 
-      const orderNumber = await allocateOrderNumber(client);
-
-      // Atomic invoice number: lock row, read, increment
-      const bizRes = await client.query(
-        `UPDATE pos.business
-         SET next_invoice_number = next_invoice_number + 1
-         RETURNING invoice_series, next_invoice_number - 1 AS invoice_num`
-      );
-      const { invoice_series, invoice_num } = bizRes.rows[0];
-      const year = new Date().getFullYear();
-      const invoiceNumber = `${invoice_series}-${year}/${String(invoice_num).padStart(6, "0")}`;
+      const orderNumber = await allocateOrderNumber(client, businessUnit);
+      const invoiceNumber = await allocateInvoiceNumber(client, businessUnit);
 
       // All sales start as "pending" so they go through
       // the KDS pending → preparing → ready flow. The Z report counts pending
@@ -281,10 +273,11 @@ export async function POST(request: NextRequest) {
                table_number = $8,
                card_reference = $9,
                card_authorization = $10,
-               card_receipt_text = $11
+               card_receipt_text = $11,
+               order_number = CASE WHEN $13 = 'cookies' THEN $14 ELSE order_number END
            WHERE id = $12
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text`,
-          [invoiceNumber, total, totalBase, totalVat, storedPaymentMethod, businessUnit, empId, tblNum, cardRef, cardAuth, cardReceiptText, parkedOrderId]
+          [invoiceNumber, total, totalBase, totalVat, storedPaymentMethod, businessUnit, empId, tblNum, cardRef, cardAuth, cardReceiptText, parkedOrderId, businessUnit, orderNumber]
         );
         order = orderRes.rows[0];
         await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
