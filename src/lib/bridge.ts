@@ -17,8 +17,10 @@ export async function chargeCashlogy(amount: number) {
       success: boolean;
       change?: number;
       deposited?: number;
+      dispensed?: number;
       changeOwed?: number;
       depositId?: string;
+      cancelled?: boolean;
       error?: string;
     };
     try {

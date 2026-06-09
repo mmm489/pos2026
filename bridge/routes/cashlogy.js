@@ -13,6 +13,7 @@ const CHARGE_TOP_MOST = parseBoolean(process.env.CASHLOGY_CHARGE_TOP_MOST, false
 const CERT_TRAFFIC_LIMIT = Number(process.env.CASHLOGY_CERT_TRAFFIC_LIMIT) || 250;
 const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
   "No se puede establecer una conexion con la maquina. Compruebe que la maquina este encendida y correctamente conectada/configurada.";
+const CASHLOGY_CHARGE_CANCELLED_MESSAGE = "El cliente ha cancelado la transaccion";
 
 let currentCharge = null;
 const certTraffic = [];
@@ -214,6 +215,18 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
       };
     }
     if (connectorResult === "CANCELLED") {
+      if (depositedCents !== dispensedCents) {
+        return {
+          depositedCents,
+          dispensedCents,
+          status: "error",
+          connectorStatus,
+          connectorResult,
+          connectorType,
+          error: "Cashlogy ha cancelado la transaccion, pero los importes depositado y dispensado no coinciden",
+          finished: true,
+        };
+      }
       return {
         depositedCents,
         dispensedCents,
@@ -221,7 +234,7 @@ function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
         connectorStatus,
         connectorResult,
         connectorType,
-        error: "Operacio cancel.lada",
+        error: CASHLOGY_CHARGE_CANCELLED_MESSAGE,
         finished: true,
       };
     }
@@ -539,9 +552,14 @@ async function handleCashlogyCharge(req, res) {
     return res.json({
       success: false,
       error: currentCharge.error || "Cobrament Cashlogy no completat",
+      cancelled: finalState.status === "cancelled",
       chargeId: currentCharge.chargeId,
       deposited: currentCharge.depositedCents / 100,
+      dispensed: currentCharge.dispensedCents / 100,
       changeOwed: Math.max(0, amountCents - currentCharge.dispensedCents) / 100,
+      connectorStatus: currentCharge.connectorStatus,
+      connectorResult: currentCharge.connectorResult,
+      connectorType: currentCharge.connectorType,
     });
   } catch (err) {
     const message = normalizeErrorMessage(err);
