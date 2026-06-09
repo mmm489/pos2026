@@ -154,7 +154,7 @@ function parseCents(value) {
   return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
 }
 
-function connectorChargeToState(op) {
+function connectorChargeToState(op, expectedId = null, expectedType = "CASH") {
   if (!op) {
     return {
       depositedCents: 0,
@@ -162,6 +162,7 @@ function connectorChargeToState(op) {
       status: "depositing",
       connectorStatus: null,
       connectorResult: null,
+      connectorType: null,
       error: null,
       finished: false,
     };
@@ -171,8 +172,35 @@ function connectorChargeToState(op) {
   const dispensedCents = parseCents(op.amount?.dispensed);
   const connectorStatus = op.status || null;
   const connectorResult = op.result || null;
+  const connectorType = op.type || null;
+  const connectorId = op.id || null;
+  const expectedConnectorType = expectedType || "CASH";
 
   if (connectorStatus === "FINISHED") {
+    if (expectedId && connectorId !== expectedId) {
+      return {
+        depositedCents,
+        dispensedCents,
+        status: "error",
+        connectorStatus,
+        connectorResult,
+        connectorType,
+        error: "El identificador del cobro devuelto por Cashlogy no coincide con el solicitado",
+        finished: true,
+      };
+    }
+    if (connectorType !== expectedConnectorType) {
+      return {
+        depositedCents,
+        dispensedCents,
+        status: "error",
+        connectorStatus,
+        connectorResult,
+        connectorType,
+        error: `El tipo de cobro devuelto por Cashlogy no es ${expectedConnectorType}`,
+        finished: true,
+      };
+    }
     if (connectorResult === "SUCCESS") {
       return {
         depositedCents,
@@ -180,6 +208,7 @@ function connectorChargeToState(op) {
         status: "done",
         connectorStatus,
         connectorResult,
+        connectorType,
         error: null,
         finished: true,
       };
@@ -191,6 +220,7 @@ function connectorChargeToState(op) {
         status: "cancelled",
         connectorStatus,
         connectorResult,
+        connectorType,
         error: "Operacio cancel.lada",
         finished: true,
       };
@@ -201,6 +231,7 @@ function connectorChargeToState(op) {
       status: "error",
       connectorStatus,
       connectorResult,
+      connectorType,
       error: connectorResult || "Operacio Cashlogy fallida",
       finished: true,
     };
@@ -213,6 +244,7 @@ function connectorChargeToState(op) {
       status: "error",
       connectorStatus,
       connectorResult,
+      connectorType,
       error: "No s'ha pogut dispensar el canvi",
       finished: true,
     };
@@ -231,6 +263,7 @@ function connectorChargeToState(op) {
     status,
     connectorStatus,
     connectorResult,
+    connectorType,
     error: null,
     finished: false,
   };
@@ -239,12 +272,13 @@ function connectorChargeToState(op) {
 function updateCurrentChargeFromConnector(op) {
   if (!currentCharge) return null;
 
-  const mapped = connectorChargeToState(op);
+  const mapped = connectorChargeToState(op, currentCharge.chargeId, currentCharge.expectedType || "CASH");
   currentCharge.depositedCents = mapped.depositedCents;
   currentCharge.dispensedCents = mapped.dispensedCents;
   currentCharge.status = mapped.status;
   currentCharge.connectorStatus = mapped.connectorStatus;
   currentCharge.connectorResult = mapped.connectorResult;
+  currentCharge.connectorType = mapped.connectorType;
   currentCharge.error = mapped.error;
   currentCharge.finishedAt = op?.finishedAt || currentCharge.finishedAt || null;
   currentCharge.raw = op || currentCharge.raw || null;
@@ -385,6 +419,7 @@ function handleCashlogyChargeStatus(_req, res) {
     status: currentCharge.status,
     connectorStatus: currentCharge.connectorStatus || null,
     connectorResult: currentCharge.connectorResult || null,
+    connectorType: currentCharge.connectorType || null,
     change: dispensedCents / 100,
     error: currentCharge.error || null,
     chargeId: currentCharge.chargeId || null,
@@ -411,6 +446,7 @@ async function handleCashlogyCharge(req, res) {
     req.body?.ticketNumber ||
     req.body?.orderId ||
     `cash-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`;
+  const requestedType = String(req.body?.type || "CASH").toUpperCase();
 
   currentCharge = {
     chargeId: null,
@@ -420,6 +456,8 @@ async function handleCashlogyCharge(req, res) {
     status: "initializing",
     connectorStatus: null,
     connectorResult: null,
+    connectorType: null,
+    expectedType: requestedType,
     change: 0,
     error: null,
     cancelRequested: false,
@@ -444,7 +482,7 @@ async function handleCashlogyCharge(req, res) {
         processManually: Boolean(req.body?.processManually),
         screenVisible: parseBoolean(req.body?.screenVisible, CHARGE_SCREEN_VISIBLE),
         topMost: parseBoolean(req.body?.topMost, CHARGE_TOP_MOST),
-        type: req.body?.type || "CASH",
+        type: requestedType,
         peripheralId: req.body?.peripheralId || "",
       },
       15_000
@@ -492,6 +530,9 @@ async function handleCashlogyCharge(req, res) {
         deposited: currentCharge.depositedCents / 100,
         chargeId: currentCharge.chargeId,
         depositId: currentCharge.chargeId,
+        connectorStatus: currentCharge.connectorStatus,
+        connectorResult: currentCharge.connectorResult,
+        connectorType: currentCharge.connectorType,
       });
     }
 
