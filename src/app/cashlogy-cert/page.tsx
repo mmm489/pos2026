@@ -47,6 +47,7 @@ type BridgeCallOptions = {
   body?: unknown;
   timeoutMs?: number;
   successMessage?: string | ((data: BridgeCallResponse) => string);
+  errorMessage?: string | ((data: BridgeCallResponse) => string);
 };
 
 export default function CashlogyCertPage() {
@@ -189,6 +190,13 @@ export default function CashlogyCertPage() {
           typeof options.successMessage === "function"
             ? options.successMessage(data)
             : options.successMessage;
+        window.alert(message);
+      }
+      if (res.ok && data.success === false && options?.errorMessage) {
+        const message =
+          typeof options.errorMessage === "function"
+            ? options.errorMessage(data)
+            : options.errorMessage;
         window.alert(message);
       }
     } catch (error) {
@@ -363,6 +371,13 @@ export default function CashlogyCertPage() {
                             ? ` (${data.amountRefunded.toFixed(2)} €)`
                             : "";
                         return `El reembolso mediante Cashlogy SNEXT se ha procesado correctamente${refunded}`;
+                      },
+                      errorMessage: (data) => {
+                        const refunded =
+                          typeof data.amountRefunded === "number"
+                            ? ` (${data.amountRefunded.toFixed(2)} €)`
+                            : "";
+                        return `Se ha producido un error durante el reembolso a traves de Cashlogy SNEXT. Intentelo de nuevo${refunded}`;
                       },
                     })
                   }

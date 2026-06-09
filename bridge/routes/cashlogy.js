@@ -21,7 +21,7 @@ const CASHLOGY_CASHLESS_FAILED_MESSAGE =
 const CASHLOGY_CASHLESS_REFUND_CANCELLED_MESSAGE =
   "El abono con tarjeta ha sido cancelado por el usuario";
 const CASHLOGY_CASHLESS_REFUND_FAILED_MESSAGE =
-  "Se ha producido un error durante el abono con tarjeta. Intentelo de nuevo";
+  "Se ha producido un error durante el reembolso a traves de Cashlogy SNEXT. Intentelo de nuevo";
 const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
   "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
 const CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE =
@@ -553,7 +553,22 @@ function connectorRefundToState(op, expectedId = null, expectedAmountCents = 0) 
       };
     }
 
-    if (connectorResult === "FAILED") {
+    if (connectorResult === "FAILED" || connectorResult === "FAIL") {
+      if (cashlessType !== "refund") {
+        return {
+          status: "error",
+          connectorStatus,
+          connectorResult,
+          cashlessType,
+          amountRefundedCents,
+          cashlessPeripheralId,
+          cashlessOperationId,
+          cashlessTransactionNumber,
+          cashlessAmountCents,
+          error: "El tipo de operacion devuelto por Cashlogy no es refund",
+          finished: true,
+        };
+      }
       return {
         status: "error",
         connectorStatus,
