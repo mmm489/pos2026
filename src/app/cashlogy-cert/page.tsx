@@ -42,6 +42,7 @@ export default function CashlogyCertPage() {
   const [traffic, setTraffic] = useState<TrafficEntry[]>([]);
   const [amount, setAmount] = useState("0.10");
   const [cashlessPeripheralId, setCashlessPeripheralId] = useState("");
+  const [refundTransactionNumber, setRefundTransactionNumber] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -202,6 +203,8 @@ export default function CashlogyCertPage() {
 
   const parsedAmount = Number(amount.replace(",", "."));
   const canCharge = Number.isFinite(parsedAmount) && parsedAmount > 0 && !busy;
+  const amountCents = Number.isFinite(parsedAmount) ? Math.round(parsedAmount * 100) : 0;
+  const canRefund = amountCents > 0 && refundTransactionNumber.trim().length > 0 && !busy;
 
   return (
     <main className="min-h-screen bg-[#f6f2ea] p-5 text-[#231f1b]">
@@ -268,6 +271,16 @@ export default function CashlogyCertPage() {
                   />
                 </label>
 
+                <label className="text-sm font-black text-[#6f6255]">
+                  TransactionNumber original SNEXT
+                  <input
+                    value={refundTransactionNumber}
+                    onChange={(event) => setRefundTransactionNumber(event.target.value)}
+                    placeholder="Ej. 322030071792"
+                    className="mt-2 w-full rounded-xl border border-[#dccfbb] bg-white px-4 py-3 text-sm font-bold outline-none focus:border-[#b45309]"
+                  />
+                </label>
+
                 <button
                   disabled={!canCharge}
                   onClick={() =>
@@ -307,6 +320,27 @@ export default function CashlogyCertPage() {
                   className="rounded-xl bg-[#7c3aed] px-4 py-3 text-base font-black text-white shadow-sm disabled:opacity-50"
                 >
                   Charge CASHLESS SNEXT
+                </button>
+
+                <button
+                  disabled={!canRefund}
+                  onClick={() =>
+                    callBridge("Abono CASHLESS SNEXT", "/cashlogy/refund", {
+                      body: {
+                        amountCents,
+                        transactionNumber: refundTransactionNumber.trim(),
+                        ticketNumber: "ticket-123",
+                        machineCode: "machine-123",
+                        screenVisible: false,
+                        topMost: false,
+                        peripheralId: cashlessPeripheralId.trim(),
+                      },
+                      timeoutMs: 150_000,
+                    })
+                  }
+                  className="rounded-xl bg-[#b45309] px-4 py-3 text-base font-black text-white shadow-sm disabled:opacity-50"
+                >
+                  Abono CASHLESS SNEXT
                 </button>
 
                 <button

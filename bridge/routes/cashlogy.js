@@ -18,6 +18,10 @@ const CASHLOGY_CASHLESS_CANCELLED_MESSAGE =
   "El pago con tarjeta ha sido cancelado por el usuario";
 const CASHLOGY_CASHLESS_FAILED_MESSAGE =
   "Se ha producido un error durante el pago con tarjeta. Intentelo de nuevo";
+const CASHLOGY_CASHLESS_REFUND_CANCELLED_MESSAGE =
+  "El abono con tarjeta ha sido cancelado por el usuario";
+const CASHLOGY_CASHLESS_REFUND_FAILED_MESSAGE =
+  "Se ha producido un error durante el abono con tarjeta. Intentelo de nuevo";
 const CASHLOGY_COMMUNICATION_CANCELLED_MESSAGE =
   "El usuario ha cancelado la operacion, por favor compruebe si la maquina esta encendida y operativa";
 const CASHLOGY_PENDING_REFUND_CANCELLED_MESSAGE =
@@ -26,6 +30,7 @@ const CASHLOGY_PENDING_CHANGE_WARNING_MESSAGE =
   "La transaccion se ha cobrado, pero no se ha podido dispensar parte del cambio. Por favor, compruebe sus niveles de monedas y billetes";
 
 let currentCharge = null;
+let currentRefund = null;
 const certTraffic = [];
 
 function sleep(ms) {
@@ -441,6 +446,144 @@ function updateCurrentChargeFromConnector(op) {
   return mapped;
 }
 
+function connectorRefundToState(op, expectedId = null) {
+  if (!op) {
+    return {
+      status: "refunding",
+      connectorStatus: null,
+      connectorResult: null,
+      amountRefundedCents: 0,
+      cashlessPeripheralId: null,
+      cashlessOperationId: null,
+      cashlessTransactionNumber: null,
+      cashlessAmountCents: 0,
+      error: null,
+      finished: false,
+    };
+  }
+
+  const connectorStatus = op.status || null;
+  const connectorResult = op.result || null;
+  const connectorId = op.id || null;
+  const amountRefundedCents = parseCents(op.amountRefunded);
+  const cashlessInfo = op.cashlessInfo || {};
+  const cashlessPeripheralId = cashlessInfo?.peripheral?.id || op?.peripheral?.id || null;
+  const cashlessOperationId = connectorId;
+  const cashlessTransactionNumber = cashlessInfo?.transactionNumber || null;
+  const cashlessAmountCents = parseCents(cashlessInfo?.amount);
+
+  if (connectorStatus === "FINISHED") {
+    if (expectedId && connectorId !== expectedId) {
+      return {
+        status: "error",
+        connectorStatus,
+        connectorResult,
+        amountRefundedCents,
+        cashlessPeripheralId,
+        cashlessOperationId,
+        cashlessTransactionNumber,
+        cashlessAmountCents,
+        error: "El identificador del abono devuelto por Cashlogy no coincide con el solicitado",
+        finished: true,
+      };
+    }
+
+    if (connectorResult === "SUCCESS") {
+      return {
+        status: "done",
+        connectorStatus,
+        connectorResult,
+        amountRefundedCents,
+        cashlessPeripheralId,
+        cashlessOperationId,
+        cashlessTransactionNumber,
+        cashlessAmountCents,
+        error: null,
+        finished: true,
+      };
+    }
+
+    if (connectorResult === "CANCELLED") {
+      return {
+        status: "cancelled",
+        connectorStatus,
+        connectorResult,
+        amountRefundedCents,
+        cashlessPeripheralId,
+        cashlessOperationId,
+        cashlessTransactionNumber,
+        cashlessAmountCents,
+        error: CASHLOGY_CASHLESS_REFUND_CANCELLED_MESSAGE,
+        finished: true,
+      };
+    }
+
+    if (connectorResult === "FAILED") {
+      return {
+        status: "error",
+        connectorStatus,
+        connectorResult,
+        amountRefundedCents,
+        cashlessPeripheralId,
+        cashlessOperationId,
+        cashlessTransactionNumber,
+        cashlessAmountCents,
+        error: CASHLOGY_CASHLESS_REFUND_FAILED_MESSAGE,
+        finished: true,
+      };
+    }
+
+    return {
+      status: "error",
+      connectorStatus,
+      connectorResult,
+      amountRefundedCents,
+      cashlessPeripheralId,
+      cashlessOperationId,
+      cashlessTransactionNumber,
+      cashlessAmountCents,
+      error: connectorResult || "Abono Cashlogy fallido",
+      finished: true,
+    };
+  }
+
+  return {
+    status: "refunding",
+    connectorStatus,
+    connectorResult,
+    amountRefundedCents,
+    cashlessPeripheralId,
+    cashlessOperationId,
+    cashlessTransactionNumber,
+    cashlessAmountCents,
+    error: null,
+    finished: false,
+  };
+}
+
+function updateCurrentRefundFromConnector(op) {
+  if (!currentRefund) return null;
+
+  const mapped = connectorRefundToState(op, currentRefund.refundId);
+  currentRefund.status = mapped.status;
+  currentRefund.connectorStatus = mapped.connectorStatus;
+  currentRefund.connectorResult = mapped.connectorResult;
+  currentRefund.amountRefundedCents = mapped.amountRefundedCents;
+  currentRefund.error = mapped.error;
+  currentRefund.cashlessPeripheralId =
+    mapped.cashlessPeripheralId || currentRefund.cashlessPeripheralId || null;
+  currentRefund.cashlessOperationId =
+    mapped.cashlessOperationId || currentRefund.cashlessOperationId || null;
+  currentRefund.cashlessTransactionNumber =
+    mapped.cashlessTransactionNumber || currentRefund.cashlessTransactionNumber || null;
+  currentRefund.cashlessAmountCents =
+    mapped.cashlessAmountCents || currentRefund.cashlessAmountCents || 0;
+  currentRefund.finishedAt = op?.finishedAt || currentRefund.finishedAt || null;
+  currentRefund.raw = op || currentRefund.raw || null;
+
+  return mapped;
+}
+
 function isChargeActive() {
   return Boolean(
     currentCharge &&
@@ -541,6 +684,11 @@ async function requireCashlogyReady() {
 async function getChargeOperation(chargeId) {
   const status = await cashlogyRequest("/charge/status", "GET", null, 8_000);
   return chargeId ? status?.[chargeId] || null : status;
+}
+
+async function getRefundOperation(refundId) {
+  const status = await cashlogyRequest("/refund/status", "GET", null, 8_000);
+  return refundId ? status?.[refundId] || null : status;
 }
 
 async function cancelCurrentCharge() {
@@ -732,6 +880,130 @@ async function handleCashlogyCharge(req, res) {
     console.error("[Cashlogy] Charge error:", message);
     currentCharge.status = "error";
     currentCharge.error = message;
+    return res.status(502).json({ success: false, error: message });
+  }
+}
+
+async function handleCashlogyRefund(req, res) {
+  const amountCents = parseAmountCents(req.body?.amountCents, req.body?.amount);
+  const transactionNumber = String(req.body?.transactionNumber || "").trim();
+
+  if (!amountCents) {
+    return res.status(400).json({ success: false, error: "Import invalid" });
+  }
+  if (!transactionNumber) {
+    return res.status(400).json({
+      success: false,
+      error: "Falta transactionNumber del pago SNEXT original",
+    });
+  }
+
+  currentRefund = {
+    refundId: null,
+    amountCents,
+    amountRefundedCents: 0,
+    transactionNumber,
+    status: "initializing",
+    connectorStatus: null,
+    connectorResult: null,
+    error: null,
+    cashlessPeripheralId: req.body?.peripheralId || null,
+    cashlessOperationId: null,
+    cashlessTransactionNumber: null,
+    cashlessAmountCents: 0,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    raw: null,
+  };
+
+  const ticketNumber = req.body?.ticketNumber || `refund-${Date.now()}`;
+
+  try {
+    console.log(`[Cashlogy] Refund ${amountCents} cents transaction=${transactionNumber}`);
+    await requireCashlogyReady();
+
+    currentRefund.status = "refunding";
+    const start = await cashlogyRequest(
+      "/refund",
+      "POST",
+      {
+        amount: amountCents,
+        transactionNumber,
+        ticketNumber,
+        machineCode: req.body?.machineCode || MACHINE_CODE,
+        screenVisible: parseBoolean(req.body?.screenVisible, false),
+        topMost: parseBoolean(req.body?.topMost, false),
+        peripheralId: req.body?.peripheralId || "",
+      },
+      15_000
+    );
+
+    if (start.result !== "SUCCESS" || !start.id) {
+      throw new Error(`No se ha podido iniciar el abono: ${start.result || "FAILED"}`);
+    }
+
+    currentRefund.refundId = start.id;
+    currentRefund.cashlessOperationId = start.id;
+    currentRefund.startedAt = start.startedAt || currentRefund.startedAt;
+
+    const deadline = Date.now() + OPERATION_TIMEOUT_MS;
+    let finalState = null;
+
+    while (Date.now() < deadline) {
+      await sleep(POLL_INTERVAL_MS);
+
+      const op = await getRefundOperation(currentRefund.refundId);
+      const mapped = updateCurrentRefundFromConnector(op);
+      if (mapped?.finished) {
+        finalState = mapped;
+        break;
+      }
+    }
+
+    if (!finalState) {
+      currentRefund.status = "error";
+      currentRefund.error = "Timeout: abono Cashlogy sin respuesta final";
+      return res.json({
+        success: false,
+        error: currentRefund.error,
+        refundId: currentRefund.refundId,
+      });
+    }
+
+    if (finalState.status === "done") {
+      return res.json({
+        success: true,
+        refundId: currentRefund.refundId,
+        amountRefunded: currentRefund.amountRefundedCents / 100,
+        amountRefundedCents: currentRefund.amountRefundedCents,
+        connectorStatus: currentRefund.connectorStatus,
+        connectorResult: currentRefund.connectorResult,
+        cashlessPeripheralId: currentRefund.cashlessPeripheralId || null,
+        cashlessOperationId: currentRefund.cashlessOperationId || null,
+        cashlessTransactionNumber: currentRefund.cashlessTransactionNumber || transactionNumber,
+        cashlessAmount: currentRefund.cashlessAmountCents || 0,
+      });
+    }
+
+    return res.json({
+      success: false,
+      cancelled: finalState.status === "cancelled",
+      error: currentRefund.error || "Abono Cashlogy no completado",
+      refundId: currentRefund.refundId,
+      amountRefunded: currentRefund.amountRefundedCents / 100,
+      amountRefundedCents: currentRefund.amountRefundedCents,
+      connectorStatus: currentRefund.connectorStatus,
+      connectorResult: currentRefund.connectorResult,
+      cashlessPeripheralId: currentRefund.cashlessPeripheralId || null,
+      cashlessOperationId: currentRefund.cashlessOperationId || null,
+      cashlessTransactionNumber: currentRefund.cashlessTransactionNumber || transactionNumber,
+      cashlessAmount: currentRefund.cashlessAmountCents || 0,
+    });
+  } catch (err) {
+    const message = normalizeErrorMessage(err);
+    console.error("[Cashlogy] Refund error:", message);
+    currentRefund.status = "error";
+    currentRefund.error = message;
     return res.status(502).json({ success: false, error: message });
   }
 }
@@ -974,6 +1246,7 @@ module.exports = {
   handleCashlogyCharge,
   handleCashlogyChargeStatus,
   handleCashlogyCancel,
+  handleCashlogyRefund,
   handleCashlogyState,
   handleCashlogyBackOffice,
   handleCashlogyBackOfficeStatus,
