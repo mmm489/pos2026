@@ -11,6 +11,8 @@ const MACHINE_CODE = process.env.CASHLOGY_MACHINE_CODE || "hicream-pos";
 const CHARGE_SCREEN_VISIBLE = parseBoolean(process.env.CASHLOGY_CHARGE_SCREEN_VISIBLE, false);
 const CHARGE_TOP_MOST = parseBoolean(process.env.CASHLOGY_CHARGE_TOP_MOST, false);
 const CERT_TRAFFIC_LIMIT = Number(process.env.CASHLOGY_CERT_TRAFFIC_LIMIT) || 250;
+const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
+  "No se puede establecer una conexion con la maquina. Compruebe que la maquina este encendida y correctamente conectada/configurada.";
 
 let currentCharge = null;
 const certTraffic = [];
@@ -273,7 +275,7 @@ async function waitForInit() {
     lastStatus = await cashlogyRequest("/init/status", "GET", null, 8_000);
     if (lastStatus.status === "FINISHED") {
       if (lastStatus.result === "SUCCESS") return lastStatus;
-      throw new Error(`Init Cashlogy fallit: ${lastStatus.result || "FAILED"}`);
+      throw new Error(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
     }
   }
 
@@ -283,7 +285,7 @@ async function waitForInit() {
 async function runStartupInit() {
   const init = await cashlogyRequest("/init", "POST", {}, 15_000);
   if (init.result !== "SUCCESS") {
-    throw new Error(`No s'ha pogut iniciar Cashlogy: ${init.result || "FAILED"}`);
+    throw new Error(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
   }
 
   const status = await waitForInit();

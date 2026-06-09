@@ -36,6 +36,8 @@ type CartAction =
 
 const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000; // 15 min
 const PARKED_TICKETS_STORAGE_KEY = "hicream_parked_tickets_v1";
+const CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE =
+  "No se puede establecer una conexion con la maquina. Compruebe que la maquina este encendida y correctamente conectada/configurada.";
 
 // Categories whose name contains any of these keywords are treated as
 // "modifier" categories — their products appear in the long-press popup
@@ -772,9 +774,10 @@ export default function PosPage() {
         if (result.error || result.success === false) {
           setCashlogyStartupInit({
             status: "error",
-            message: result.error || "No se ha podido inicializar Cashlogy",
+            message: CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE,
             data: result,
           });
+          window.alert(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
           return;
         }
 
@@ -785,12 +788,13 @@ export default function PosPage() {
         });
         window.alert("La inicializacion de Cashlogy se ha completado con exito.");
       })
-      .catch((error) => {
+      .catch(() => {
         if (cancelled) return;
         setCashlogyStartupInit({
           status: "error",
-          message: (error as Error).message || "No se ha podido inicializar Cashlogy",
+          message: CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE,
         });
+        window.alert(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
       });
 
     return () => {
