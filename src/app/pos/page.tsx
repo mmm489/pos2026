@@ -788,7 +788,6 @@ export default function PosPage() {
             message: CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE,
             data: result,
           });
-          window.alert(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
           return;
         }
 
@@ -801,7 +800,6 @@ export default function PosPage() {
           message: successMessage,
           data: result,
         });
-        window.alert(successMessage);
       })
       .catch(() => {
         if (cancelled) return;
@@ -809,13 +807,20 @@ export default function PosPage() {
           status: "error",
           message: CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE,
         });
-        window.alert(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
       });
 
     return () => {
       cancelled = true;
     };
   }, [employee, cashlogyStartupInit.status]);
+
+  useEffect(() => {
+    if (cashlogyStartupInit.status !== "success") return;
+    const timer = window.setTimeout(() => {
+      setCashlogyStartupInit({ status: "dismissed" });
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [cashlogyStartupInit.status]);
 
   // Load products (fallback to mock data if API unavailable)
   useEffect(() => {
@@ -946,6 +951,7 @@ export default function PosPage() {
   if (
     cashlogyStartupInit.status === "idle" ||
     cashlogyStartupInit.status === "initializing" ||
+    cashlogyStartupInit.status === "success" ||
     cashlogyStartupInit.status === "error"
   ) {
     return (
@@ -1341,6 +1347,7 @@ function CashlogyStartupInitScreen({
   onContinue: () => void;
 }) {
   const isError = state.status === "error";
+  const isSuccess = state.status === "success";
   const isWaiting = state.status === "idle" || state.status === "initializing";
 
   return (
@@ -1351,6 +1358,8 @@ function CashlogyStartupInitScreen({
         }`}>
           {isError ? (
             <span className="text-3xl font-black">!</span>
+          ) : isSuccess ? (
+            <span className="text-3xl font-black">OK</span>
           ) : (
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#b7dcc2] border-t-[#2e9e5b]" />
           )}
@@ -1360,7 +1369,11 @@ function CashlogyStartupInitScreen({
           Inicializacion Cashlogy
         </p>
         <h1 className="mt-2 text-3xl font-black tracking-tight">
-          {isError ? "No se ha podido inicializar" : "Inicializando maquina"}
+          {isError
+            ? "No se ha podido inicializar"
+            : isSuccess
+              ? "Inicializacion completada"
+              : "Inicializando maquina"}
         </h1>
         <p className="mt-3 text-sm font-semibold text-[#6f665c]">
           {state.message || "Enviando POST /init a ConnectorPlus..."}
@@ -1371,6 +1384,29 @@ function CashlogyStartupInitScreen({
             <p>Estado: INITIALIZING</p>
             <p>Resultado: IN_PROGRESS</p>
           </div>
+        )}
+
+        {isSuccess && (
+          <div className="mt-6 space-y-4">
+            <div className="rounded-2xl border border-[#bfe6ca] bg-[#f2fbf4] px-4 py-3 text-left text-sm font-semibold text-[#1e6b3a]">
+              {state.message}
+            </div>
+            <button
+              onClick={onContinue}
+              className="w-full rounded-xl bg-[#2e9e5b] px-4 py-3 text-sm font-black text-white"
+            >
+              Entrar al POS
+            </button>
+          </div>
+        )}
+
+        {isWaiting && (
+          <button
+            onClick={onContinue}
+            className="mt-5 w-full rounded-xl border border-[#d4cbbb] bg-white px-4 py-3 text-sm font-black text-[#6f665c]"
+          >
+            Continuar POS
+          </button>
         )}
 
         {isError && (
