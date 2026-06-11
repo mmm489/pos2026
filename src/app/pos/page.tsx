@@ -22,7 +22,7 @@ import {
   groupItemsWithModifiers,
 } from "@/lib/item-grouping";
 import { publishCustomerDisplaySnapshot } from "@/lib/customer-display";
-import { closeCashlogy, initCashlogy, printTicket } from "@/lib/bridge";
+import { closeCashlogy, getCashlogyState, initCashlogy, printTicket } from "@/lib/bridge";
 import type { Business, ParkedTicket } from "@/types/pos";
 
 type CartAction =
@@ -335,6 +335,7 @@ export default function PosPage() {
   const [cashlogyStartupInit, setCashlogyStartupInit] = useState<CashlogyStartupInitState>({
     status: "idle",
   });
+  const [cashlogyInitAttempt, setCashlogyInitAttempt] = useState(0);
 
   useEffect(() => {
     dispatch({ type: "NORMALIZE" });
@@ -771,7 +772,6 @@ export default function PosPage() {
       setCashlogyStartupInit({ status: "idle" });
       return;
     }
-    if (cashlogyStartupInit.status !== "idle") return;
 
     let cancelled = false;
     setCashlogyStartupInit({
@@ -779,8 +779,20 @@ export default function PosPage() {
       message: "Inicializando Cashlogy...",
     });
 
-    initCashlogy()
-      .then((result) => {
+    async function startCashlogyInit() {
+      try {
+        const currentState = await getCashlogyState();
+        if (cancelled) return;
+        if (currentState?.online === true) {
+          setCashlogyStartupInit({
+            status: "success",
+            message: "Cashlogy ya esta inicializada y disponible.",
+            data: currentState,
+          });
+          return;
+        }
+
+        const result = await initCashlogy();
         if (cancelled) return;
         if (result.error || result.success === false) {
           setCashlogyStartupInit({
@@ -800,19 +812,21 @@ export default function PosPage() {
           message: successMessage,
           data: result,
         });
-      })
-      .catch(() => {
+      } catch {
         if (cancelled) return;
         setCashlogyStartupInit({
           status: "error",
           message: CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE,
         });
-      });
+      }
+    }
+
+    startCashlogyInit();
 
     return () => {
       cancelled = true;
     };
-  }, [employee, cashlogyStartupInit.status]);
+  }, [employee, cashlogyInitAttempt]);
 
   useEffect(() => {
     if (cashlogyStartupInit.status !== "success") return;
@@ -957,7 +971,10 @@ export default function PosPage() {
     return (
       <CashlogyStartupInitScreen
         state={cashlogyStartupInit}
-        onRetry={() => setCashlogyStartupInit({ status: "idle" })}
+        onRetry={() => {
+          setCashlogyStartupInit({ status: "idle" });
+          setCashlogyInitAttempt((attempt) => attempt + 1);
+        }}
         onContinue={() => setCashlogyStartupInit({ status: "dismissed" })}
       />
     );

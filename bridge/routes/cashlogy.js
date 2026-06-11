@@ -763,13 +763,31 @@ function summarizeCashlogyPeripherals(peripherals) {
 async function waitForInit() {
   const deadline = Date.now() + INIT_TIMEOUT_MS;
   let lastStatus = null;
+  let pollCount = 0;
 
   while (Date.now() < deadline) {
     await sleep(POLL_INTERVAL_MS);
+    pollCount += 1;
     lastStatus = await cashlogyRequest("/init/status", "GET", null, 8_000);
     if (lastStatus.status === "FINISHED") {
       if (lastStatus.result === "SUCCESS") return lastStatus;
       throw new Error(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
+    }
+
+    if (pollCount % 4 === 0) {
+      const [runtimeStatus, peripherals] = await Promise.all([
+        cashlogyRequest("/status", "GET", null, 8_000).catch(() => null),
+        getCashlogyPeripherals().catch(() => null),
+      ]);
+      const peripheral = peripherals ? getPrimaryCashPeripheralFrom(peripherals) : null;
+      if (runtimeStatus?.status === "standby" && peripheral?.status === "AVAILABLE") {
+        return {
+          ...lastStatus,
+          status: "FINISHED",
+          result: "SUCCESS",
+          recoveredFromAvailableState: true,
+        };
+      }
     }
   }
 
