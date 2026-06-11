@@ -777,6 +777,27 @@ async function waitForInit() {
 }
 
 async function runStartupInit() {
+  const currentPeripherals = await getCashlogyPeripherals().catch(() => null);
+  const currentPeripheral = currentPeripherals
+    ? getPrimaryCashPeripheralFrom(currentPeripherals)
+    : null;
+
+  if (currentPeripheral?.status === "AVAILABLE") {
+    const deviceSummary = summarizeCashlogyPeripherals(currentPeripherals);
+    return {
+      initialized: true,
+      alreadyAvailable: true,
+      status: {
+        status: "FINISHED",
+        result: "SUCCESS",
+      },
+      peripherals: currentPeripherals,
+      peripheral: currentPeripheral,
+      deviceSummary,
+      multipleTransactionsAvailable: deviceSummary.multipleTransactionsAvailable,
+    };
+  }
+
   const init = await cashlogyRequest("/init", "POST", {}, 15_000);
   if (init.result !== "SUCCESS") {
     throw new Error(CASHLOGY_INIT_CONNECTION_ERROR_MESSAGE);
