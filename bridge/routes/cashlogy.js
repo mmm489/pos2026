@@ -1,5 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const {
+  recordCashlogyStateSnapshot,
+  recordCashlogyStateError,
+} = require("../lib/cashlogy-state-snapshots");
 
 const CASHLOGY_BASE = process.env.CASHLOGY_URL || "http://127.0.0.1:3000";
 const CASHLOGY_API = `${CASHLOGY_BASE}/connectorPlus`;
@@ -1338,7 +1342,7 @@ async function handleCashlogyState(_req, res) {
       parseCents(accounting.coinbox?.amount) +
       parseCents(accounting.safebox?.amount);
 
-    return res.json({
+    const state = {
       ok: !status.error && !peripherals.error,
       online: primaryCash?.status === "AVAILABLE",
       status,
@@ -1349,10 +1353,14 @@ async function handleCashlogyState(_req, res) {
       denominations: accountingItems,
       totalAmount,
       total: totalAmount / 100,
-    });
+    };
+
+    recordCashlogyStateSnapshot(state);
+    return res.json(state);
   } catch (err) {
     const message = normalizeErrorMessage(err);
     console.error("[Cashlogy] State error:", message);
+    recordCashlogyStateError(err);
     return res.status(502).json({ error: message });
   }
 }

@@ -209,6 +209,29 @@ const TABLES = [
     optional: true,
   },
   {
+    name: "cashlogy_state_snapshots",
+    columns: [
+      "id",
+      "captured_at",
+      "ok",
+      "online",
+      "total_amount",
+      "total",
+      "status",
+      "peripherals",
+      "model",
+      "accounting",
+      "errors",
+      "denominations",
+      "error_message",
+      "synced",
+    ],
+    jsonColumns: ["status", "peripherals", "model", "accounting", "errors", "denominations"],
+    orderBy: "captured_at",
+    optional: true,
+    keyColumns: ["id"],
+  },
+  {
     name: "time_clock_sessions",
     columns: [
       "id",
@@ -472,6 +495,35 @@ async function ensureLocalSupplierPaymentSchema(local) {
   await local.query(`
     ALTER TABLE pos.cash_closings
     ADD COLUMN IF NOT EXISTS supplier_payments_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb
+  `);
+}
+
+async function ensureLocalCashlogyStateSnapshotSchema(local) {
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.cashlogy_state_snapshots (
+      id TEXT PRIMARY KEY,
+      captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      ok BOOLEAN NOT NULL DEFAULT false,
+      online BOOLEAN NOT NULL DEFAULT false,
+      total_amount INTEGER NOT NULL DEFAULT 0,
+      total NUMERIC(10,2) NOT NULL DEFAULT 0,
+      status JSONB NOT NULL DEFAULT '{}'::jsonb,
+      peripherals JSONB NOT NULL DEFAULT '{}'::jsonb,
+      model JSONB NOT NULL DEFAULT '{}'::jsonb,
+      accounting JSONB NOT NULL DEFAULT '{}'::jsonb,
+      errors JSONB NOT NULL DEFAULT '{}'::jsonb,
+      denominations JSONB NOT NULL DEFAULT '[]'::jsonb,
+      error_message TEXT,
+      synced BOOLEAN NOT NULL DEFAULT false
+    )
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_cashlogy_state_snapshots_captured
+    ON pos.cashlogy_state_snapshots(captured_at DESC)
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_cashlogy_state_snapshots_synced
+    ON pos.cashlogy_state_snapshots(synced)
   `);
 }
 
@@ -1029,6 +1081,7 @@ async function runSync() {
 
     await ensureLocalModifierSchema(local);
     await ensureLocalSupplierPaymentSchema(local);
+    await ensureLocalCashlogyStateSnapshotSchema(local);
     await ensureLocalTimeClockSchema(local);
     await ensureCloudSchema(cloud);
     await ensureOrderBusinessUnitSchema(local);

@@ -41,6 +41,7 @@ const {
   handlePrintZReport,
   handlePrinterStatus,
 } = require("./routes/printer");
+const { startCashlogyStateSnapshotScheduler } = require("./lib/cashlogy-state-snapshots");
 
 const app = express();
 const PORT = process.env.PORT || 3006;
@@ -102,4 +103,5 @@ app.get("/printer/status", handlePrinterStatus);
 
 app.listen(PORT, () => {
   console.log(`[${new Date().toISOString()}] Hi Cream Bridge running on port ${PORT}`);
+  startCashlogyStateSnapshotScheduler({ port: PORT });
 });

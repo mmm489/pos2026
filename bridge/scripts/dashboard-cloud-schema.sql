@@ -191,6 +191,23 @@ CREATE TABLE IF NOT EXISTS pos.supplier_payments (
   synced BOOLEAN NOT NULL DEFAULT true
 );
 
+CREATE TABLE IF NOT EXISTS pos.cashlogy_state_snapshots (
+  id TEXT PRIMARY KEY,
+  captured_at TIMESTAMPTZ NOT NULL,
+  ok BOOLEAN NOT NULL DEFAULT false,
+  online BOOLEAN NOT NULL DEFAULT false,
+  total_amount INTEGER NOT NULL DEFAULT 0,
+  total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  status JSONB NOT NULL DEFAULT '{}'::jsonb,
+  peripherals JSONB NOT NULL DEFAULT '{}'::jsonb,
+  model JSONB NOT NULL DEFAULT '{}'::jsonb,
+  accounting JSONB NOT NULL DEFAULT '{}'::jsonb,
+  errors JSONB NOT NULL DEFAULT '{}'::jsonb,
+  denominations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  error_message TEXT,
+  synced BOOLEAN NOT NULL DEFAULT true
+);
+
 CREATE TABLE IF NOT EXISTS pos.time_clock_sessions (
   id INTEGER PRIMARY KEY,
   employee_id INTEGER NOT NULL REFERENCES pos.employees(id),
@@ -259,6 +276,7 @@ CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(cr
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_reference ON pos.card_transactions(reference);
 CREATE INDEX IF NOT EXISTS idx_cloud_supplier_payments_created ON pos.supplier_payments(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_supplier_payments_status ON pos.supplier_payments(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_cashlogy_state_snapshots_captured ON pos.cashlogy_state_snapshots(captured_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_time_clock_sessions_business_date ON pos.time_clock_sessions(business_date DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_time_clock_sessions_employee ON pos.time_clock_sessions(employee_id, business_date DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_time_clock_sessions_status ON pos.time_clock_sessions(status, clock_in_at DESC);
