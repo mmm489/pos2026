@@ -124,7 +124,7 @@ async function recordCashlogyStateError(error) {
 }
 
 function startCashlogyStateSnapshotScheduler({ port }) {
-  const intervalMs = Number(process.env.CASHLOGY_STATE_SNAPSHOT_INTERVAL_MS || 300_000);
+  const intervalMs = Number(process.env.CASHLOGY_STATE_SNAPSHOT_INTERVAL_MS || 0);
   const startupDelayMs = Number(process.env.CASHLOGY_STATE_SNAPSHOT_START_DELAY_MS || 15_000);
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
     console.log("[CashlogyState] scheduler disabled");
