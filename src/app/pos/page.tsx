@@ -10,6 +10,7 @@ import PinLogin from "@/components/pos/PinLogin";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
 import ParkedTicketsModal from "@/components/pos/ParkedTicketsModal";
+import SplitParkedTicketModal, { type SplitSelection } from "@/components/pos/SplitParkedTicketModal";
 import TimeClockModal from "@/components/pos/TimeClockModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import {
@@ -275,6 +276,57 @@ function buildParkedTicket(
   };
 }
 
+function selectedModifierQty(baseQty: number, selectedBaseQty: number, modifierQty: number) {
+  if (selectedBaseQty <= 0 || modifierQty <= 0) return 0;
+  if (selectedBaseQty >= baseQty) return modifierQty;
+  return Math.min(modifierQty, selectedBaseQty);
+}
+
+function splitParkedTicketItems(items: CartItem[], selection: SplitSelection) {
+  const selectedItems: CartItem[] = [];
+  const remainingItems: CartItem[] = [];
+  const groupedItems = groupItemsWithModifiers(
+    items,
+    (item) => item.name,
+    (item) => item.notes
+  );
+
+  for (const group of groupedItems) {
+    const base = group.base;
+    if (group.isOrphanModifier) {
+      remainingItems.push({ ...base });
+      continue;
+    }
+
+    const baseQty = Math.max(0, Number(base.qty || 0));
+    const selectedBaseQty = Math.max(0, Math.min(baseQty, Number(selection[base.line_id] || 0)));
+    const remainingBaseQty = Math.max(0, baseQty - selectedBaseQty);
+
+    if (selectedBaseQty > 0) selectedItems.push({ ...base, qty: selectedBaseQty });
+    if (remainingBaseQty > 0) remainingItems.push({ ...base, qty: remainingBaseQty });
+
+    for (const modifier of group.modifiers) {
+      const modifierQty = Math.max(0, Number(modifier.qty || 0));
+      const selectedQty = selectedModifierQty(baseQty || 1, selectedBaseQty, modifierQty);
+      const remainingQty = Math.max(0, modifierQty - selectedQty);
+      if (selectedQty > 0) selectedItems.push({ ...modifier, qty: selectedQty });
+      if (remainingQty > 0) remainingItems.push({ ...modifier, qty: remainingQty });
+    }
+  }
+
+  return { selectedItems, remainingItems };
+}
+
+function updateParkedTicketItems(ticket: ParkedTicket, items: CartItem[]): ParkedTicket {
+  return {
+    ...ticket,
+    items: items.map((item) => ({ ...item })),
+    total: cartTotal(items),
+    item_count: cartItemCount(items),
+    summary: summarizeCart(items) || "Comanda aparcada",
+  };
+}
+
 function readParkedTickets() {
   if (typeof window === "undefined") return [];
   try {
@@ -308,6 +360,12 @@ type CashlogyStartupInitState = {
   data?: unknown;
 };
 
+type SplitCheckoutState = {
+  ticket: ParkedTicket;
+  items: CartItem[];
+  remainingItems: CartItem[];
+};
+
 export default function PosPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -323,6 +381,8 @@ export default function PosPage() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [parkedTickets, setParkedTickets] = useState<ParkedTicket[]>([]);
   const [recoveringTicket, setRecoveringTicket] = useState<ParkedTicket | null>(null);
+  const [splittingTicket, setSplittingTicket] = useState<ParkedTicket | null>(null);
+  const [splitCheckout, setSplitCheckout] = useState<SplitCheckoutState | null>(null);
   const [activeParkedOrderId, setActiveParkedOrderId] = useState<number | null>(null);
   const [printingParkedTicketId, setPrintingParkedTicketId] = useState<string | null>(null);
   const [sendingParkedTicketId, setSendingParkedTicketId] = useState<string | null>(null);
@@ -439,10 +499,11 @@ export default function PosPage() {
     () => modifierCategories.filter((c) => selectedModifierCategoryIds.has(c.id)),
     [modifierCategories, selectedModifierCategoryIds]
   );
+  const displayCart = splitCheckout?.items ?? cart;
   const customerDisplayItems = useMemo(
     () =>
       groupItemsWithModifiers(
-        cart,
+        displayCart,
         (item) => item.name,
         (item) => item.notes
       ).map(({ base, modifiers }) => ({
@@ -461,11 +522,11 @@ export default function PosPage() {
           note: getVisibleItemNote(modifier.notes),
         })),
       })),
-    [cart]
+    [displayCart]
   );
   const customerDisplayTotal = useMemo(
-    () => Math.round(cart.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100,
-    [cart]
+    () => Math.round(displayCart.reduce((sum, item) => sum + item.price * item.qty, 0) * 100) / 100,
+    [displayCart]
   );
   const customerDisplayItemCount = useMemo(
     () => customerDisplayItems.reduce((sum, item) => sum + item.qty, 0),
@@ -488,7 +549,7 @@ export default function PosPage() {
 
   useEffect(() => {
     publishCustomerDisplaySnapshot({
-      status: !employee || cart.length === 0 ? "idle" : showCheckout ? "checkout" : "active",
+      status: !employee || displayCart.length === 0 ? "idle" : showCheckout || splitCheckout ? "checkout" : "active",
       employeeName: employee?.name ?? null,
       items: employee ? customerDisplayItems : [],
       itemCount: employee ? customerDisplayItemCount : 0,
@@ -496,11 +557,12 @@ export default function PosPage() {
       updatedAt: new Date().toISOString(),
     });
   }, [
-    cart.length,
     customerDisplayItemCount,
     customerDisplayItems,
     customerDisplayTotal,
+    displayCart.length,
     employee,
+    splitCheckout,
     showCheckout,
   ]);
 
@@ -758,6 +820,44 @@ export default function PosPage() {
       setPrintingParkedTicketId(null);
     }
   }, []);
+
+  const handleSplitParkedTicket = useCallback((ticket: ParkedTicket) => {
+    setShowParkedTickets(false);
+    setRecoveringTicket(null);
+    setSplittingTicket(ticket);
+  }, []);
+
+  const handleConfirmSplitPayment = useCallback((ticket: ParkedTicket, selection: SplitSelection) => {
+    const split = splitParkedTicketItems(ticket.items, selection);
+    if (split.selectedItems.length === 0) {
+      window.alert("Selecciona almenys un producte per cobrar.");
+      return;
+    }
+    setSplittingTicket(null);
+    setSplitCheckout({
+      ticket,
+      items: split.selectedItems,
+      remainingItems: split.remainingItems,
+    });
+  }, []);
+
+  const handleSplitCheckoutComplete = useCallback(() => {
+    if (!splitCheckout) return;
+
+    const remainingItems = splitCheckout.remainingItems;
+    const nextTickets = remainingItems.length > 0
+      ? parkedTickets.map((ticket) =>
+          ticket.id === splitCheckout.ticket.id
+            ? updateParkedTicketItems(ticket, remainingItems)
+            : ticket
+        )
+      : parkedTickets.filter((ticket) => ticket.id !== splitCheckout.ticket.id);
+
+    saveParkedTickets(nextTickets);
+    setSplitCheckout(null);
+    setShowCheckout(false);
+    setRecoveringTicket(null);
+  }, [parkedTickets, saveParkedTickets, splitCheckout]);
 
   // Restore session
   useEffect(() => {
@@ -1116,15 +1216,22 @@ export default function PosPage() {
       </div>
 
       {/* Checkout modal */}
-      {showCheckout && (
+      {(showCheckout || splitCheckout) && (
         <CheckoutModal
-          items={cart}
-          total={cart.reduce((sum, i) => sum + i.price * i.qty, 0)}
+          items={splitCheckout?.items ?? cart}
+          total={(splitCheckout?.items ?? cart).reduce((sum, i) => sum + i.price * i.qty, 0)}
           employeeId={employee.id}
           canUseCookies={isAdminEmployee}
-          parkedOrderId={activeParkedOrderId}
-          onClose={() => setShowCheckout(false)}
-          onComplete={handleCheckoutComplete}
+          parkedOrderId={splitCheckout ? null : activeParkedOrderId}
+          skipKitchenPrint={Boolean(splitCheckout)}
+          onClose={() => {
+            if (splitCheckout) {
+              setSplitCheckout(null);
+              return;
+            }
+            setShowCheckout(false);
+          }}
+          onComplete={splitCheckout ? handleSplitCheckoutComplete : handleCheckoutComplete}
         />
       )}
 
@@ -1189,6 +1296,7 @@ export default function PosPage() {
           tickets={parkedTickets}
           currentCartHasItems={cart.length > 0}
           onRecover={handleRecoverParkedTicket}
+          onSplit={handleSplitParkedTicket}
           onDelete={handleDeleteParkedTicket}
           onPrint={handlePrintParkedTicket}
           onSendToKds={handleSendParkedTicketToKds}
@@ -1198,6 +1306,14 @@ export default function PosPage() {
             setShowParkedTickets(false);
             setRecoveringTicket(null);
           }}
+        />
+      )}
+
+      {splittingTicket && (
+        <SplitParkedTicketModal
+          ticket={splittingTicket}
+          onCancel={() => setSplittingTicket(null)}
+          onConfirm={handleConfirmSplitPayment}
         />
       )}
 

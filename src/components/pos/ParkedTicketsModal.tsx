@@ -7,6 +7,7 @@ interface ParkedTicketsModalProps {
   tickets: ParkedTicket[];
   currentCartHasItems: boolean;
   onRecover: (ticket: ParkedTicket) => void;
+  onSplit: (ticket: ParkedTicket) => void;
   onDelete: (ticketId: string) => void;
   onPrint: (ticket: ParkedTicket) => void;
   onSendToKds: (ticket: ParkedTicket) => void;
@@ -19,6 +20,7 @@ export default function ParkedTicketsModal({
   tickets,
   currentCartHasItems,
   onRecover,
+  onSplit,
   onDelete,
   onPrint,
   onSendToKds,
@@ -110,9 +112,15 @@ export default function ParkedTicketsModal({
                           Recuperar
                         </button>
                         <button
+                          onClick={() => onSplit(ticket)}
+                          className="rounded-xl bg-[#fbf0cc] px-4 py-3 text-sm font-semibold text-[#87620d] active:bg-[#f4df9d]"
+                        >
+                          Cobrar separat
+                        </button>
+                        <button
                           onClick={() => onPrint(ticket)}
                           disabled={printingTicketId === ticket.id}
-                          className="rounded-xl bg-[#e4f0fb] px-4 py-3 text-sm font-semibold text-[#275a8f] active:bg-[#d4e7f8] disabled:opacity-60"
+                          className="col-span-2 rounded-xl bg-[#e4f0fb] px-4 py-3 text-sm font-semibold text-[#275a8f] active:bg-[#d4e7f8] disabled:opacity-60"
                         >
                           {printingTicketId === ticket.id ? "..." : "Imprimir"}
                         </button>

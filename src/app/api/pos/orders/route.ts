@@ -187,6 +187,7 @@ export async function POST(request: NextRequest) {
       cashless_transaction_number,
       cashless_amount,
       parked_order_id,
+      skip_kitchen_print,
     } = body;
     const businessUnit = normalizeBusinessUnit(body.business_unit);
 
@@ -218,6 +219,7 @@ export async function POST(request: NextRequest) {
       ? parsedParkedOrderId
       : null;
     const isFinalizingParkedOrder = parkedOrderId !== null;
+    const shouldSkipKitchenPrint = skip_kitchen_print === true;
     const cardRef = (storedPaymentMethod === "card" && card_reference) ? String(card_reference).slice(0, 20) : null;
     const cardAuth = (storedPaymentMethod === "card" && card_authorization) ? String(card_authorization).slice(0, 20) : null;
     // Receipt text from REDSYS DatosRecibo — kept verbatim, can be quite long
@@ -405,7 +407,7 @@ export async function POST(request: NextRequest) {
       console.error("Pusher emit error:", e);
     }
 
-    const kitchenPrint = isFinalizingParkedOrder
+    const kitchenPrint = isFinalizingParkedOrder || shouldSkipKitchenPrint
       ? { success: true }
       : await printKitchenTicketForOrder(completeOrder);
 

@@ -35,6 +35,7 @@ interface CheckoutModalProps {
   employeeId?: number;
   canUseCookies?: boolean;
   parkedOrderId?: number | null;
+  skipKitchenPrint?: boolean;
   onClose: () => void;
   onComplete: () => void;
 }
@@ -52,6 +53,7 @@ export default function CheckoutModal({
   employeeId,
   canUseCookies = false,
   parkedOrderId,
+  skipKitchenPrint = false,
   onClose,
   onComplete,
 }: CheckoutModalProps) {
@@ -231,6 +233,7 @@ export default function CheckoutModal({
             employee_id: employeeId,
             table_number: tableNumber || null,
             parked_order_id: parkedOrderId || null,
+            skip_kitchen_print: skipKitchenPrint,
           }),
         });
         if (orderRes.ok) {
@@ -242,7 +245,7 @@ export default function CheckoutModal({
 
       if (!order) {
         order = createDemoOrder("card");
-        broadcastNewOrder(order);
+        if (!skipKitchenPrint) broadcastNewOrder(order);
       }
 
       setOrderNumber(order.order_number);
@@ -251,7 +254,7 @@ export default function CheckoutModal({
       setTicketPrinted(false);
       setTicketError("");
 
-      if (!parkedOrderId) {
+      if (!parkedOrderId && !skipKitchenPrint) {
         await printKitchenFallback(order);
       }
 
@@ -350,6 +353,7 @@ export default function CheckoutModal({
             employee_id: employeeId,
             table_number: tableNumber || null,
             parked_order_id: parkedOrderId || null,
+            skip_kitchen_print: skipKitchenPrint,
             card_reference: cardReference,
             card_authorization: cardAuthorization,
             card_receipt_text: cardReceiptText,
@@ -368,7 +372,7 @@ export default function CheckoutModal({
 
       if (!order) {
         order = createDemoOrder(paymentMethod, businessUnit);
-        broadcastNewOrder(order);
+        if (!skipKitchenPrint) broadcastNewOrder(order);
       }
 
       setOrderNumber(order.order_number);
@@ -380,7 +384,7 @@ export default function CheckoutModal({
       setTicketPrinted(false);
       setTicketError("");
 
-      if (!parkedOrderId) {
+      if (!parkedOrderId && !skipKitchenPrint) {
         await printKitchenFallback(order);
       }
 
