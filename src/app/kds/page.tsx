@@ -66,7 +66,7 @@ export default function KdsPage() {
         const order = event.order as Order;
         setOrders((prev) => {
           if (prev.some((o) => o.id === order.id)) return prev;
-          return [order, ...prev];
+          return [...prev, order];
         });
       }
       if (event.type === "order-updated") {

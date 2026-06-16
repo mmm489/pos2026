@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
          FROM pos.orders
          WHERE status = ANY($1)
            AND ($2::text IS NULL OR COALESCE(business_unit, 'hicream') = $2)
-         ORDER BY created_at DESC`,
+         ORDER BY created_at ASC`,
         [statuses, businessUnit]
       );
     } else {
