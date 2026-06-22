@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { CartItem } from "@/types/pos";
 import {
   getModifierParent,
@@ -15,6 +15,7 @@ interface CartProps {
   onUpdateQty: (lineId: string, delta: number) => void;
   onRemove: (lineId: string) => void;
   onSetNote: (lineId: string, note: string | null) => void;
+  onEditModifiers?: (lineId: string) => void;
   onPark: () => void;
   onOpenParkedTickets: () => void;
   onCheckout: () => void;
@@ -33,6 +34,7 @@ export default function Cart({
   onUpdateQty,
   onRemove,
   onSetNote,
+  onEditModifiers,
   onPark,
   onOpenParkedTickets,
   onCheckout,
@@ -81,6 +83,7 @@ export default function Cart({
                     setEditingNoteFor(item.line_id);
                     setNoteDraft(getVisibleItemNote(item.notes) || "");
                   }}
+                  onEditModifiers={onEditModifiers}
                 />
 
                 {modifiers.length > 0 && (
@@ -198,19 +201,46 @@ function CartLine({
   onUpdateQty,
   onRemove,
   onEditNote,
+  onEditModifiers,
 }: {
   item: CartItem;
   isModifier?: boolean;
   onUpdateQty: (lineId: string, delta: number) => void;
   onRemove: (lineId: string) => void;
   onEditNote: (item: CartItem) => void;
+  onEditModifiers?: (lineId: string) => void;
 }) {
   const modifierParent = getModifierParent(item.notes);
   const visibleNote = !modifierParent ? getVisibleItemNote(item.notes) : null;
   const hideIncreaseButton = isSingleChoiceCartModifier(item.name, modifierParent);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const startLongPress = (event: PointerEvent<HTMLDivElement>) => {
+    if (isModifier || modifierParent || !onEditModifiers) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, input, textarea")) return;
+    clearLongPress();
+    longPressTimer.current = setTimeout(() => {
+      onEditModifiers(item.line_id);
+      longPressTimer.current = null;
+    }, 520);
+  };
 
   return (
-    <div className={`flex items-center gap-3 ${isModifier ? "py-1" : ""}`}>
+    <div
+      className={`flex select-none items-center gap-3 ${isModifier ? "py-1" : ""}`}
+      onPointerDown={startLongPress}
+      onPointerUp={clearLongPress}
+      onPointerCancel={clearLongPress}
+      onPointerLeave={clearLongPress}
+    >
       <div className="min-w-0 flex-1">
         <p
           className={`line-clamp-2 font-medium leading-5 ${

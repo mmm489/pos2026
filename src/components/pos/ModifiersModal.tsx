@@ -20,6 +20,10 @@ interface ModifiersModalProps {
   modifierCategories: Category[];
   includedCount?: number | null;
   extraPrice?: number | null;
+  initialSelections?: Map<number, number>;
+  initialIceCreamBallFlavors?: Map<number, string[]>;
+  initialNote?: string | null;
+  confirmLabel?: string;
   onConfirm: (selections: PricedModifierSelection[], note: string | null) => void;
   onCancel: () => void;
 }
@@ -109,13 +113,27 @@ export default function ModifiersModal({
   modifierCategories,
   includedCount,
   extraPrice,
+  initialSelections,
+  initialIceCreamBallFlavors,
+  initialNote,
+  confirmLabel = "Afegir al carro",
   onConfirm,
   onCancel,
 }: ModifiersModalProps) {
-  const [selections, setSelections] = useState<Map<number, number>>(new Map());
-  const [iceCreamBallFlavors, setIceCreamBallFlavors] = useState<Map<number, string[]>>(new Map());
+  const [selections, setSelections] = useState<Map<number, number>>(
+    () => new Map(initialSelections ?? [])
+  );
+  const [iceCreamBallFlavors, setIceCreamBallFlavors] = useState<Map<number, string[]>>(
+    () =>
+      new Map(
+        Array.from(initialIceCreamBallFlavors ?? []).map(([productId, flavors]) => [
+          productId,
+          [...flavors],
+        ])
+      )
+  );
   const [flavorPickerFor, setFlavorPickerFor] = useState<Product | null>(null);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(initialNote ?? "");
   const includedLimit = Math.max(0, Math.floor(Number(includedCount ?? 0)));
   const extraUnitPrice = Math.max(0, Number(extraPrice ?? 0));
 
@@ -808,7 +826,7 @@ export default function ModifiersModal({
               onClick={handleConfirm}
               className="rounded-xl bg-[#2e9e5b] px-7 py-3 font-medium text-white active:bg-[#27874e]"
             >
-              Afegir al carro
+              {confirmLabel}
             </button>
           </div>
         </div>

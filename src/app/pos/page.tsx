@@ -31,6 +31,7 @@ type CartAction =
   | { type: "UPDATE_QTY"; lineId: string; delta: number }
   | { type: "REMOVE"; lineId: string }
   | { type: "SET_NOTE"; lineId: string; note: string | null }
+  | { type: "REPLACE_GROUP"; baseLineId: string; items: CartItem[] }
   | { type: "RESTORE"; items: CartItem[] }
   | { type: "NORMALIZE" }
   | { type: "CLEAR" };
@@ -142,6 +143,36 @@ function removeCartItemWithModifiers(items: CartItem[], lineId: string): CartIte
   return items.filter((item) => !lineIdsToRemove.has(item.line_id));
 }
 
+function replaceCartGroup(items: CartItem[], baseLineId: string, replacementItems: CartItem[]): CartItem[] {
+  const groupedItems = groupItemsWithModifiers(
+    items,
+    (item) => item.name,
+    (item) => item.notes
+  );
+  const targetGroup = groupedItems.find((group) => group.base.line_id === baseLineId);
+
+  if (!targetGroup) return items;
+
+  const lineIdsToReplace = new Set([
+    targetGroup.base.line_id,
+    ...targetGroup.modifiers.map((modifier) => modifier.line_id),
+  ]);
+  const nextItems: CartItem[] = [];
+  let inserted = false;
+
+  for (const item of items) {
+    if (!inserted && item.line_id === targetGroup.base.line_id) {
+      nextItems.push(...replacementItems.map((replacement) => ({ ...replacement })));
+      inserted = true;
+    }
+    if (!lineIdsToReplace.has(item.line_id)) {
+      nextItems.push(item);
+    }
+  }
+
+  return inserted ? nextItems : items;
+}
+
 const POS_CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
   { value: "error", label: "Error en la comanda" },
@@ -196,6 +227,8 @@ function cartReducer(state: CartItem[], action: CartAction): CartItem[] {
     }
     case "REMOVE":
       return normalizeCartModifierPrices(removeCartItemWithModifiers(state, action.lineId));
+    case "REPLACE_GROUP":
+      return normalizeCartModifierPrices(replaceCartGroup(state, action.baseLineId, action.items));
     case "SET_NOTE":
       return normalizeCartModifierPrices(state.map((i) =>
         i.line_id === action.lineId && !getModifierParent(i.notes)
@@ -366,6 +399,76 @@ type SplitCheckoutState = {
   remainingItems: CartItem[];
 };
 
+type EditingCartGroup = {
+  base: CartItem;
+  product: Product;
+  modifiers: CartItem[];
+};
+
+type ModifierInitialState = {
+  selections: Map<number, number>;
+  iceCreamBallFlavors: Map<number, string[]>;
+  note: string | null;
+};
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractIceCreamBallFlavor(displayName: string, catalogName?: string | null) {
+  const candidates = [
+    catalogName,
+    "bola gelat",
+    "bola helado",
+    "gelat",
+    "helado",
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    const match = displayName.match(new RegExp(`^${escapeRegExp(candidate)}\\s+(.+)$`, "i"));
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+
+  return null;
+}
+
+function buildModifierInitialState(
+  base: CartItem,
+  modifiers: CartItem[],
+  productsById: Map<number, Product>
+): ModifierInitialState {
+  const selections = new Map<number, number>();
+  const iceCreamBallFlavors = new Map<number, string[]>();
+
+  for (const modifier of modifiers) {
+    const product = productsById.get(modifier.product_id);
+    if (!product) continue;
+
+    const qty = Math.max(0, Number(modifier.qty || 0));
+    if (qty <= 0) continue;
+
+    const displayName = getModifierDisplayName(modifier.name, modifier.notes);
+    if (isIceCreamBallName(product.name) || isIceCreamBallName(modifier.name)) {
+      const flavor = extractIceCreamBallFlavor(displayName, product.name);
+      const currentFlavors = iceCreamBallFlavors.get(product.id) ?? [];
+      for (let index = 0; index < qty; index += 1) {
+        currentFlavors.push(flavor ?? displayName);
+      }
+      iceCreamBallFlavors.set(product.id, currentFlavors);
+      selections.set(product.id, currentFlavors.length);
+      continue;
+    }
+
+    selections.set(product.id, (selections.get(product.id) ?? 0) + qty);
+  }
+
+  return {
+    selections,
+    iceCreamBallFlavors,
+    note: getVisibleItemNote(base.notes),
+  };
+}
+
 export default function PosPage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -392,6 +495,7 @@ export default function PosPage() {
   const [cancelReason, setCancelReason] = useState("client");
   const [loading, setLoading] = useState(true);
   const [modifiersFor, setModifiersFor] = useState<Product | null>(null);
+  const [editingCartGroup, setEditingCartGroup] = useState<EditingCartGroup | null>(null);
   const [cashlogyStartupInit, setCashlogyStartupInit] = useState<CashlogyStartupInitState>({
     status: "idle",
   });
@@ -458,6 +562,10 @@ export default function PosPage() {
     () => new Map(categories.map((category) => [category.id, category])),
     [categories]
   );
+  const productsById = useMemo(
+    () => new Map(products.map((product) => [product.id, product])),
+    [products]
+  );
   const flavorModifierGroupIds = useMemo(
     () =>
       new Set(
@@ -484,8 +592,9 @@ export default function PosPage() {
     },
     [categoriesById, flavorModifierGroupIds, modifierProducts.length]
   );
-  const selectedModifierGroup = modifiersFor?.modifier_group_id
-    ? modifierGroupById.get(modifiersFor.modifier_group_id) ?? null
+  const activeModifierProduct = editingCartGroup?.product ?? modifiersFor;
+  const selectedModifierGroup = activeModifierProduct?.modifier_group_id
+    ? modifierGroupById.get(activeModifierProduct.modifier_group_id) ?? null
     : null;
   const selectedModifierCategoryIds = useMemo(() => {
     if (selectedModifierGroup) return new Set(selectedModifierGroup.category_ids);
@@ -498,6 +607,13 @@ export default function PosPage() {
   const availableModifierCategories = useMemo(
     () => modifierCategories.filter((c) => selectedModifierCategoryIds.has(c.id)),
     [modifierCategories, selectedModifierCategoryIds]
+  );
+  const editingModifierInitialState = useMemo(
+    () =>
+      editingCartGroup
+        ? buildModifierInitialState(editingCartGroup.base, editingCartGroup.modifiers, productsById)
+        : null,
+    [editingCartGroup, productsById]
   );
   const displayCart = splitCheckout?.items ?? cart;
   const customerDisplayItems = useMemo(
@@ -859,6 +975,40 @@ export default function PosPage() {
     setRecoveringTicket(null);
   }, [parkedTickets, saveParkedTickets, splitCheckout]);
 
+  const handleEditCartModifiers = useCallback((baseLineId: string) => {
+    const groupedItems = groupItemsWithModifiers(
+      cart,
+      (item) => item.name,
+      (item) => item.notes
+    );
+    const group = groupedItems.find((candidate) => candidate.base.line_id === baseLineId);
+    if (!group || group.isOrphanModifier) return;
+
+    const product = productsById.get(group.base.product_id);
+    if (!product?.modifier_group_id) return;
+
+    if (group.base.qty > 1) {
+      window.alert("Per modificar toppings, deixa aquest producte amb quantitat 1 o torna'l a fer.");
+      return;
+    }
+
+    const groupConfig = modifierGroupById.get(product.modifier_group_id);
+    const editableCategoryIds = groupConfig?.category_ids?.length
+      ? new Set(groupConfig.category_ids)
+      : modifierCategoryIds;
+    const hasEditableOptions = modifierProducts.some((productOption) =>
+      editableCategoryIds.has(productOption.category_id)
+    );
+    if (!hasEditableOptions) return;
+
+    setModifiersFor(null);
+    setEditingCartGroup({
+      base: group.base,
+      product,
+      modifiers: group.modifiers,
+    });
+  }, [cart, modifierCategoryIds, modifierGroupById, modifierProducts, productsById]);
+
   // Restore session
   useEffect(() => {
     const saved = localStorage.getItem("pos_employee");
@@ -1207,6 +1357,7 @@ export default function PosPage() {
             onSetNote={(lineId, note) =>
               dispatch({ type: "SET_NOTE", lineId, note })
             }
+            onEditModifiers={handleEditCartModifiers}
             onPark={handleParkCurrentTicket}
             onOpenParkedTickets={() => setShowParkedTickets(true)}
             onCheckout={() => setShowCheckout(true)}
@@ -1236,21 +1387,76 @@ export default function PosPage() {
       )}
 
       {/* Modifiers modal — opened on long-press of a base product */}
-      {modifiersFor && (
+      {activeModifierProduct && (
         <ModifiersModal
-          baseProduct={modifiersFor}
+          key={editingCartGroup ? `edit-${editingCartGroup.base.line_id}` : `add-${activeModifierProduct.id}`}
+          baseProduct={activeModifierProduct}
           modifierGroupName={selectedModifierGroup?.name ?? null}
           modifierProducts={availableModifierProducts}
           modifierCategories={availableModifierCategories}
-          includedCount={modifiersFor.modifier_included_count ?? 0}
-          extraPrice={modifiersFor.modifier_extra_price ?? 0}
-          onCancel={() => setModifiersFor(null)}
+          includedCount={activeModifierProduct.modifier_included_count ?? 0}
+          extraPrice={activeModifierProduct.modifier_extra_price ?? 0}
+          initialSelections={editingModifierInitialState?.selections}
+          initialIceCreamBallFlavors={editingModifierInitialState?.iceCreamBallFlavors}
+          initialNote={editingModifierInitialState?.note}
+          confirmLabel={editingCartGroup ? "Guardar canvis" : "Afegir al carro"}
+          onCancel={() => {
+            setModifiersFor(null);
+            setEditingCartGroup(null);
+          }}
           onConfirm={(extras, note) => {
             const hasCustomizations = extras.length > 0 || Boolean(note?.trim());
-            const baseLineId = makeCartLineId(modifiersFor.id);
+            const baseLineId = editingCartGroup?.base.line_id ?? makeCartLineId(activeModifierProduct.id);
+
+            if (editingCartGroup) {
+              const replacementItems: CartItem[] = [
+                {
+                  ...editingCartGroup.base,
+                  product_id: activeModifierProduct.id,
+                  name: activeModifierProduct.name,
+                  qty: 1,
+                  notes: hasCustomizations ? buildBaseLineNote(baseLineId, note) : null,
+                },
+              ];
+
+              for (const { product, qty, unitPrice } of extras) {
+                const isIceCreamBall = isIceCreamBallName(product.name);
+                if (isIceCreamBall) {
+                  for (let i = 0; i < qty; i += 1) {
+                    replacementItems.push({
+                      line_id: makeCartLineId(product.id),
+                      product_id: product.id,
+                      name: product.name,
+                      price: unitPrice,
+                      qty: 1,
+                      notes: buildModifierNote(activeModifierProduct.name, product.name, baseLineId),
+                    });
+                  }
+                  continue;
+                }
+
+                replacementItems.push({
+                  line_id: makeCartLineId(product.id),
+                  product_id: product.id,
+                  name: product.name,
+                  price: unitPrice,
+                  qty,
+                  notes: buildModifierNote(activeModifierProduct.name, product.name, baseLineId),
+                });
+              }
+
+              dispatch({
+                type: "REPLACE_GROUP",
+                baseLineId: editingCartGroup.base.line_id,
+                items: replacementItems,
+              });
+              setEditingCartGroup(null);
+              return;
+            }
+
             dispatch({
               type: "ADD",
-              product: modifiersFor,
+              product: activeModifierProduct,
               note: hasCustomizations ? buildBaseLineNote(baseLineId, note) : note,
               merge: !hasCustomizations,
               lineId: hasCustomizations ? baseLineId : undefined,
@@ -1262,7 +1468,7 @@ export default function PosPage() {
                   type: "ADD",
                   product,
                   price: unitPrice,
-                  note: buildModifierNote(modifiersFor.name, product.name, baseLineId),
+                  note: buildModifierNote(activeModifierProduct.name, product.name, baseLineId),
                   merge: isIceCreamBall ? false : undefined,
                   lineId: isIceCreamBall ? makeCartLineId(product.id) : undefined,
                 });
