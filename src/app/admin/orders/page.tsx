@@ -125,6 +125,8 @@ export default function AdminOrdersPage() {
       paymentMethod: paymentLabel,
       date: new Date(order.created_at).toLocaleString("es-ES"),
       business: business || undefined,
+      tableNumber: order.table_number || undefined,
+      serviceType: order.service_type || "dine_in",
     }).catch(() => {});
     setReprintingTicketId(null);
   };

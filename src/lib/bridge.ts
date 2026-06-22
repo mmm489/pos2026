@@ -430,6 +430,7 @@ export async function getCashlogyState() {
 export async function printKitchenTicket(data: {
   orderNumber: string;
   tableNumber?: string;
+  serviceType?: "dine_in" | "takeaway";
   items: {
     name: string;
     qty: number;
@@ -544,6 +545,8 @@ export async function printZReport(closing: {
 export async function printTicket(data: {
   orderNumber: string;
   invoiceNumber?: string;
+  tableNumber?: string;
+  serviceType?: "dine_in" | "takeaway";
   items: { name: string; qty: number; price: number }[];
   total: number;
   totalBase?: number;

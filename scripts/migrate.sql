@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   total_base NUMERIC(10,2),
   total_vat NUMERIC(10,2),
   payment_method VARCHAR(10) NOT NULL CHECK (payment_method IN ('cash', 'card', 'manual', 'parked')),
+  service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in' CHECK (service_type IN ('dine_in', 'takeaway')),
   employee_id INTEGER REFERENCES pos.employees(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
@@ -293,6 +294,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='pos' AND table_name='orders' AND column_name='table_number') THEN
     ALTER TABLE pos.orders ADD COLUMN table_number VARCHAR(10);
   END IF;
+
+  ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in';
+  ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_service_type_check;
+  ALTER TABLE pos.orders ADD CONSTRAINT orders_service_type_check CHECK (service_type IN ('dine_in', 'takeaway'));
 
   -- Add cancellation columns if missing
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='pos' AND table_name='orders' AND column_name='cancelled_at') THEN

@@ -103,6 +103,7 @@ const TABLES = [
       "total_vat",
       "payment_method",
       "business_unit",
+      "service_type",
       "employee_id",
       "table_number",
       "created_at",
@@ -396,6 +397,16 @@ async function ensureOrderBusinessUnitSchema(db) {
   await db.query(`
     ALTER TABLE pos.orders
     ADD COLUMN IF NOT EXISTS business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream'
+  `);
+  await db.query(`
+    ALTER TABLE pos.orders
+    ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in'
+  `);
+  await db.query(`ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_service_type_check`);
+  await db.query(`
+    ALTER TABLE pos.orders
+    ADD CONSTRAINT orders_service_type_check
+    CHECK (service_type IN ('dine_in', 'takeaway'))
   `);
   await db.query(`
     CREATE INDEX IF NOT EXISTS idx_orders_business_unit

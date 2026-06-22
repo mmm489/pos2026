@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   total_vat NUMERIC(10,2),
   payment_method VARCHAR(10) NOT NULL,
   business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream',
+  service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in',
   employee_id INTEGER REFERENCES pos.employees(id),
   table_number VARCHAR(10),
   created_at TIMESTAMPTZ NOT NULL,
@@ -107,6 +108,9 @@ CREATE TABLE IF NOT EXISTS pos.orders (
 );
 
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS business_unit VARCHAR(20) NOT NULL DEFAULT 'hicream';
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in';
+ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_service_type_check;
+ALTER TABLE pos.orders ADD CONSTRAINT orders_service_type_check CHECK (service_type IN ('dine_in', 'takeaway'));
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_peripheral_id VARCHAR(120);
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_operation_id VARCHAR(120);
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_transaction_number VARCHAR(120);

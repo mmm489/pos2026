@@ -6,6 +6,20 @@ import { ensureOrderBusinessUnitSchema } from "@/lib/business-unit";
 
 export const dynamic = "force-dynamic";
 
+let serviceTypeColumnEnsured = false;
+
+function normalizeServiceType(value: unknown): "dine_in" | "takeaway" {
+  return value === "takeaway" ? "takeaway" : "dine_in";
+}
+
+async function ensureOrderServiceTypeColumn(client: { query: (sql: string) => Promise<unknown> }) {
+  if (serviceTypeColumnEnsured) return;
+  await client.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in'`);
+  await client.query(`ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_service_type_check`);
+  await client.query(`ALTER TABLE pos.orders ADD CONSTRAINT orders_service_type_check CHECK (service_type IN ('dine_in', 'takeaway'))`);
+  serviceTypeColumnEnsured = true;
+}
+
 type IncomingItem = {
   product_id: number;
   qty: number;
@@ -59,6 +73,7 @@ function getBridgeUrl() {
 async function printKitchenTicketForOrder(order: {
   order_number: string;
   table_number?: string | null;
+  service_type?: string | null;
   items?: KitchenOrderItem[];
 }): Promise<KitchenPrintResult> {
   const controller = new AbortController();
@@ -71,6 +86,7 @@ async function printKitchenTicketForOrder(order: {
       body: JSON.stringify({
         orderNumber: order.order_number,
         tableNumber: order.table_number || undefined,
+        serviceType: order.service_type === "takeaway" ? "takeaway" : "dine_in",
         items: (order.items || []).map((item) => ({
           name: item.product_name || "",
           qty: Number(item.qty || 0),
@@ -182,9 +198,11 @@ export async function POST(request: NextRequest) {
       : null;
     const employeeId = body.employee_id || null;
     const tableNumber = body.table_number || null;
+    const serviceType = normalizeServiceType(body.service_type);
 
     const parkedOrder = await withTransaction(async (client) => {
       await ensureOrderBusinessUnitSchema(client);
+      await ensureOrderServiceTypeColumn(client);
 
       const productIds = Array.from(new Set(items.map((item) => Number(item.product_id))));
       const prodRes = await client.query(
@@ -278,11 +296,12 @@ export async function POST(request: NextRequest) {
                total_vat = $3,
                employee_id = $4,
                table_number = $5,
+               service_type = $6,
                completed_at = NULL
-           WHERE id = $6
+           WHERE id = $7
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat,
-                     payment_method, business_unit, employee_id, table_number, created_at, completed_at`,
-          [total, totalBase, totalVat, employeeId, tableNumber, parkedOrderId]
+                     payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at`,
+          [total, totalBase, totalVat, employeeId, tableNumber, serviceType, parkedOrderId]
         );
         order = orderRes.rows[0];
         await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
@@ -292,11 +311,11 @@ export async function POST(request: NextRequest) {
         const orderRes = await client.query(
           `INSERT INTO pos.orders
              (order_number, invoice_number, status, total, total_base, total_vat,
-              payment_method, business_unit, employee_id, table_number, completed_at)
-           VALUES ($1, NULL, 'pending', $2, $3, $4, 'parked', 'hicream', $5, $6, NULL)
+              payment_method, business_unit, service_type, employee_id, table_number, completed_at)
+           VALUES ($1, NULL, 'pending', $2, $3, $4, 'parked', 'hicream', $5, $6, $7, NULL)
            RETURNING id, order_number, invoice_number, status, total, total_base, total_vat,
-                     payment_method, business_unit, employee_id, table_number, created_at, completed_at`,
-          [orderNumber, total, totalBase, totalVat, employeeId, tableNumber]
+                     payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at`,
+          [orderNumber, total, totalBase, totalVat, serviceType, employeeId, tableNumber]
         );
         order = orderRes.rows[0];
       }

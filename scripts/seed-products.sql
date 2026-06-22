@@ -147,12 +147,15 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('CREPE KINDER',            6, 4.95, 10, 7),
   ('CREPE XOCOLATA',          6, 4.95, 10, 8),
   ('CREPE XOCOLATA BLANCA',   6, 4.95, 10, 9),
-  ('CREPE SALSA OREO',        6, 4.95, 10, 10);
+  ('CREPE SALSA OREO',        6, 4.95, 10, 10),
+  ('CREPE DE LA CASA',        6, 2.00, 10, 11);
 
 -- DOUGHT (category 7)
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('DOGHT BOX 6 UD.',  7, 7.50, 10, 1),
-  ('DOGHT BOX 9 UD.',  7, 9.90, 10, 2);
+  ('DOGHT BOX 9 UD.',  7, 9.90, 10, 2),
+  ('DOGHT BOX 12 UD.', 7, 11.90, 10, 3),
+  ('DOGHT BOX 16 UD.', 7, 14.90, 10, 4);
 
 -- FRAPPES (category 8)
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
@@ -181,7 +184,8 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('GRANITZAT MADUIXA',    10, 4.90, 10, 4),
   ('GRANITZAT MANGO',      10, 4.90, 10, 5),
   ('GRANISSAT MARACUIA',   10, 4.90, 10, 9),
-  ('GRANITZAT CAFE',       10, 4.90, 10, 10);
+  ('GRANITZAT CAFE',       10, 4.90, 10, 10),
+  ('GRANITZAT IOGURT',     10, 4.90, 10, 11);
 
 -- HI POP (category 11)
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
@@ -220,7 +224,8 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('OREO ICE',             13, 7.30, 10, 5),
   ('PISTACHO RECETA',      13, 7.30, 10, 6),
   ('TÉ MACHA RECETA',      13, 7.30, 10, 7),
-  ('YOGURT PASIÓN',        13, 7.30, 10, 8);
+  ('YOGURT PASIÓN',        13, 7.30, 10, 8),
+  ('CHAI',                 13, 7.30, 10, 9);
 
 -- SMOOTHIE (category 14) — all 5.90€
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
@@ -337,7 +342,9 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('PLATAN NATURAL',       21, 0.00, 10, 9),
   ('SUCRE',                21, 0.00, 10, 10),
   ('CRUMBLE MADUIXA',      21, 0.00, 10, 11),
-  ('CRISPY BALLS NEGRA',   21, 0.00, 10, 12);
+  ('CRISPY BALLS NEGRA',   21, 0.00, 10, 12),
+  ('KINDER GALLETA',       21, 0.00, 10, 13),
+  ('GRANOLA',              21, 0.00, 10, 14);
 
 -- TOPPING GELAT 1€ (category 22) — all 1.00€
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
@@ -364,7 +371,9 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('PLATAN NATURAL 1€',       23, 1.00, 10, 10),
   ('SUCRE 1€',                23, 1.00, 10, 11),
   ('CRISPY BALLS NEGRA 1€',   23, 1.00, 10, 12),
-  ('PISTATXO POLS 1€',        23, 1.00, 10, 13);
+  ('PISTATXO POLS 1€',        23, 1.00, 10, 13),
+  ('KINDER GALLETA 1€',       23, 1.00, 10, 14),
+  ('GRANOLA 1€',              23, 1.00, 10, 15);
 
 -- TOPPING GELAT 2€ (category 24) — all 2.00€
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
@@ -402,7 +411,9 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('PLATAN NATURAL 0.5€',       25, 0.50, 10, 9),
   ('SUCRE 0.5€',                25, 0.50, 10, 10),
   ('CRUMBLE MADUIXA 0,5€',      25, 0.50, 10, 11),
-  ('CRISPY BALLS NEGRE 0.5€',   25, 0.50, 10, 12);
+  ('CRISPY BALLS NEGRE 0.5€',   25, 0.50, 10, 12),
+  ('KINDER GALLETA 0.5€',       25, 0.50, 10, 13),
+  ('GRANOLA 0.5€',              25, 0.50, 10, 14);
 
 -- INFUSIONS (category 26)
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES

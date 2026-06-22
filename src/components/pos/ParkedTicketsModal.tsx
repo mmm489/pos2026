@@ -84,6 +84,10 @@ export default function ParkedTicketsModal({
                             {ticket.employee_name}
                           </span>
                         )}
+                        <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-sm font-semibold text-[#275a8f]">
+                          {ticket.service_type === "takeaway" ? "Llevar" : "Aquí"}
+                          {ticket.table_number ? ` · T${ticket.table_number}` : ""}
+                        </span>
                         {ticket.order_number && (
                           <span className="rounded-full bg-[#f1eee7] px-3 py-1 text-sm font-semibold text-[#5f6878]">
                             KDS {ticket.order_number}

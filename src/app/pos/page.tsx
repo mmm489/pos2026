@@ -302,6 +302,8 @@ function buildParkedTicket(
     created_at: now.toISOString(),
     employee_id: employee?.id ?? null,
     employee_name: employee?.name ?? null,
+    service_type: "dine_in",
+    table_number: null,
     items: items.map((item) => ({ ...item })),
     total: cartTotal(items),
     item_count: cartItemCount(items),
@@ -724,7 +726,11 @@ export default function PosPage() {
     writeParkedTickets(todayTickets);
   }, []);
 
-  const sendParkedTicketToKds = useCallback(async (items: CartItem[], orderId?: number | null) => {
+  const sendParkedTicketToKds = useCallback(async (
+    items: CartItem[],
+    orderId?: number | null,
+    options?: { serviceType?: "dine_in" | "takeaway"; tableNumber?: string | null }
+  ) => {
     const res = await fetch("/api/pos/orders/parked", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -732,7 +738,8 @@ export default function PosPage() {
         order_id: orderId || null,
         items,
         employee_id: employee?.id,
-        table_number: null,
+        table_number: options?.tableNumber || null,
+        service_type: options?.serviceType || "dine_in",
       }),
     });
     const data = await res.json().catch(() => null);
@@ -871,7 +878,10 @@ export default function PosPage() {
   const handleSendParkedTicketToKds = useCallback(async (ticket: ParkedTicket) => {
     setSendingParkedTicketId(ticket.id);
     try {
-      const order = await sendParkedTicketToKds(ticket.items, ticket.order_id);
+      const order = await sendParkedTicketToKds(ticket.items, ticket.order_id, {
+        serviceType: ticket.service_type || "dine_in",
+        tableNumber: ticket.table_number || null,
+      });
       const updatedTicket: ParkedTicket = {
         ...ticket,
         order_id: order.id,
@@ -914,6 +924,8 @@ export default function PosPage() {
       const totalVat = Math.round((ticket.total - totalBase) * 100) / 100;
       const result = await printTicket({
         orderNumber: ticket.order_number || "APARCAT",
+        tableNumber: ticket.table_number || undefined,
+        serviceType: ticket.service_type || "dine_in",
         items: ticket.items.map((item) => ({
           name: getModifierParent(item.notes)
             ? `+ ${getModifierDisplayName(item.name, item.notes)}`
@@ -1602,6 +1614,9 @@ export default function PosPage() {
                             T{order.table_number}
                           </span>
                         )}
+                        <span className="rounded-full bg-[#e4f0fb] px-2 py-0.5 text-xs font-medium text-[#275a8f]">
+                          {order.service_type === "takeaway" ? "Llevar" : "Aquí"}
+                        </span>
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                           order.status === "cancelled" ? "bg-[#fdeceb] text-[#c4423a]"
                           : order.status === "completed" ? "bg-[#dff5e6] text-[#1e6b3a]"

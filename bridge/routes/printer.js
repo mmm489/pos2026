@@ -523,6 +523,8 @@ async function handlePrintTicket(req, res) {
   const {
     orderNumber,
     invoiceNumber,
+    tableNumber,
+    serviceType,
     items,
     total,
     totalBase,
@@ -581,6 +583,8 @@ async function handlePrintTicket(req, res) {
       printer.println(`N.: ${invoiceNumber}`);
     }
     printer.println(`Pedido: ${orderNumber}`);
+    printer.println(`Servicio: ${serviceType === "takeaway" ? "PARA LLEVAR" : "AQUI"}`);
+    if (tableNumber) printer.println(`Mesa: ${tableNumber}`);
     printer.println(date || new Date().toLocaleString("es-ES"));
     printer.drawLine();
 
@@ -659,7 +663,7 @@ async function handlePrintTicket(req, res) {
 }
 
 async function handlePrintKitchenTicket(req, res) {
-  const { orderNumber, tableNumber, items, date } = req.body;
+  const { orderNumber, tableNumber, serviceType, items, date } = req.body;
 
   if (!orderNumber || !items) {
     return res
@@ -679,14 +683,13 @@ async function handlePrintKitchenTicket(req, res) {
     printer.bold(false);
     printer.setTextNormal();
 
-    if (tableNumber) {
-      printer.newLine();
-      printer.setTextSize(1, 1);
-      printer.bold(true);
-      printer.println(`TAULA ${tableNumber}`);
-      printer.bold(false);
-      printer.setTextNormal();
-    }
+    printer.newLine();
+    printer.setTextSize(1, 1);
+    printer.bold(true);
+    printer.println(serviceType === "takeaway" ? "PARA LLEVAR" : "AQUI");
+    if (tableNumber) printer.println(`TAULA ${tableNumber}`);
+    printer.bold(false);
+    printer.setTextNormal();
 
     printer.println(date || new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }));
     printer.drawLine();

@@ -41,6 +41,7 @@ export interface Order {
   total_vat?: number;
   payment_method: "cash" | "card" | "manual" | "parked";
   business_unit?: "hicream" | "cookies";
+  service_type?: "dine_in" | "takeaway";
   employee_id: number | null;
   table_number?: string;
   created_at: string;
@@ -180,6 +181,8 @@ export interface ParkedTicket {
   created_at: string;
   employee_id: number | null;
   employee_name: string | null;
+  service_type?: "dine_in" | "takeaway";
+  table_number?: string | null;
   items: CartItem[];
   total: number;
   item_count: number;

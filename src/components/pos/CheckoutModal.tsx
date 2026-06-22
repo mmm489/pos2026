@@ -43,9 +43,14 @@ interface CheckoutModalProps {
 type Step = "select" | "processing" | "success" | "error";
 type CheckoutMethod = "cash" | "card" | "manual" | "cookies";
 type BusinessUnit = "hicream" | "cookies";
+type ServiceType = "dine_in" | "takeaway";
 type TicketPrintData = Parameters<typeof printTicket>[0];
 type KitchenPrintResult = { success?: boolean; error?: string };
 type OrderWithKitchenPrint = Order & { kitchen_print?: KitchenPrintResult };
+
+function serviceTypeLabel(serviceType: ServiceType) {
+  return serviceType === "takeaway" ? "Para llevar" : "Aquí";
+}
 
 export default function CheckoutModal({
   items,
@@ -63,6 +68,7 @@ export default function CheckoutModal({
   const [errorMsg, setErrorMsg] = useState("");
   const [change, setChange] = useState<number | null>(null);
   const [tableNumber, setTableNumber] = useState("");
+  const [serviceType, setServiceType] = useState<ServiceType>("dine_in");
   const [showTableInput, setShowTableInput] = useState(false);
   const [depositedEur, setDepositedEur] = useState(0);
   const [cashStatus, setCashStatus] = useState<string>("");
@@ -125,6 +131,7 @@ export default function CheckoutModal({
       total,
       payment_method: paymentMethod,
       business_unit: businessUnit,
+      service_type: serviceType,
       employee_id: employeeId || null,
       table_number: tableNumber || undefined,
       created_at: new Date().toISOString(),
@@ -153,6 +160,8 @@ export default function CheckoutModal({
     paymentMethod: paymentLabel,
     date: new Date().toLocaleString("es-ES"),
     business: business || undefined,
+    tableNumber: tableNumber || undefined,
+    serviceType,
   });
 
   const buildKitchenItems = () =>
@@ -177,6 +186,7 @@ export default function CheckoutModal({
     const result = await printKitchenTicket({
       orderNumber: order.order_number,
       tableNumber: tableNumber || undefined,
+      serviceType,
       items: buildKitchenItems(),
     }).catch((error) => ({
       success: false,
@@ -232,6 +242,7 @@ export default function CheckoutModal({
             payment_method: "manual",
             employee_id: employeeId,
             table_number: tableNumber || null,
+            service_type: serviceType,
             parked_order_id: parkedOrderId || null,
             skip_kitchen_print: skipKitchenPrint,
           }),
@@ -352,6 +363,7 @@ export default function CheckoutModal({
             business_unit: businessUnit,
             employee_id: employeeId,
             table_number: tableNumber || null,
+            service_type: serviceType,
             parked_order_id: parkedOrderId || null,
             skip_kitchen_print: skipKitchenPrint,
             card_reference: cardReference,
@@ -431,6 +443,9 @@ export default function CheckoutModal({
       : cashStatus === "dispensing"
       ? "Cashlogy esta entregant el canvi."
       : "Mantingues aquesta pantalla oberta fins que acabi.";
+  const serviceSummary = tableNumber
+    ? `${serviceTypeLabel(serviceType)} · Taula ${tableNumber}`
+    : serviceTypeLabel(serviceType);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/68 p-3">
@@ -455,8 +470,33 @@ export default function CheckoutModal({
               {total.toFixed(2)} &euro;
             </p>
 
-            {/* Table number */}
-            <div className="mb-6">
+            {/* Service type and table number */}
+            <div className="mb-6 space-y-3">
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[#ddd4c4] bg-white p-1.5">
+                <button
+                  type="button"
+                  onClick={() => setServiceType("dine_in")}
+                  className={`rounded-xl px-4 py-3 text-base font-semibold transition-colors ${
+                    serviceType === "dine_in"
+                      ? "bg-[#2e9e5b] text-white shadow-sm"
+                      : "text-[#6f665c] active:bg-[#f1eee7]"
+                  }`}
+                >
+                  Aquí
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setServiceType("takeaway")}
+                  className={`rounded-xl px-4 py-3 text-base font-semibold transition-colors ${
+                    serviceType === "takeaway"
+                      ? "bg-[#2f6fe5] text-white shadow-sm"
+                      : "text-[#6f665c] active:bg-[#f1eee7]"
+                  }`}
+                >
+                  Llevar
+                </button>
+              </div>
+
               {!showTableInput ? (
                 <button
                   onClick={() => setShowTableInput(true)}
@@ -511,7 +551,7 @@ export default function CheckoutModal({
               )}
               {tableNumber && (
                 <p className="mt-2 text-center text-sm font-medium text-[#c65a42]">
-                  Taula {tableNumber}
+                  {serviceTypeLabel(serviceType)} · Taula {tableNumber}
                 </p>
               )}
             </div>
@@ -638,9 +678,7 @@ export default function CheckoutModal({
               )}
             </div>
 
-            {tableNumber && (
-              <p className="mb-4 text-center font-medium text-[#c65a42]">Taula {tableNumber}</p>
-            )}
+            <p className="mb-4 text-center font-medium text-[#c65a42]">{serviceSummary}</p>
 
             <p className="mb-4 text-center text-sm font-medium text-[#7b7469]">
               {cashStatus === "depositing" && "Introdueixi els diners a la Cashlogy..."}
@@ -665,9 +703,7 @@ export default function CheckoutModal({
               Processant cobrament manual...
             </p>
             <p className="mt-2 font-medium text-[#6f665c]">{total.toFixed(2)} &euro;</p>
-            {tableNumber && (
-              <p className="mt-1 font-medium text-[#c65a42]">Taula {tableNumber}</p>
-            )}
+            <p className="mt-1 font-medium text-[#c65a42]">{serviceSummary}</p>
           </div>
         )}
 
@@ -679,9 +715,7 @@ export default function CheckoutModal({
               {aborting ? "Cancel·lant operació..." : "Passi la targeta al datàfon..."}
             </p>
             <p className="mt-2 font-medium text-[#6f665c]">{total.toFixed(2)} &euro;</p>
-            {tableNumber && (
-              <p className="mt-1 font-medium text-[#c65a42]">Taula {tableNumber}</p>
-            )}
+            <p className="mt-1 font-medium text-[#c65a42]">{serviceSummary}</p>
             <button
               onClick={async () => {
                 setAborting(true);
@@ -714,11 +748,9 @@ export default function CheckoutModal({
             <p className="mb-2 text-5xl font-semibold text-[#241f1c]">
               {orderNumber}
             </p>
-            {tableNumber && (
-              <p className="text-lg font-medium text-[#c65a42]">
-                Taula {tableNumber}
-              </p>
-            )}
+            <p className="text-lg font-medium text-[#c65a42]">
+              {serviceSummary}
+            </p>
             {change !== null && change > 0 && (
               <p className="text-lg font-medium text-[#a87912]">
                 Canvi: {change.toFixed(2)} &euro;

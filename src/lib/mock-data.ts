@@ -116,10 +116,13 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 72, name: "CREPE XOCOLATA", category_id: 6, price: 4.95, vat_rate: 10, image_url: null, active: true, sort_order: 8, category_name: "CREPES", category_color: "#EAB308" },
   { id: 73, name: "CREPE XOCOLATA BLANCA", category_id: 6, price: 4.95, vat_rate: 10, image_url: null, active: true, sort_order: 9, category_name: "CREPES", category_color: "#EAB308" },
   { id: 74, name: "CREPE SALSA OREO", category_id: 6, price: 4.95, vat_rate: 10, image_url: null, active: true, sort_order: 10, category_name: "CREPES", category_color: "#EAB308" },
+  { id: 286, name: "CREPE DE LA CASA", category_id: 6, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "CREPES", category_color: "#EAB308" },
 
   // ── DOUGHT (cat 7) ──
   { id: 75, name: "DOGHT BOX 6 UD.", category_id: 7, price: 7.50, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "DOUGHT", category_color: "#F97316" },
   { id: 76, name: "DOGHT BOX 9 UD.", category_id: 7, price: 9.90, vat_rate: 10, image_url: null, active: true, sort_order: 2, category_name: "DOUGHT", category_color: "#F97316" },
+  { id: 284, name: "DOGHT BOX 12 UD.", category_id: 7, price: 11.90, vat_rate: 10, image_url: null, active: true, sort_order: 3, category_name: "DOUGHT", category_color: "#F97316" },
+  { id: 285, name: "DOGHT BOX 16 UD.", category_id: 7, price: 14.90, vat_rate: 10, image_url: null, active: true, sort_order: 4, category_name: "DOUGHT", category_color: "#F97316" },
 
   // ── FRAPPES (cat 8) ──
   { id: 77, name: "FRAPPE CLASIC", category_id: 8, price: 5.95, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "FRAPPES", category_color: "#78350F" },
@@ -144,6 +147,7 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 92, name: "GRANITZAT LLIMONA", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 3, category_name: "GRANISSATS", category_color: "#34D399" },
   { id: 93, name: "GRANITZAT MADUIXA", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 4, category_name: "GRANISSATS", category_color: "#34D399" },
   { id: 94, name: "GRANITZAT MANGO", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 5, category_name: "GRANISSATS", category_color: "#34D399" },
+  { id: 287, name: "GRANITZAT IOGURT", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "GRANISSATS", category_color: "#34D399" },
 
   // ── HI POP (cat 11) ──
   { id: 95, name: "AMERICAN WAFFLE", category_id: 11, price: 4.95, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "HI POP", category_color: "#F59E0B" },
@@ -180,6 +184,7 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 122, name: "PISTACHO RECETA", category_id: 13, price: 7.30, vat_rate: 10, image_url: null, active: true, sort_order: 6, category_name: "RECEPTES", category_color: "#F43F5E" },
   { id: 123, name: "T\u00C9 MACHA RECETA", category_id: 13, price: 7.30, vat_rate: 10, image_url: null, active: true, sort_order: 7, category_name: "RECEPTES", category_color: "#F43F5E" },
   { id: 124, name: "YOGURT PASI\u00D3N", category_id: 13, price: 7.30, vat_rate: 10, image_url: null, active: true, sort_order: 8, category_name: "RECEPTES", category_color: "#F43F5E" },
+  { id: 280, name: "CHAI", category_id: 13, price: 7.30, vat_rate: 10, image_url: null, active: true, sort_order: 9, category_name: "RECEPTES", category_color: "#F43F5E" },
 
   // ── SMOOTHIE (cat 14) — all 5.90€ ──
   { id: 125, name: "SMOOTHIE COCO", category_id: 14, price: 5.90, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "SMOOTHIE", category_color: "#10B981" },
@@ -289,6 +294,8 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 215, name: "SUCRE", category_id: 21, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 10, category_name: "TOPPINGS", category_color: "#FBBF24" },
   { id: 216, name: "CRUMBLE MADUIXA", category_id: 21, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "TOPPINGS", category_color: "#FBBF24" },
   { id: 217, name: "CRISPY BALLS NEGRA", category_id: 21, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 12, category_name: "TOPPINGS", category_color: "#FBBF24" },
+  { id: 281, name: "KINDER GALLETA", category_id: 21, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 13, category_name: "TOPPINGS", category_color: "#FBBF24" },
+  { id: 288, name: "GRANOLA", category_id: 21, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 14, category_name: "TOPPINGS", category_color: "#FBBF24" },
 
   // ── TOPPING GELAT 1€ (cat 22) — all 1.00€ ──
   { id: 218, name: "GELAT LOTUS", category_id: 22, price: 1.00, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "TOPPING GELAT 1\u20AC", category_color: "#60A5FA" },
@@ -314,6 +321,8 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 236, name: "SUCRE 1\u20AC", category_id: 23, price: 1.00, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "TOPPING 1\u20AC EXTRA", category_color: "#F472B6" },
   { id: 237, name: "CRISPY BALLS NEGRA 1\u20AC", category_id: 23, price: 1.00, vat_rate: 10, image_url: null, active: true, sort_order: 12, category_name: "TOPPING 1\u20AC EXTRA", category_color: "#F472B6" },
   { id: 238, name: "PISTATXO POLS 1\u20AC", category_id: 23, price: 1.00, vat_rate: 10, image_url: null, active: true, sort_order: 13, category_name: "TOPPING 1\u20AC EXTRA", category_color: "#F472B6" },
+  { id: 282, name: "KINDER GALLETA 1\u20AC", category_id: 23, price: 1.00, vat_rate: 10, image_url: null, active: true, sort_order: 14, category_name: "TOPPING 1\u20AC EXTRA", category_color: "#F472B6" },
+  { id: 289, name: "GRANOLA 1\u20AC", category_id: 23, price: 1.00, vat_rate: 10, image_url: null, active: true, sort_order: 15, category_name: "TOPPING 1\u20AC EXTRA", category_color: "#F472B6" },
 
   // ── TOPPING GELAT 2€ (cat 24) — all 2.00€ ──
   { id: 239, name: "GELAT AVELLANA 2\u20AC", category_id: 24, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "TOPPING GELAT 2\u20AC", category_color: "#2DD4BF" },
@@ -350,6 +359,8 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 268, name: "SUCRE 0.5\u20AC", category_id: 25, price: 0.50, vat_rate: 10, image_url: null, active: true, sort_order: 10, category_name: "TOPPINGS 0,5\u20AC", category_color: "#A855F7" },
   { id: 269, name: "CRUMBLE MADUIXA 0,5\u20AC", category_id: 25, price: 0.50, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "TOPPINGS 0,5\u20AC", category_color: "#A855F7" },
   { id: 270, name: "CRISPY BALLS NEGRE 0.5\u20AC", category_id: 25, price: 0.50, vat_rate: 10, image_url: null, active: true, sort_order: 12, category_name: "TOPPINGS 0,5\u20AC", category_color: "#A855F7" },
+  { id: 283, name: "KINDER GALLETA 0.5\u20AC", category_id: 25, price: 0.50, vat_rate: 10, image_url: null, active: true, sort_order: 13, category_name: "TOPPINGS 0,5\u20AC", category_color: "#A855F7" },
+  { id: 290, name: "GRANOLA 0.5\u20AC", category_id: 25, price: 0.50, vat_rate: 10, image_url: null, active: true, sort_order: 14, category_name: "TOPPINGS 0,5\u20AC", category_color: "#A855F7" },
 
   // ── INFUSIONS (cat 26) ──
   { id: 271, name: "MENTA POLEO", category_id: 26, price: 2.50, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "INFUSIONS", category_color: "#65A30D" },

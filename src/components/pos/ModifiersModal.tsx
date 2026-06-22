@@ -71,6 +71,11 @@ function isHiPopName(name: string | null | undefined) {
   return compact.includes("hipop");
 }
 
+function allowsRepeatedGelatFlavor(product: Product) {
+  const compact = product.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return ["cucurutxom", "cucurutxol", "potm", "potl"].includes(compact);
+}
+
 function isNoCreamFlavorName(name: string) {
   const lower = name.toLowerCase();
   return lower.includes("sin nata") || lower.includes("sense nata");
@@ -198,6 +203,7 @@ export default function ModifiersModal({
     [flavorCategoryIds, modifierProducts]
   );
   const hasFlavorSection = flavorCategoryIds.size > 0 && !hasNestedFlavorPicker;
+  const allowRepeatedFlavorSelections = hasFlavorSection && allowsRepeatedGelatFlavor(baseProduct);
   const displayedModifierCategories = useMemo(
     () =>
       hasNestedFlavorPicker
@@ -252,26 +258,33 @@ export default function ModifiersModal({
       const isTemperature = Boolean(product && temperatureCategoryIds.has(product.category_id));
       const isSize = Boolean(product && sizeCategoryIds.has(product.category_id));
       const isIceCreamBall = Boolean(product && isIceCreamBallProductName(product.name));
+      const canRepeatFlavor = Boolean(isFlavor && allowRepeatedFlavorSelections);
       const isSingleChoiceExtra = Boolean(
         product &&
           (singleChoiceExtraCategoryIds.has(product.category_id) ||
             isTemperature ||
             isSize)
       );
-      const normalizedQty =
-        isFlavor || isSingleChoiceExtra
+      const currentFlavorQty = isFlavor
+        ? Array.from(prev.entries()).reduce((sum, [id, itemQty]) => {
+            if (id === productId) return sum;
+            const candidate = productById.get(id);
+            return candidate && flavorCategoryIds.has(candidate.category_id) ? sum + itemQty : sum;
+          }, 0)
+        : 0;
+      const maxFlavorQty = canRepeatFlavor
+        ? Math.max(0, includedLimit - currentFlavorQty)
+        : 1;
+      const normalizedQty = isFlavor
+        ? Math.min(Math.max(qty, 0), maxFlavorQty)
+        : isSingleChoiceExtra
           ? Math.min(Math.max(qty, 0), 1)
           : isIceCreamBall
             ? Math.min(Math.max(qty, 0), MAX_ICE_CREAM_BALLS)
             : qty;
 
       if (isFlavor && normalizedQty > (prev.get(productId) || 0)) {
-        const currentFlavorQty = Array.from(prev.entries()).reduce((sum, [id, itemQty]) => {
-          if (id === productId) return sum;
-          const candidate = productById.get(id);
-          return candidate && flavorCategoryIds.has(candidate.category_id) ? sum + itemQty : sum;
-        }, 0);
-        if (currentFlavorQty >= includedLimit) return prev;
+        if (currentFlavorQty + normalizedQty > includedLimit) return prev;
       }
 
       const next = new Map(prev);
@@ -649,6 +662,8 @@ export default function ModifiersModal({
                         .join(" + ");
                       const maxFlavorReached =
                         hasFlavorSection && isFlavor && !isSelected && selectedFlavorQty >= includedLimit;
+                      const selectedFlavorAtLimit =
+                        hasFlavorSection && isFlavor && isSelected && selectedFlavorQty >= includedLimit;
                       const maxIceCreamBallsReached = isIceCreamBall && qty >= MAX_ICE_CREAM_BALLS;
                       const status = isIceCreamBall
                         ? iceCreamBallStatus
@@ -668,7 +683,9 @@ export default function ModifiersModal({
                               : "Gratis"
                         : hasFlavorSection && isFlavor
                           ? isSelected
-                            ? "Sabor escollit"
+                            ? allowRepeatedFlavorSelections
+                              ? `${qty}/${includedLimit} sabor${qty === 1 ? "" : "s"}`
+                              : "Sabor escollit"
                             : maxFlavorReached
                               ? "Max sabors"
                               : ""
@@ -696,6 +713,7 @@ export default function ModifiersModal({
                           <button
                             onClick={() => {
                               if (maxFlavorReached) return;
+                              if (selectedFlavorAtLimit) return;
                               if (isIceCreamBall) {
                                 if (maxIceCreamBallsReached) return;
                                 setFlavorPickerFor(product);

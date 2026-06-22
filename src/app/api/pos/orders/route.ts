@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 let kdsReadyColumnsEnsured = false;
 let cashlessAuditColumnsEnsured = false;
+let serviceTypeColumnEnsured = false;
 
 type KitchenOrderItem = {
   product_name?: string | null;
@@ -32,6 +33,7 @@ function getBridgeUrl() {
 async function printKitchenTicketForOrder(order: {
   order_number: string;
   table_number?: string | null;
+  service_type?: string | null;
   items?: KitchenOrderItem[];
 }): Promise<KitchenPrintResult> {
   const controller = new AbortController();
@@ -39,9 +41,10 @@ async function printKitchenTicketForOrder(order: {
 
   try {
     const payload = {
-      orderNumber: order.order_number,
-      tableNumber: order.table_number || undefined,
-      items: (order.items || []).map((item) => ({
+        orderNumber: order.order_number,
+        tableNumber: order.table_number || undefined,
+        serviceType: order.service_type === "takeaway" ? "takeaway" : "dine_in",
+        items: (order.items || []).map((item) => ({
         name: item.product_name || "",
         qty: Number(item.qty || 0),
         notes: item.notes || undefined,
@@ -103,11 +106,29 @@ async function ensureCashlessAuditColumns(client?: { query: (sql: string) => Pro
   if (!client) cashlessAuditColumnsEnsured = true;
 }
 
+async function ensureOrderServiceTypeColumn(client?: { query: (sql: string) => Promise<unknown> }) {
+  if (serviceTypeColumnEnsured) return;
+  const runner = client || {
+    query: async (sql: string) => {
+      await rawQuery(sql);
+    },
+  };
+  await runner.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'dine_in'`);
+  await runner.query(`ALTER TABLE pos.orders DROP CONSTRAINT IF EXISTS orders_service_type_check`);
+  await runner.query(`ALTER TABLE pos.orders ADD CONSTRAINT orders_service_type_check CHECK (service_type IN ('dine_in', 'takeaway'))`);
+  serviceTypeColumnEnsured = true;
+}
+
+function normalizeServiceType(value: unknown): "dine_in" | "takeaway" {
+  return value === "takeaway" ? "takeaway" : "dine_in";
+}
+
 export async function GET(request: NextRequest) {
   try {
     await ensureOrderBusinessUnitSchema();
     await ensureKdsReadyColumns();
     await ensureCashlessAuditColumns();
+    await ensureOrderServiceTypeColumn();
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
@@ -119,7 +140,7 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       const statuses = statusFilter.split(",");
       orders = await rawQuery(
-        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
          FROM pos.orders
          WHERE status = ANY($1)
            AND ($2::text IS NULL OR COALESCE(business_unit, 'hicream') = $2)
@@ -128,7 +149,7 @@ export async function GET(request: NextRequest) {
       );
     } else {
       orders = await rawQuery(
-        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
          FROM pos.orders
          WHERE ($1::text IS NULL OR COALESCE(business_unit, 'hicream') = $1)
          ORDER BY created_at DESC
@@ -179,6 +200,7 @@ export async function POST(request: NextRequest) {
       payment_method,
       employee_id,
       table_number,
+      service_type,
       card_reference,
       card_authorization,
       card_receipt_text,
@@ -190,6 +212,7 @@ export async function POST(request: NextRequest) {
       skip_kitchen_print,
     } = body;
     const businessUnit = normalizeBusinessUnit(body.business_unit);
+    const serviceType = normalizeServiceType(service_type);
 
     if (!items || items.length === 0 || !payment_method) {
       return NextResponse.json(
@@ -244,6 +267,7 @@ export async function POST(request: NextRequest) {
     const completeOrder = await withTransaction(async (client) => {
       await ensureOrderBusinessUnitSchema(client);
       await ensureCashlessAuditColumns(client);
+      await ensureOrderServiceTypeColumn(client);
 
       // Fetch actual VAT rate per product from DB (don't trust client)
       const productIds = Array.from(new Set((items as { product_id: number }[]).map((i) => i.product_id)));
@@ -314,18 +338,19 @@ export async function POST(request: NextRequest) {
                total_vat = $4,
                payment_method = $5,
                business_unit = $6,
-               employee_id = $7,
-               table_number = $8,
-               card_reference = $9,
-               card_authorization = $10,
-               card_receipt_text = $11,
-               cashless_peripheral_id = $12,
-               cashless_operation_id = $13,
-               cashless_transaction_number = $14,
-               cashless_amount = $15,
-               order_number = CASE WHEN $17 = 'cookies' THEN $18 ELSE order_number END
-           WHERE id = $16
-           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount`,
+               service_type = $7,
+               employee_id = $8,
+               table_number = $9,
+               card_reference = $10,
+               card_authorization = $11,
+               card_receipt_text = $12,
+               cashless_peripheral_id = $13,
+               cashless_operation_id = $14,
+               cashless_transaction_number = $15,
+               cashless_amount = $16,
+               order_number = CASE WHEN $18 = 'cookies' THEN $19 ELSE order_number END
+           WHERE id = $17
+           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount`,
           [
             invoiceNumber,
             total,
@@ -333,6 +358,7 @@ export async function POST(request: NextRequest) {
             totalVat,
             storedPaymentMethod,
             businessUnit,
+            serviceType,
             empId,
             tblNum,
             cardRef,
@@ -351,9 +377,9 @@ export async function POST(request: NextRequest) {
         await client.query(`DELETE FROM pos.order_items WHERE order_id = $1`, [order.id]);
       } else {
         const orderRes = await client.query(
-          `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, completed_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, ${initialCompletedAt})
-           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount`,
+          `INSERT INTO pos.orders (order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, completed_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, ${initialCompletedAt})
+           RETURNING id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount`,
           [
             orderNumber,
             invoiceNumber,
@@ -363,6 +389,7 @@ export async function POST(request: NextRequest) {
             totalVat,
             storedPaymentMethod,
             businessUnit,
+            serviceType,
             empId,
             tblNum,
             cardRef,

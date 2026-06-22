@@ -31,6 +31,10 @@ function getTimerColor(seconds: number) {
   return "bg-red-500";
 }
 
+function serviceLabel(serviceType?: string | null) {
+  return serviceType === "takeaway" ? "Llevar" : "Aquí";
+}
+
 export default function OrderCard({
   order,
   onStatusChange,
@@ -81,6 +85,9 @@ export default function OrderCard({
               T{order.table_number}
             </span>
           )}
+          <span className="px-1.5 py-0 bg-white/30 rounded text-lg font-black text-white flex-shrink-0">
+            {serviceLabel(order.service_type)}
+          </span>
         </div>
         <span className="text-xl font-mono font-black text-white flex-shrink-0">
           {formatTimer(elapsed)}
