@@ -5,7 +5,7 @@ DECLARE
   frappes_category_id INTEGER;
   extres_category_id INTEGER;
   sin_nata_id INTEGER;
-  group_id INTEGER;
+  target_group_id INTEGER;
   seq_name TEXT;
 BEGIN
   SELECT pg_get_serial_sequence('pos.categories', 'id') INTO seq_name;
@@ -74,15 +74,15 @@ BEGIN
   SET description = EXCLUDED.description,
       sort_order = EXCLUDED.sort_order,
       active = true
-  RETURNING id INTO group_id;
+  RETURNING id INTO target_group_id;
 
   INSERT INTO pos.modifier_group_categories (group_id, category_id, sort_order)
-  VALUES (group_id, extres_category_id, 0)
+  VALUES (target_group_id, extres_category_id, 0)
   ON CONFLICT (group_id, category_id) DO UPDATE
   SET sort_order = EXCLUDED.sort_order;
 
   INSERT INTO pos.product_modifier_groups (product_id, group_id, included_count, extra_price)
-  SELECT p.id, group_id, 1, 0.00
+  SELECT p.id, target_group_id, 1, 0.00
   FROM pos.products p
   WHERE p.category_id = frappes_category_id
     AND p.active = true
