@@ -252,6 +252,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Sabors: "#D6B36A",
   "Sabors gelat": "#D6B36A",
   "Extres batut": "#F0E8D6",
+  "Extres frappes": "#F0E8D6",
   "Temperatura especialitats": "#78C7D8",
   "Mida especialitats": "#D6B36A",
 };

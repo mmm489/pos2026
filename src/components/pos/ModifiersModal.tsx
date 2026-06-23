@@ -42,7 +42,8 @@ function isFlavorCategoryName(name: string) {
 }
 
 function isSingleChoiceExtraCategoryName(name: string) {
-  return name.toLowerCase().includes("extres batut");
+  const lower = name.toLowerCase();
+  return lower.includes("extres batut") || lower.includes("extres frappes");
 }
 
 function isTemperatureCategoryName(name: string) {
