@@ -202,6 +202,8 @@ export const ITEM_COLORS: Record<string, string> = {
   "Plàtan": "#EBD24A",
   "Platan natural": "#EBD24A",
   "Xoco maduixa": "#B9485E",
+  "Xoco blanc": "#EFE6C6",
+  "Xoco negre": "#4A2E22",
   "Xocolata blanca": "#EFE6C6",
   "Xocolata pistatxo": "#7DAA62",
   "Pistatxo salsa": "#9DBB62",
@@ -253,6 +255,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   "Sabors gelat": "#D6B36A",
   "Extres batut": "#F0E8D6",
   "Extres frappes": "#F0E8D6",
+  "Opcions xurros": "#F6D9A8",
   "Temperatura especialitats": "#78C7D8",
   "Mida especialitats": "#D6B36A",
 };

@@ -56,7 +56,7 @@ function getCashlogyDeviceMessage(data: unknown): string | null {
 // Categories whose name contains any of these keywords are treated as
 // "modifier" categories — their products appear in the long-press popup
 // instead of being eligible to trigger their own modifier popup.
-const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "complemento", "sabor"];
+const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "complemento", "sabor", "opcio", "opcion"];
 
 function isModifierCategory(name: string): boolean {
   const lower = name.toLowerCase();
@@ -70,6 +70,10 @@ function isFlavorCategory(name: string): boolean {
 function isGelatsCategory(name?: string | null): boolean {
   const lower = (name || "").trim().toLowerCase();
   return lower === "gelat" || lower === "gelats";
+}
+
+function shouldOpenProductModifiersOnTap(product: Product): boolean {
+  return product.name.trim().toLowerCase() === "pack 3 xurros";
 }
 
 function isIceCreamBallName(name: string): boolean {
@@ -599,6 +603,10 @@ export default function PosPage() {
   );
   const shouldOpenModifiersOnTap = useCallback(
     (product: Product) => {
+      if (shouldOpenProductModifiersOnTap(product)) {
+        return Boolean(product.modifier_group_id && modifierProducts.length > 0);
+      }
+
       const categoryName = product.category_name ?? categoriesById.get(product.category_id)?.name;
       if (isGelatsCategory(categoryName)) return false;
       return Boolean(

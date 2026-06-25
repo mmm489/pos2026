@@ -43,7 +43,11 @@ function isFlavorCategoryName(name: string) {
 
 function isSingleChoiceExtraCategoryName(name: string) {
   const lower = name.toLowerCase();
-  return lower.includes("extres batut") || lower.includes("extres frappes");
+  return (
+    lower.includes("extres batut") ||
+    lower.includes("extres frappes") ||
+    lower.includes("opcions xurros")
+  );
 }
 
 function isTemperatureCategoryName(name: string) {
@@ -57,7 +61,14 @@ function isSizeCategoryName(name: string) {
 }
 
 function usesCatalogPriceCategoryName(name: string) {
-  return name.trim().toLowerCase() === "varios";
+  const lower = name.trim().toLowerCase();
+  return lower === "varios" || lower === "opcions xurros";
+}
+
+function requiresModifierSelection(product: Product, modifierGroupName: string | null | undefined) {
+  const productName = product.name.trim().toLowerCase();
+  const groupName = String(modifierGroupName || "").trim().toLowerCase();
+  return productName === "pack 3 xurros" || groupName === "opcions pack 3 xurros";
 }
 
 function isIceCreamBallProductName(name: string) {
@@ -196,6 +207,7 @@ export default function ModifiersModal({
   const hasTemperatureSection = temperatureCategoryIds.size > 0;
   const hasSizeSection = sizeCategoryIds.size > 0;
   const hasCatalogPriceSection = catalogPriceCategoryIds.size > 0;
+  const requiresSelection = requiresModifierSelection(baseProduct, modifierGroupName);
   const sizeUnitPrice = extraUnitPrice > 0 ? extraUnitPrice : 1;
   const hasNestedFlavorPicker = useMemo(
     () =>
@@ -289,7 +301,7 @@ export default function ModifiersModal({
       }
 
       const next = new Map(prev);
-      if (product && normalizedQty > 0 && (isTemperature || isSize)) {
+      if (product && normalizedQty > 0 && (isSingleChoiceExtra || isTemperature || isSize)) {
         for (const id of Array.from(next.keys())) {
           const candidate = productById.get(id);
           if (candidate?.category_id === product.category_id && id !== productId) {
@@ -488,6 +500,8 @@ export default function ModifiersModal({
   );
 
   const handleConfirm = () => {
+    if (requiresSelection && selectedQty <= 0) return;
+
     for (const [id, qty] of Array.from(selections.entries())) {
       const product = productById.get(id);
       const flavors = iceCreamBallFlavors.get(id) ?? [];
@@ -833,6 +847,11 @@ export default function ModifiersModal({
             <p className="text-[28px] font-medium leading-7 tabular-nums text-[#241f1c]">
               {formatPrice(Number(baseProduct.price) + totalExtra)}
             </p>
+            {requiresSelection && selectedQty <= 0 && (
+              <p className="mt-1 text-xs font-semibold text-[#a86538]">
+                Tria una opcio per continuar
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -843,7 +862,8 @@ export default function ModifiersModal({
             </button>
             <button
               onClick={handleConfirm}
-              className="rounded-xl bg-[#2e9e5b] px-7 py-3 font-medium text-white active:bg-[#27874e]"
+              disabled={requiresSelection && selectedQty <= 0}
+              className="rounded-xl bg-[#2e9e5b] px-7 py-3 font-medium text-white active:bg-[#27874e] disabled:bg-[#cfc8bb] disabled:text-[#7b746a]"
             >
               {confirmLabel}
             </button>

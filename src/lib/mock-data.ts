@@ -28,6 +28,7 @@ export const MOCK_CATEGORIES: Category[] = [
   { id: 25, name: "TOPPINGS 0,5\u20AC", sort_order: 25, color: "#A855F7" },
   { id: 26, name: "INFUSIONS", sort_order: 26, color: "#65A30D" },
   { id: 27, name: "ORXATA", sort_order: 27, color: "#FCA5A5" },
+  { id: 28, name: "OPCIONS XURROS", sort_order: 28, color: "#F6D9A8" },
 ];
 
 export const MOCK_PRODUCTS: Product[] = [
@@ -209,15 +210,22 @@ export const MOCK_PRODUCTS: Product[] = [
   // ── XURROS (cat 17) ──
   { id: 139, name: "BOX 6 XURROS + 2 XOCOLATA", category_id: 17, price: 9.90, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "XURROS", category_color: "#F97316" },
   { id: 140, name: "BOX 9 XURROS + 3 XOCOLATA", category_id: 17, price: 14.90, vat_rate: 10, image_url: null, active: true, sort_order: 2, category_name: "XURROS", category_color: "#F97316" },
-  { id: 141, name: "PACK 3 XURROS SUCRE", category_id: 17, price: 3.30, vat_rate: 10, image_url: null, active: true, sort_order: 3, category_name: "XURROS", category_color: "#F97316" },
-  { id: 142, name: "PACK 3 XURROS XOCOLATA", category_id: 17, price: 5.30, vat_rate: 10, image_url: null, active: true, sort_order: 4, category_name: "XURROS", category_color: "#F97316" },
+  { id: 141, name: "PACK 3 XURROS SUCRE", category_id: 17, price: 3.30, vat_rate: 10, image_url: null, active: false, sort_order: 3, category_name: "XURROS", category_color: "#F97316" },
+  { id: 142, name: "PACK 3 XURROS XOCOLATA", category_id: 17, price: 5.30, vat_rate: 10, image_url: null, active: false, sort_order: 4, category_name: "XURROS", category_color: "#F97316" },
   { id: 143, name: "XOCOLATA & XURROS", category_id: 17, price: 5.90, vat_rate: 10, image_url: null, active: true, sort_order: 5, category_name: "XURROS", category_color: "#F97316" },
   { id: 144, name: "XURRO XOCOLATA", category_id: 17, price: 1.90, vat_rate: 10, image_url: null, active: true, sort_order: 6, category_name: "XURROS", category_color: "#F97316" },
   { id: 145, name: "XURRO MADUIXA", category_id: 17, price: 1.90, vat_rate: 10, image_url: null, active: true, sort_order: 7, category_name: "XURROS", category_color: "#F97316" },
-  { id: 146, name: "PACK 3 XURROS PISTATXO", category_id: 17, price: 5.30, vat_rate: 10, image_url: null, active: true, sort_order: 8, category_name: "XURROS", category_color: "#F97316" },
-  { id: 147, name: "PACK 3 XURROS", category_id: 17, price: 5.30, vat_rate: 10, image_url: null, active: true, sort_order: 9, category_name: "XURROS", category_color: "#F97316" },
-  { id: 148, name: "MADUIXA", category_id: 17, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 10, category_name: "XURROS", category_color: "#F97316" },
-  { id: 149, name: "PACK 3 XURROS XOCO B", category_id: 17, price: 5.90, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "XURROS", category_color: "#F97316" },
+  { id: 146, name: "PACK 3 XURROS PISTATXO", category_id: 17, price: 5.30, vat_rate: 10, image_url: null, active: false, sort_order: 8, category_name: "XURROS", category_color: "#F97316" },
+  { id: 147, name: "PACK 3 XURROS", category_id: 17, price: 3.30, vat_rate: 10, image_url: null, active: true, sort_order: 3, category_name: "XURROS", category_color: "#F97316" },
+  { id: 148, name: "MADUIXA", category_id: 17, price: 0.00, vat_rate: 10, image_url: null, active: false, sort_order: 10, category_name: "XURROS", category_color: "#F97316" },
+  { id: 149, name: "PACK 3 XURROS XOCO B", category_id: 17, price: 5.90, vat_rate: 10, image_url: null, active: false, sort_order: 11, category_name: "XURROS", category_color: "#F97316" },
+
+  // ── OPCIONS XURROS (cat 28) ──
+  { id: 301, name: "SUCRE", category_id: 28, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
+  { id: 302, name: "PISTATXO", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 2, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
+  { id: 303, name: "XOCO BLANC", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 3, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
+  { id: 304, name: "XOCO NEGRE", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 4, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
+  { id: 305, name: "MADUIXA", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 5, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
 
   // ── VARIOS (cat 18) ──
   { id: 150, name: "GEL", category_id: 18, price: 0.10, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "VARIOS", category_color: "#6B7280" },
