@@ -156,6 +156,8 @@ export const ITEM_COLORS: Record<string, string> = {
   "Granitzat llimona": "#EBD24A",
   "Granitzat maduixa": "#E36A86",
   "Granitzat mango": "#F1A93C",
+  "Granitzat blue": "#3F7DFF",
+  "Granissat blue": "#3F7DFF",
   "Smoothie açai": "#6E4E8F",
   "Smoothie acai": "#6E4E8F",
   "Smoothie coco": "#EDE7DA",

@@ -150,6 +150,7 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 93, name: "GRANITZAT MADUIXA", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 4, category_name: "GRANISSATS", category_color: "#34D399" },
   { id: 94, name: "GRANITZAT MANGO", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 5, category_name: "GRANISSATS", category_color: "#34D399" },
   { id: 287, name: "GRANITZAT IOGURT", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 11, category_name: "GRANISSATS", category_color: "#34D399" },
+  { id: 307, name: "GRANITZAT BLUE", category_id: 10, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 12, category_name: "GRANISSATS", category_color: "#34D399" },
 
   // ── HI POP (cat 11) ──
   { id: 95, name: "AMERICAN WAFFLE", category_id: 11, price: 4.95, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "HI POP", category_color: "#F59E0B" },
