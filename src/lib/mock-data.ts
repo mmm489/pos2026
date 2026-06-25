@@ -29,6 +29,7 @@ export const MOCK_CATEGORIES: Category[] = [
   { id: 26, name: "INFUSIONS", sort_order: 26, color: "#65A30D" },
   { id: 27, name: "ORXATA", sort_order: 27, color: "#FCA5A5" },
   { id: 28, name: "OPCIONS XURROS", sort_order: 28, color: "#F6D9A8" },
+  { id: 29, name: "EXTRES ESPECIALITATS", sort_order: 29, color: "#F0E8D6" },
 ];
 
 export const MOCK_PRODUCTS: Product[] = [
@@ -226,6 +227,9 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 303, name: "XOCO BLANC", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 3, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
   { id: 304, name: "XOCO NEGRE", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 4, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
   { id: 305, name: "MADUIXA", category_id: 28, price: 2.00, vat_rate: 10, image_url: null, active: true, sort_order: 5, category_name: "OPCIONS XURROS", category_color: "#F6D9A8" },
+
+  // ── EXTRES ESPECIALITATS (cat 29) ──
+  { id: 306, name: "LLET VEGETAL", category_id: 29, price: 0.30, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "EXTRES ESPECIALITATS", category_color: "#F0E8D6" },
 
   // ── VARIOS (cat 18) ──
   { id: 150, name: "GEL", category_id: 18, price: 0.10, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "VARIOS", category_color: "#6B7280" },

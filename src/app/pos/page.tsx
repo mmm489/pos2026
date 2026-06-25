@@ -56,7 +56,7 @@ function getCashlogyDeviceMessage(data: unknown): string | null {
 // Categories whose name contains any of these keywords are treated as
 // "modifier" categories — their products appear in the long-press popup
 // instead of being eligible to trigger their own modifier popup.
-const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "salsa", "complement", "complemento", "sabor", "opcio", "opcion"];
+const MODIFIER_CATEGORY_KEYWORDS = ["topping", "extra", "extres", "salsa", "complement", "complemento", "sabor", "opcio", "opcion"];
 
 function isModifierCategory(name: string): boolean {
   const lower = name.toLowerCase();

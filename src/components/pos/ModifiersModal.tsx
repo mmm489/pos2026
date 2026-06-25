@@ -46,6 +46,7 @@ function isSingleChoiceExtraCategoryName(name: string) {
   return (
     lower.includes("extres batut") ||
     lower.includes("extres frappes") ||
+    lower.includes("extres especialitats") ||
     lower.includes("opcions xurros")
   );
 }
@@ -62,7 +63,7 @@ function isSizeCategoryName(name: string) {
 
 function usesCatalogPriceCategoryName(name: string) {
   const lower = name.trim().toLowerCase();
-  return lower === "varios" || lower === "opcions xurros";
+  return lower === "varios" || lower === "opcions xurros" || lower === "extres especialitats";
 }
 
 function requiresModifierSelection(product: Product, modifierGroupName: string | null | undefined) {
