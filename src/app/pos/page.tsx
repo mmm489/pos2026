@@ -6,6 +6,7 @@ import ProductGrid from "@/components/pos/ProductGrid";
 import ModifiersModal from "@/components/pos/ModifiersModal";
 import Cart from "@/components/pos/Cart";
 import CheckoutModal from "@/components/pos/CheckoutModal";
+import CustomAmountModal from "@/components/pos/CustomAmountModal";
 import PinLogin from "@/components/pos/PinLogin";
 import CashlogyModal from "@/components/pos/CashlogyModal";
 import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
@@ -481,6 +482,7 @@ export default function PosPage() {
   const [showCashlogy, setShowCashlogy] = useState(false);
   const [showSupplierPayments, setShowSupplierPayments] = useState(false);
   const [showTimeClock, setShowTimeClock] = useState(false);
+  const [showCustomAmount, setShowCustomAmount] = useState(false);
   const [showParkedTickets, setShowParkedTickets] = useState(false);
   const [showRecentOrders, setShowRecentOrders] = useState(false);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
@@ -568,6 +570,19 @@ export default function PosPage() {
     () => new Map(products.map((product) => [product.id, product])),
     [products]
   );
+  const customAmountProduct = useMemo(() => {
+    const byName = products.find((product) => product.name.trim().toLowerCase() === "importe libre");
+    if (byName) return byName;
+
+    const fallback =
+      products.find(
+        (product) =>
+          product.name.trim().toLowerCase() === "varios" &&
+          (product.category_name || "").trim().toLowerCase() === "varios"
+      ) ?? products.find((product) => product.name.trim().toLowerCase() === "varios");
+
+    return fallback ?? products[0] ?? null;
+  }, [products]);
   const flavorModifierGroupIds = useMemo(
     () =>
       new Set(
@@ -1340,6 +1355,7 @@ export default function PosPage() {
           <ProductGrid
             products={baseProducts}
             categories={baseCategories}
+            onCustomAmount={() => setShowCustomAmount(true)}
             onAddToCart={(p) => {
               if (shouldOpenModifiersOnTap(p)) {
                 setModifiersFor(p);
@@ -1487,6 +1503,29 @@ export default function PosPage() {
               }
             }
             setModifiersFor(null);
+          }}
+        />
+      )}
+
+      {showCustomAmount && (
+        <CustomAmountModal
+          onCancel={() => setShowCustomAmount(false)}
+          onConfirm={(amount) => {
+            if (!customAmountProduct) {
+              alert("No se ha encontrado ningun producto base para importe libre.");
+              return;
+            }
+            dispatch({
+              type: "ADD",
+              product: {
+                ...customAmountProduct,
+                name: "IMPORTE LIBRE",
+                price: amount,
+              },
+              price: amount,
+              merge: false,
+            });
+            setShowCustomAmount(false);
           }}
         />
       )}

@@ -1,9 +1,9 @@
--- Migration v3: Card payment audit trail (REDSYS reference, refund tracking)
+-- Migration v3: Card payment audit trail (provider reference, refund tracking)
 -- Safe to re-run.
 
 DO $$
 BEGIN
-  -- REDSYS factura (12-char ref sent at sale time, used to refund/cancel later).
+  -- Provider reference sent at sale time, used to refund/cancel later.
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'pos' AND table_name = 'orders' AND column_name = 'card_reference'
@@ -12,7 +12,7 @@ BEGIN
     RAISE NOTICE 'Added pos.orders.card_reference';
   END IF;
 
-  -- REDSYS authorization code (returned by datafono on approved sale).
+  -- Authorization code returned by datafono on approved sale.
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'pos' AND table_name = 'orders' AND column_name = 'card_authorization'

@@ -228,6 +228,7 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 155, name: "SUCRE MORE", category_id: 18, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 6, category_name: "VARIOS", category_color: "#6B7280" },
   { id: 156, name: "LLET SENSE LACTOSA", category_id: 18, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 7, category_name: "VARIOS", category_color: "#6B7280" },
   { id: 157, name: "LLET VEGETAL 0\u20AC", category_id: 18, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 8, category_name: "VARIOS", category_color: "#6B7280" },
+  { id: 291, name: "IMPORTE LIBRE", category_id: 18, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 99, category_name: "VARIOS", category_color: "#6B7280" },
 
   // ── SABORS (cat 19) — all 0.00€ ──
   { id: 158, name: "SABOR AVELLANA", category_id: 19, price: 0.00, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "SABORS", category_color: "#A78BFA" },

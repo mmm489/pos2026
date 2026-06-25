@@ -245,7 +245,7 @@ export async function POST(request: NextRequest) {
     const shouldSkipKitchenPrint = skip_kitchen_print === true;
     const cardRef = (storedPaymentMethod === "card" && card_reference) ? String(card_reference).slice(0, 20) : null;
     const cardAuth = (storedPaymentMethod === "card" && card_authorization) ? String(card_authorization).slice(0, 20) : null;
-    // Receipt text from REDSYS DatosRecibo — kept verbatim, can be quite long
+    // Receipt text from the card provider, kept verbatim because it can be quite long.
     // (multiple lines, multiple kB). Cap at 8 KB to avoid abuse.
     const cardReceiptText = (storedPaymentMethod === "card" && card_receipt_text)
       ? String(card_receipt_text).slice(0, 8192)

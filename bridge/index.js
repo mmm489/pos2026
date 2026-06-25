@@ -31,8 +31,8 @@ const {
   handleIngenicoCancel,
   handleIngenicoQuery,
   handleIngenicoAbort,
-  handleVerifoneStatus,
-  handleVerifoneHealth,
+  handleCardStatus,
+  handleCardHealth,
 } = require("./routes/ingenico");
 const {
   handlePrintTicket,
@@ -93,8 +93,8 @@ app.post("/ingenico/refund", handleIngenicoRefund);
 app.post("/ingenico/cancel", handleIngenicoCancel);
 app.post("/ingenico/query", handleIngenicoQuery);
 app.post("/ingenico/abort", handleIngenicoAbort);
-app.get("/ingenico/status", handleVerifoneStatus);
-app.get("/ingenico/health", handleVerifoneHealth);
+app.get("/ingenico/status", handleCardStatus);
+app.get("/ingenico/health", handleCardHealth);
 app.post("/printer/ticket", handlePrintTicket);
 app.post("/printer/kitchen", handlePrintKitchenTicket);
 app.post("/printer/card-receipt", handlePrintCardReceipt);

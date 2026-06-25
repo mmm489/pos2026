@@ -89,7 +89,7 @@ export async function chargeCashlogyCashless(amount: number, peripheralId = "") 
 export interface IngenicoResult {
   success: boolean;
   operation?: "sale" | "refund" | "cancel";
-  // Reference (factura) sent to REDSYS — store this to enable later refund/cancel.
+  // Card provider reference: store this to enable later refund/cancel.
   reference?: string;
   responseCode?: string;
   authorizationCode?: string;
@@ -205,7 +205,7 @@ export async function abortIngenico(): Promise<{ success: boolean; cancelled?: b
 }
 
 /**
- * Read-only consultation: ask the datáfono what REDSYS recorded for a given reference.
+ * Read-only consultation: ask the datáfono what the card provider recorded for a given reference.
  * Use this to recover from crashes mid-payment when the local order state is uncertain.
  * Does NOT modify any local state — caller decides what to do with the result.
  */
@@ -458,7 +458,7 @@ export async function printKitchenTicket(data: {
 }
 
 /**
- * Print a bank card receipt (DatosRecibo from REDSYS) on the receipt printer.
+ * Print a bank card receipt on the receipt printer.
  * Two copies should be printed for every approved card sale: merchant + customer.
  */
 export async function printCardReceipt(

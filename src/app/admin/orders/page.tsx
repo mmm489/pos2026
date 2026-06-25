@@ -481,15 +481,15 @@ export default function AdminOrdersPage() {
                         </div>
                         {queryResults.has(order.id) && (() => {
                           const q = queryResults.get(order.id)!;
-                          // Detect mismatch: REDSYS approved a charge but our local order is pending/cancelled.
+                          // Detect mismatch: the card provider approved a charge but our local order is pending/cancelled.
                           const localStatus = order.status;
                           const localApproved = localStatus === "completed" || localStatus === "ready" || localStatus === "preparing";
                           const localCancelled = localStatus === "cancelled";
                           let mismatch: string | null = null;
                           if (q.success && localCancelled) {
-                            mismatch = "REDSYS dóna la transacció com aprovada però la comanda local està anul·lada. Pot ser una anul·lació pendent al datàfon — revisa-ho manualment.";
+                            mismatch = "El proveïdor de targeta dona la transacció com aprovada però la comanda local està anul·lada. Pot ser una anul·lació pendent al datàfon — revisa-ho manualment.";
                           } else if (!q.success && localApproved && !localCancelled) {
-                            mismatch = "REDSYS NO confirma la transacció però la comanda local consta com cobrada. Verifica si realment es va fer el cobrament.";
+                            mismatch = "El proveïdor de targeta NO confirma la transacció però la comanda local consta com cobrada. Verifica si realment es va fer el cobrament.";
                           }
                           return (
                             <div

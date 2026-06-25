@@ -750,8 +750,8 @@ async function handlePrintKitchenTicket(req, res) {
 }
 
 /**
- * Print the bank receipt returned by the datáfono (DatosRecibo from REDSYS).
- * The Verifone P400 ENGAGE has no built-in printer, so we render the receipt
+ * Print the bank receipt returned by the datáfono.
+ * Some terminals have no built-in printer, so we render the receipt
  * text on the same Epson TM-m30. Two copies are typically printed: merchant
  * (with signature line) and customer.
  */
@@ -779,7 +779,7 @@ async function handlePrintCardReceipt(req, res) {
     printer.drawLine();
 
     // Render the raw receipt text (datáfono already formatted it, including
-    // a signature line ONLY when REDSYS deems it necessary — e.g. mag stripe
+    // a signature line ONLY when the card provider deems it necessary.
     // or fallback. PIN/contactless transactions don't need signature, so we
     // don't add one ourselves; trust the receipt text as-is.
     printer.alignLeft();

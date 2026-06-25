@@ -319,8 +319,8 @@ export default function CheckoutModal({
         window.alert(paymentResult.warning);
       }
 
-      // For card payments, capture REDSYS reference + authorization code so we can
-      // later refund/cancel through the same datafono (and so it shows on Comercia portal).
+      // For card payments, capture provider reference + authorization code so we can
+      // later refund/cancel through the same datafono.
       const cardReference =
         paymentMethod === "card" && "reference" in paymentResult
           ? (paymentResult as { reference?: string }).reference || null
@@ -402,8 +402,8 @@ export default function CheckoutModal({
 
       // Card payments: always print the merchant copy (we need it for our records),
       // and stash the receipt text so the success screen can ask the customer
-      // if they want a copy too. Verifone P400 ENGAGE has no built-in printer,
-      // so REDSYS returns the formatted receipt as text via paymentResult.receipt.
+      // if they want a copy too. Some providers return the formatted receipt
+      // as text via paymentResult.receipt.
       const cardReceipt =
         paymentMethod === "card" && "receipt" in paymentResult
           ? (paymentResult as { receipt?: string }).receipt
@@ -721,7 +721,7 @@ export default function CheckoutModal({
                 setAborting(true);
                 // The /charge request is still pending in chargeIngenico above —
                 // /abort travels on a separate connection and signals the
-                // VerifoneService polling thread to bail out, which then resolves
+                // card provider polling thread to bail out, which then resolves
                 // the original /charge with success: false and we transition to
                 // the error step normally.
                 await abortIngenico().catch(() => {});

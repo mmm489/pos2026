@@ -9,6 +9,7 @@ interface ProductGridProps {
   products: Product[];
   categories: Category[];
   onAddToCart: (product: Product) => void;
+  onCustomAmount?: () => void;
   /** Optional: triggered on long press (~500ms) for products that allow modifiers. */
   onLongPress?: (product: Product) => void;
   /** Optional: ids of products that should NOT trigger long-press (e.g. modifier products themselves). */
@@ -31,6 +32,7 @@ export default function ProductGrid({
   products,
   categories,
   onAddToCart,
+  onCustomAmount,
   onLongPress,
   noLongPressIds,
 }: ProductGridProps) {
@@ -99,6 +101,7 @@ export default function ProductGrid({
           <CategoryGrid
             categories={categories}
             onSelect={setSelectedCategory}
+            onCustomAmount={onCustomAmount}
             onSelectAll={() => {
               // Pseudo-category for "all products" — no color, no id match.
               setSelectedCategory({ id: -1, name: "Tots els productes", sort_order: 0, color: "#374151" });
@@ -125,10 +128,12 @@ export default function ProductGrid({
 function CategoryGrid({
   categories,
   onSelect,
+  onCustomAmount,
   onSelectAll,
 }: {
   categories: Category[];
   onSelect: (cat: Category) => void;
+  onCustomAmount?: () => void;
   onSelectAll: () => void;
 }) {
   const cardClass =
@@ -146,6 +151,18 @@ function CategoryGrid({
           Tots els productes
         </span>
       </button>
+
+      {onCustomAmount && (
+        <button
+          onClick={onCustomAmount}
+          className={cardClass}
+          style={tileStyle("#111827")}
+        >
+          <span className="line-clamp-2 max-w-full text-center text-[18px] font-medium leading-tight">
+            Importe libre
+          </span>
+        </button>
+      )}
 
       {categories.map((cat) => (
         <button

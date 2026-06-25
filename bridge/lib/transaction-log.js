@@ -19,7 +19,7 @@ function getPool() {
  *
  * @param {object} entry
  * @param {string} entry.operation - "charge" | "refund" | "cancel" | "query" | "abort"
- * @param {object} entry.request   - the body we sent to VerifoneService
+ * @param {object} entry.request   - the body we sent to the card provider
  * @param {object} entry.response  - the body we got back
  * @param {number} entry.durationMs
  */
