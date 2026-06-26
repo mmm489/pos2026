@@ -1,7 +1,9 @@
 param(
   [switch]$DryRun,
   [switch]$NoPrint,
-  [switch]$AllowOutsideWindow
+  [switch]$AllowOutsideWindow,
+  [switch]$RecoverMissed,
+  [string]$Until
 )
 
 $ErrorActionPreference = "Stop"
@@ -50,6 +52,14 @@ if ($NoPrint) {
 
 if ($AllowOutsideWindow) {
   $arguments += "--allow-outside-window"
+}
+
+if ($RecoverMissed) {
+  $arguments += "--recover-missed"
+}
+
+if ($Until) {
+  $arguments += @("--until", $Until)
 }
 
 Push-Location $repoRoot

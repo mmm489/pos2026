@@ -25,6 +25,12 @@ if not defined NODE_EXE (
   exit /b 1
 )
 
+set "CLOSING_RUNNER=%APP_DIR%\scripts\run-auto-cash-closing.ps1"
+if exist "%CLOSING_RUNNER%" (
+  echo Comprobando cierre automatico pendiente...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%CLOSING_RUNNER%" -RecoverMissed -NoPrint >nul 2>nul
+)
+
 set "NEXT_BIN=%APP_DIR%\node_modules\next\dist\bin\next"
 if not exist "%NEXT_BIN%" (
   echo No se ha encontrado Next.js en:

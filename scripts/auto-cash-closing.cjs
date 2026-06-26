@@ -8,6 +8,8 @@ const logFile = path.join(__dirname, "auto-cash-closing.log");
 const dryRun = args.has("--dry-run") || !args.has("--execute");
 const printEnabled = !args.has("--no-print");
 const allowOutsideWindow = args.has("--allow-outside-window");
+const recoverMissed = args.has("--recover-missed");
+const explicitUntil = getArgValue("--until");
 
 function log(message) {
   const line = `[${new Date().toISOString()}] ${message}`;
@@ -43,6 +45,27 @@ function isAutoClosingWindow(date = new Date()) {
 
 function formatZLabel(zNumber, year) {
   return `Z-${year}/${String(zNumber).padStart(6, "0")}`;
+}
+
+function getArgValue(name) {
+  const prefix = `${name}=`;
+  const inline = process.argv.slice(2).find((arg) => arg.startsWith(prefix));
+  if (inline) return inline.slice(prefix.length);
+
+  const index = process.argv.indexOf(name);
+  if (index >= 0 && process.argv[index + 1]) {
+    return process.argv[index + 1];
+  }
+  return null;
+}
+
+function previousThreeAmCutoff(date = new Date()) {
+  const cutoff = new Date(date);
+  cutoff.setHours(3, 0, 0, 0);
+  if (date <= cutoff) {
+    cutoff.setDate(cutoff.getDate() - 1);
+  }
+  return cutoff;
 }
 
 function roundMoney(value) {
@@ -87,9 +110,13 @@ async function ensureSchema(client) {
   `);
 }
 
-async function computeSummary(client, since) {
+async function computeSummary(client, since, until = null) {
+  const params = until ? [since, until] : [since];
+  const untilOrderClause = until ? " AND o.created_at < $2::timestamptz" : "";
+  const untilItemClause = until ? " AND o.created_at < $2::timestamptz" : "";
+  const untilSupplierClause = until ? " AND created_at < $2::timestamptz" : "";
   const activeWhere =
-    "o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked' AND COALESCE(o.business_unit, 'hicream') = 'hicream'";
+    `o.created_at >= $1::timestamptz${untilOrderClause} AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked' AND COALESCE(o.business_unit, 'hicream') = 'hicream'`;
 
   const totalsRes = await client.query(
     `SELECT
@@ -103,7 +130,7 @@ async function computeSummary(client, since) {
        COUNT(*) FILTER (WHERE o.payment_method IN ('card', 'manual'))::int AS card_count
      FROM pos.orders o
      WHERE ${activeWhere}`,
-    [since]
+    params
   );
   const totals = totalsRes.rows[0];
 
@@ -118,7 +145,7 @@ async function computeSummary(client, since) {
      WHERE ${activeWhere}
      GROUP BY oi.vat_rate
      ORDER BY oi.vat_rate`,
-    [since]
+    params
   );
   const vatBreakdown = {};
   for (const row of vatRows.rows) {
@@ -134,33 +161,33 @@ async function computeSummary(client, since) {
        COUNT(*) FILTER (WHERE o.status = 'cancelled')::int AS cancelled_count,
        COALESCE(SUM(CASE WHEN o.refund_reference IS NOT NULL THEN o.total END), 0)::float AS total_refunded
      FROM pos.orders o
-     WHERE o.created_at >= $1::timestamptz AND o.status = 'cancelled'
+     WHERE o.created_at >= $1::timestamptz${untilOrderClause} AND o.status = 'cancelled'
        AND COALESCE(o.business_unit, 'hicream') = 'hicream'`,
-    [since]
+    params
   );
   const cancelledStats = cancelledStatsRes.rows[0];
 
   const rangeRes = await client.query(
     `SELECT
        (SELECT invoice_number FROM pos.orders
-        WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
+        WHERE created_at >= $1::timestamptz${untilItemClause} AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
           AND COALESCE(business_unit, 'hicream') = 'hicream'
         ORDER BY created_at ASC LIMIT 1) AS first_invoice,
        (SELECT invoice_number FROM pos.orders
-        WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
+        WHERE created_at >= $1::timestamptz${untilItemClause} AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
           AND COALESCE(business_unit, 'hicream') = 'hicream'
         ORDER BY created_at DESC LIMIT 1) AS last_invoice`,
-    [since]
+    params
   );
   const range = rangeRes.rows[0];
 
   const supplierPaymentsRes = await client.query(
     `SELECT id, supplier_name, amount::float AS amount, reason, created_at
      FROM pos.supplier_payments
-     WHERE created_at >= $1::timestamptz
+     WHERE created_at >= $1::timestamptz${untilSupplierClause}
        AND status = 'dispensed'
      ORDER BY created_at ASC`,
-    [since]
+    params
   );
   const supplierPayments = supplierPaymentsRes.rows;
   const supplierPaymentsTotal = roundMoney(
@@ -234,7 +261,7 @@ async function main() {
     throw new Error("Falta NEON_DATABASE_URL en el entorno o en .env.local");
   }
 
-  if (!dryRun && !allowOutsideWindow && !isAutoClosingWindow()) {
+  if (!dryRun && !allowOutsideWindow && !recoverMissed && !explicitUntil && !isAutoClosingWindow()) {
     log("Fuera de la ventana automatica 02:00-03:59. No se crea cierre.");
     return;
   }
@@ -247,10 +274,21 @@ async function main() {
 
     const lastRes = await client.query(`SELECT closed_at FROM pos.cash_closings ORDER BY closed_at DESC LIMIT 1`);
     const since = lastRes.rows[0]?.closed_at || new Date().toISOString().split("T")[0] + "T00:00:00Z";
-    const summary = await computeSummary(client, since);
+    const recoverCutoff = recoverMissed ? (explicitUntil ? new Date(explicitUntil) : previousThreeAmCutoff()) : null;
+
+    if (recoverCutoff && new Date(since) >= recoverCutoff) {
+      await client.query("ROLLBACK");
+      log(`No hay cierre pendiente antes de ${recoverCutoff.toISOString()}. Ultimo cierre: ${new Date(since).toISOString()}`);
+      return;
+    }
+
+    const closingUntil = explicitUntil || (recoverCutoff ? recoverCutoff.toISOString() : null);
+    const closedAt = closingUntil || new Date().toISOString();
+    const summary = await computeSummary(client, since, closingUntil);
 
     log(
-      `${dryRun ? "DRY-RUN" : "AUTO"} desde ${new Date(since).toISOString()}: ` +
+      `${dryRun ? "DRY-RUN" : recoverMissed ? "RECOVERY" : "AUTO"} desde ${new Date(since).toISOString()}` +
+        `${closingUntil ? ` hasta ${new Date(closingUntil).toISOString()}` : ""}: ` +
         `${summary.ticket_count} tickets, total ${summary.total_sales.toFixed(2)} EUR, ` +
         `${summary.supplier_payments_count} pagos proveedores`
     );
@@ -273,14 +311,16 @@ async function main() {
        RETURNING next_z_number - 1 AS z_number`
     );
     const zNumber = Number(zRes.rows[0].z_number);
-    const zLabel = formatZLabel(zNumber, new Date().getFullYear());
+    const zLabel = formatZLabel(zNumber, new Date(closedAt).getFullYear());
 
     const bizRes = await client.query(
       `SELECT name, trade_name, nif, address, city, postal_code, province, phone, invoice_series
        FROM pos.business LIMIT 1`
     );
     const businessSnapshot = bizRes.rows[0] || null;
-    const notes = process.env.HICREAM_AUTO_CLOSING_NOTES || "Cierre automatico 03:00";
+    const notes =
+      process.env.HICREAM_AUTO_CLOSING_NOTES ||
+      (recoverMissed ? "Cierre recuperado por fallo de tarea automatica 03:00. Sin impresion." : "Cierre automatico 03:00");
 
     const insertRes = await client.query(
       `INSERT INTO pos.cash_closings
@@ -293,18 +333,19 @@ async function main() {
          expected_cash_after_supplier_payments, supplier_payments_snapshot,
          first_invoice, last_invoice,
          z_number, z_label, business_snapshot, notes)
-       VALUES (NULL, $1::timestamptz, NOW(),
-               $2, $3, $4,
-               $5, $6, $7::jsonb,
-               $8, $9, $10,
-               $11, $12,
-               $13, $14,
-               $15, $16::jsonb,
-               $17, $18,
-               $19, $20, $21::jsonb, $22)
+       VALUES (NULL, $1::timestamptz, $2::timestamptz,
+               $3, $4, $5,
+               $6, $7, $8::jsonb,
+               $9, $10, $11,
+               $12, $13,
+               $14, $15,
+               $16, $17::jsonb,
+               $18, $19,
+               $20, $21, $22::jsonb, $23)
        RETURNING *`,
       [
         since,
+        closedAt,
         summary.total_cash,
         summary.total_card,
         summary.total_sales,
