@@ -81,9 +81,95 @@ export function buildModifierNote(
   return lines.join("\n");
 }
 
+function stripPriceSuffix(name: string): string {
+  return name
+    .replace(/\s+\d+(?:[,.]\d+)?\s*€/gi, "")
+    .replace(/\s+\d+(?:[,.]\d+)?\s*eur$/gi, "")
+    .trim();
+}
+
+function stripLeadingWords(name: string, words: string[]): string {
+  let current = name.trim();
+  for (const word of words) {
+    current = current.replace(new RegExp(`^${word}\\s+`, "i"), "").trim();
+  }
+  return current;
+}
+
+function toDisplayWords(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/(^|[\s/-])([a-zà-ÿ])/g, (match, prefix: string, letter: string) =>
+      `${prefix}${letter.toUpperCase()}`
+    );
+}
+
+function cleanFlavorName(name: string): string {
+  return toDisplayWords(
+    stripLeadingWords(stripPriceSuffix(name), ["bola", "gelat", "helado", "sabor"])
+  );
+}
+
+function cleanNaturalFruitName(name: string): string {
+  return toDisplayWords(stripPriceSuffix(name).replace(/\bnatural\b/gi, "").trim());
+}
+
+function cleanModifierName(name: string): string {
+  return toDisplayWords(
+    stripLeadingWords(stripPriceSuffix(name), ["sabor", "topping", "salsa", "crema"])
+  );
+}
+
+export function getContextualModifierDisplayName(
+  defaultName: string,
+  categoryName?: string | null
+): string {
+  const name = defaultName.trim();
+  const lowerName = name.toLowerCase();
+  const lowerCategory = String(categoryName || "").toLowerCase();
+
+  if (!name) return defaultName;
+  if (/^(sabor gelat|bola gelat|fruita|crema|salsa|cruixent)\s*:/i.test(name)) {
+    return name;
+  }
+
+  if (lowerCategory.includes("sabor") || lowerName.startsWith("sabor ")) {
+    return `Sabor gelat: ${cleanFlavorName(name)}`;
+  }
+
+  if (
+    lowerCategory.includes("topping gelat") ||
+    lowerName.startsWith("bola gelat") ||
+    lowerName.startsWith("gelat ") ||
+    lowerName.startsWith("helado ")
+  ) {
+    return `Bola gelat: ${cleanFlavorName(name)}`;
+  }
+
+  if (lowerName.includes("natural") && lowerCategory.includes("topping")) {
+    return `Fruita: ${cleanNaturalFruitName(name)}`;
+  }
+
+  if (
+    lowerCategory.includes("salsa") ||
+    lowerCategory.includes("crema") ||
+    lowerName.startsWith("salsa ") ||
+    lowerName.startsWith("crema ")
+  ) {
+    return `Crema: ${cleanModifierName(name)}`;
+  }
+
+  if (lowerCategory.includes("crunchy") || lowerCategory.includes("cruixent")) {
+    return `Cruixent: ${cleanModifierName(name)}`;
+  }
+
+  return name;
+}
+
 export function getModifierDisplayName(defaultName: string, notes?: string | null): string {
   const parent = getModifierParent(notes);
-  if (!parent) return defaultName;
+  if (!parent) return getContextualModifierDisplayName(defaultName);
 
   const lines = notes?.split(/\r?\n/) ?? [];
   const displayLine = lines
@@ -91,7 +177,7 @@ export function getModifierDisplayName(defaultName: string, notes?: string | nul
     .map((line) => line.trim())
     .find((line) => line.toLowerCase().startsWith("nom:"));
 
-  return displayLine?.slice(4).trim() || defaultName;
+  return getContextualModifierDisplayName(displayLine?.slice(4).trim() || defaultName);
 }
 
 function normalizeName(name: string): string {

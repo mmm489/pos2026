@@ -17,6 +17,7 @@ import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import {
   buildBaseLineNote,
   buildModifierNote,
+  getContextualModifierDisplayName,
   getModifierDisplayName,
   getModifierParent,
   getModifierParentLineId,
@@ -423,6 +424,9 @@ function escapeRegExp(value: string) {
 }
 
 function extractIceCreamBallFlavor(displayName: string, catalogName?: string | null) {
+  const contextualMatch = displayName.match(/^(?:bola gelat|sabor gelat|gelat|helado)\s*:?\s*(.+)$/i);
+  if (contextualMatch?.[1]?.trim()) return contextualMatch[1].trim();
+
   const candidates = [
     catalogName,
     "bola gelat",
@@ -1459,25 +1463,27 @@ export default function PosPage() {
                 const isIceCreamBall = isIceCreamBallName(product.name);
                 if (isIceCreamBall) {
                   for (let i = 0; i < qty; i += 1) {
+                    const displayName = getContextualModifierDisplayName(product.name, product.category_name);
                     replacementItems.push({
                       line_id: makeCartLineId(product.id),
                       product_id: product.id,
                       name: product.name,
                       price: unitPrice,
                       qty: 1,
-                      notes: buildModifierNote(activeModifierProduct.name, product.name, baseLineId),
+                      notes: buildModifierNote(activeModifierProduct.name, displayName, baseLineId),
                     });
                   }
                   continue;
                 }
 
+                const displayName = getContextualModifierDisplayName(product.name, product.category_name);
                 replacementItems.push({
                   line_id: makeCartLineId(product.id),
                   product_id: product.id,
                   name: product.name,
                   price: unitPrice,
                   qty,
-                  notes: buildModifierNote(activeModifierProduct.name, product.name, baseLineId),
+                  notes: buildModifierNote(activeModifierProduct.name, displayName, baseLineId),
                 });
               }
 
@@ -1500,11 +1506,12 @@ export default function PosPage() {
             for (const { product, qty, unitPrice } of extras) {
               for (let i = 0; i < qty; i++) {
                 const isIceCreamBall = isIceCreamBallName(product.name);
+                const displayName = getContextualModifierDisplayName(product.name, product.category_name);
                 dispatch({
                   type: "ADD",
                   product,
                   price: unitPrice,
-                  note: buildModifierNote(activeModifierProduct.name, product.name, baseLineId),
+                  note: buildModifierNote(activeModifierProduct.name, displayName, baseLineId),
                   merge: isIceCreamBall ? false : undefined,
                   lineId: isIceCreamBall ? makeCartLineId(product.id) : undefined,
                 });
