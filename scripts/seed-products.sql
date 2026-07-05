@@ -213,7 +213,8 @@ INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
   ('ICED MARACUIA',  12, 4.90, 10, 5),
   ('MILK CAFE',      12, 4.90, 10, 6),
   ('MILK MANGO',     12, 4.90, 10, 7),
-  ('MILK MARACUIA',  12, 4.90, 10, 8);
+  ('MILK MARACUIA',  12, 4.90, 10, 8),
+  ('ICED COCO',      12, 4.90, 10, 9);
 
 -- RECEPTES (category 13) — all 7.30€
 INSERT INTO pos.products (name, category_id, price, vat_rate, sort_order) VALUES
