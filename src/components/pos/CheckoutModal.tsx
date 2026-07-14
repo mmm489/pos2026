@@ -5,6 +5,7 @@ import { CartItem, Order } from "@/types/pos";
 import {
   chargeCashlogy,
   chargeIngenico,
+  prepareIngenicoTransaction,
   cancelCashlogy,
   abortIngenico,
   getCashlogyChargeStatus,
@@ -12,6 +13,7 @@ import {
   printKitchenTicket,
   printCardReceipt,
 } from "@/lib/bridge";
+import type { IngenicoResult } from "@/lib/bridge";
 import { broadcastNewOrder } from "@/lib/demo-channel";
 import { Business } from "@/types/pos";
 import { useDatafonoHealth } from "@/hooks/useDatafonoHealth";
@@ -76,6 +78,7 @@ export default function CheckoutModal({
   // Card receipt text held until we ask the customer if they want a copy.
   const [pendingCustomerReceipt, setPendingCustomerReceipt] = useState<string | null>(null);
   const [printingCustomerCopy, setPrintingCustomerCopy] = useState(false);
+  const [cardReceiptError, setCardReceiptError] = useState("");
   const [pendingTicket, setPendingTicket] = useState<TicketPrintData | null>(null);
   const [printingTicket, setPrintingTicket] = useState(false);
   const [ticketPrinted, setTicketPrinted] = useState(false);
@@ -291,12 +294,50 @@ export default function CheckoutModal({
 
     try {
       let paymentResult;
+      let cardDraft: OrderWithKitchenPrint | null = null;
       if (paymentMethod === "cash") {
         paymentResult = await chargeCashlogy(total);
       } else {
-        paymentResult = await chargeIngenico(total);
+        const prepared = await prepareIngenicoTransaction();
+        const providerTransactionId = prepared.transactionId;
+        if (!prepared.success || !providerTransactionId) {
+          setErrorMsg(prepared.error || "No s'ha pogut preparar l'operacio de targeta");
+          setStep("error");
+          return;
+        }
+
+        const draftResponse = await fetch("/api/pos/card-orders/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items,
+            provider_transaction_id: providerTransactionId,
+            table_number: tableNumber || null,
+            service_type: serviceType,
+            parked_order_id: parkedOrderId || null,
+          }),
+        });
+        if (!draftResponse.ok) {
+          const draftError = await draftResponse.json().catch(() => ({}));
+          setErrorMsg(draftError.error || "No s'ha pogut guardar la comanda abans del cobrament");
+          setStep("error");
+          return;
+        }
+        cardDraft = await draftResponse.json();
+        paymentResult = await chargeIngenico(total, String(cardDraft!.id), providerTransactionId);
       }
       if (!paymentResult.success) {
+        if (paymentMethod === "card" && cardDraft) {
+          const cardFailure = paymentResult as IngenicoResult;
+          await fetch(`/api/pos/card-orders/${cardDraft.id}/status`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              status: cardFailure.unknown ? "unknown" : "failed",
+              error: paymentResult.error || "Operacio de targeta no completada",
+            }),
+          }).catch(() => {});
+        }
         if (
           (paymentMethod === "cash" || paymentMethod === "card") &&
           "cancelled" in paymentResult &&
@@ -340,7 +381,10 @@ export default function CheckoutModal({
           : null;
       const cashlessOperationId =
         paymentMethod === "card" && "cashlessOperationId" in paymentResult
-          ? (paymentResult as { cashlessOperationId?: string | null }).cashlessOperationId || null
+          ? (paymentResult as IngenicoResult).cashlessOperationId ||
+            (paymentResult as IngenicoResult).transactionId ||
+            cardDraft?.cashless_operation_id ||
+            null
           : null;
       const cashlessTransactionNumber =
         paymentMethod === "card" && "cashlessTransactionNumber" in paymentResult
@@ -353,7 +397,32 @@ export default function CheckoutModal({
 
       // Create order via API
       let order: OrderWithKitchenPrint | null = null;
-      try {
+      if (paymentMethod === "card" && cardDraft) {
+        const cardPaymentResult = paymentResult as IngenicoResult;
+        const finalizeResponse = await fetch(`/api/pos/card-orders/${cardDraft.id}/finalize`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider_transaction_id: cashlessOperationId,
+            reference: cashlessTransactionNumber || cardReference,
+            authorization_code: cardAuthorization,
+            response_code: cardPaymentResult.responseCode || null,
+            receipt: cardReceiptText,
+            peripheral_id: cashlessPeripheralId,
+            amount: cashlessAmount ?? total,
+            skip_kitchen_print: skipKitchenPrint,
+          }),
+        });
+        if (!finalizeResponse.ok) {
+          const finalizeError = await finalizeResponse.json().catch(() => ({}));
+          setErrorMsg(
+            `Pagament aprovat, pendent de regularitzar. No el tornis a cobrar. ${finalizeError.error || "Utilitza Comprovar pagament a Comandes."}`,
+          );
+          setStep("error");
+          return;
+        }
+        order = await finalizeResponse.json();
+      } else try {
         const orderRes = await fetch("/api/pos/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -383,6 +452,11 @@ export default function CheckoutModal({
       }
 
       if (!order) {
+        if (paymentMethod === "card") {
+          setErrorMsg("Pagament de targeta pendent de regularitzar. No el tornis a cobrar.");
+          setStep("error");
+          return;
+        }
         order = createDemoOrder(paymentMethod, businessUnit);
         if (!skipKitchenPrint) broadcastNewOrder(order);
       }
@@ -409,6 +483,7 @@ export default function CheckoutModal({
           ? (paymentResult as { receipt?: string }).receipt
           : null;
       if (cardReceipt) {
+        setCardReceiptError("");
         printCardReceipt(cardReceipt, "merchant", order.order_number).catch(() => {});
         setPendingCustomerReceipt(cardReceipt);
       }
@@ -800,7 +875,7 @@ export default function CheckoutModal({
             {pendingCustomerReceipt ? (
               <div className="mt-6 rounded-2xl border border-[#bfd5ee] bg-[#e4f0fb] p-4">
                 <p className="mb-3 text-base font-medium text-[#275a8f]">
-                  Vol còpia del rebut bancari?
+                  Vol imprimir una còpia de targeta?
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -816,11 +891,20 @@ export default function CheckoutModal({
                   <button
                     onClick={async () => {
                       setPrintingCustomerCopy(true);
-                      await printCardReceipt(
+                      setCardReceiptError("");
+                      const result = await printCardReceipt(
                         pendingCustomerReceipt,
                         "customer",
                         orderNumber
-                      ).catch(() => {});
+                      ).catch(() => ({
+                        success: false,
+                        error: "No s'ha pogut connectar amb la impressora",
+                      }));
+                      if (!result.success) {
+                        setCardReceiptError(result.error || "No s'ha pogut imprimir la còpia de targeta");
+                        setPrintingCustomerCopy(false);
+                        return;
+                      }
                       setPendingCustomerReceipt(null);
                       setPrintingCustomerCopy(false);
                       onComplete();
@@ -828,9 +912,14 @@ export default function CheckoutModal({
                     disabled={printingCustomerCopy}
                     className="flex-1 rounded-xl bg-[#4b8fd6] px-6 py-3 font-semibold text-white transition-colors active:bg-[#3475bb] disabled:opacity-50"
                   >
-                    {printingCustomerCopy ? "Imprimint..." : "Sí, imprimir"}
+                    {printingCustomerCopy ? "Imprimint..." : "Imprimir còpia targeta"}
                   </button>
                 </div>
+                {cardReceiptError && (
+                  <p className="mt-3 text-sm font-medium text-[#c4423a]">
+                    {cardReceiptError}
+                  </p>
+                )}
               </div>
             ) : (
               <button

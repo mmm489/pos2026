@@ -4,6 +4,7 @@ import { ensureSupplierPaymentsSchema } from "@/lib/supplier-payments";
 import type { PoolClient } from "pg";
 import type { VatBreakdown } from "@/types/pos";
 import { ensureOrderBusinessUnitSchema } from "@/lib/business-unit";
+import { ensurePostSaleSchema } from "@/lib/post-sale-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,42 @@ async function computeSummary(
     [since]
   );
 
+  const [refundStats] = await exec<{ amount: number; total_base: number; total_vat: number }>(
+    `SELECT COALESCE(SUM(r.amount), 0)::float AS amount,
+            COALESCE(SUM(r.total_base), 0)::float AS total_base,
+            COALESCE(SUM(r.total_vat), 0)::float AS total_vat
+     FROM pos.refunds r
+     JOIN pos.orders o ON o.id = r.order_id
+     WHERE r.status = 'completed'
+       AND r.completed_at >= $1::timestamptz
+       AND COALESCE(o.business_unit, 'hicream') = 'hicream'`,
+    [since],
+  );
+
+  const refundVatRows = await exec<{ vat_rate: number; base: number; vat: number; total: number }>(
+    `SELECT ri.vat_rate::float AS vat_rate,
+            SUM(ri.qty * ri.unit_price / (1 + ri.vat_rate / 100.0))::float AS base,
+            SUM(ri.qty * ri.unit_price - ri.qty * ri.unit_price / (1 + ri.vat_rate / 100.0))::float AS vat,
+            SUM(ri.qty * ri.unit_price)::float AS total
+     FROM pos.refund_items ri
+     JOIN pos.refunds r ON r.id = ri.refund_id
+     JOIN pos.orders o ON o.id = r.order_id
+     WHERE r.status = 'completed'
+       AND r.completed_at >= $1::timestamptz
+       AND COALESCE(o.business_unit, 'hicream') = 'hicream'
+     GROUP BY ri.vat_rate`,
+    [since],
+  );
+  for (const row of refundVatRows) {
+    const key = String(row.vat_rate);
+    const current = vat_breakdown[key] ?? { base: 0, vat: 0, total: 0 };
+    vat_breakdown[key] = {
+      base: Math.round((current.base - row.base) * 100) / 100,
+      vat: Math.round((current.vat - row.vat) * 100) / 100,
+      total: Math.round((current.total - row.total) * 100) / 100,
+    };
+  }
+
   const supplierPayments = await exec<{
     id: number;
     supplier_name: string;
@@ -163,16 +200,16 @@ async function computeSummary(
 
   return {
     total_cash: totals.total_cash,
-    total_card: totals.total_card,
-    total_sales: totals.total_sales,
-    total_base: totals.total_base,
-    total_vat: totals.total_vat,
+    total_card: Math.round((totals.total_card - refundStats.amount) * 100) / 100,
+    total_sales: Math.round((totals.total_sales - refundStats.amount) * 100) / 100,
+    total_base: Math.round((totals.total_base - refundStats.total_base) * 100) / 100,
+    total_vat: Math.round((totals.total_vat - refundStats.total_vat) * 100) / 100,
     vat_breakdown,
     ticket_count: totals.ticket_count,
     cash_count: totals.cash_count,
     card_count: totals.card_count,
     cancelled_count: cancelledStats.cancelled_count,
-    total_refunded: cancelledStats.total_refunded,
+    total_refunded: Math.round((cancelledStats.total_refunded + refundStats.amount) * 100) / 100,
     supplier_payments_total: supplierPaymentsTotal,
     supplier_payments_count: supplierPayments.length,
     expected_cash_after_supplier_payments:
@@ -194,6 +231,7 @@ export async function GET() {
     const sql = getDb();
     await ensureSupplierPaymentsSchema();
     await ensureOrderBusinessUnitSchema();
+    await ensurePostSaleSchema();
 
     const [lastClosing] = await sql`
       SELECT closed_at FROM pos.cash_closings
@@ -229,6 +267,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensurePostSaleSchema();
     const body = await request.json();
     const { employee_id, notes } = body;
     const closingNotes = notes || null;

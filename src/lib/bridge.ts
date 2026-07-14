@@ -97,13 +97,46 @@ export interface IngenicoResult {
   receipt?: string;
   // Legacy field kept for compatibility — same value as reference.
   transactionId?: string;
+  cashlessPeripheralId?: string | null;
+  cashlessOperationId?: string | null;
+  cashlessTransactionNumber?: string | null;
+  cashlessAmount?: number | null;
+  unknown?: boolean;
   error?: string;
 }
 
 // Frontend timeout must be longer than bridge (135s) and service (120s).
 const INGENICO_TIMEOUT_MS = 150_000;
 
-export async function chargeIngenico(amount: number, orderId?: string): Promise<IngenicoResult> {
+export async function prepareIngenicoTransaction(): Promise<IngenicoResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/prepare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: controller.signal,
+    });
+    return (await res.json()) as IngenicoResult;
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        (error as Error).name === "AbortError"
+          ? "Timeout creando la operacion de tarjeta"
+          : "No se pudo preparar la operacion de tarjeta",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function chargeIngenico(
+  amount: number,
+  orderId?: string,
+  transactionId?: string,
+): Promise<IngenicoResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
 
@@ -111,13 +144,18 @@ export async function chargeIngenico(amount: number, orderId?: string): Promise<
     const res = await fetch(`${BRIDGE_URL}/ingenico/charge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, orderId }),
+      body: JSON.stringify({ amount, orderId, transactionId }),
       signal: controller.signal,
     });
     return (await res.json()) as IngenicoResult;
   } catch (error) {
     if ((error as Error).name === "AbortError") {
-      return { success: false, error: "Timeout: el datáfono no respondió" };
+      return {
+        success: false,
+        unknown: true,
+        transactionId,
+        error: "Timeout: el datáfono no respondió",
+      };
     }
     return { success: false, error: "Error de conexión con el datáfono" };
   } finally {
@@ -132,7 +170,8 @@ export async function chargeIngenico(amount: number, orderId?: string): Promise<
 export async function refundIngenico(
   amount: number,
   originalReference: string,
-  orderId?: string
+  orderId?: string,
+  transactionId?: string,
 ): Promise<IngenicoResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
@@ -141,13 +180,18 @@ export async function refundIngenico(
     const res = await fetch(`${BRIDGE_URL}/ingenico/refund`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, orderId, originalReference }),
+      body: JSON.stringify({ amount, orderId, originalReference, transactionId }),
       signal: controller.signal,
     });
     return (await res.json()) as IngenicoResult;
   } catch (error) {
     if ((error as Error).name === "AbortError") {
-      return { success: false, error: "Timeout: el datáfono no respondió" };
+      return {
+        success: false,
+        unknown: true,
+        transactionId,
+        error: "Timeout: el datáfono no respondió",
+      };
     }
     return { success: false, error: "Error de conexión con el datáfono" };
   } finally {
@@ -478,6 +522,46 @@ export async function printCardReceipt(
     return (await res.json()) as { success: boolean; error?: string };
   } catch {
     return { success: false, error: "Error de conexión con la impresora" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function printRectifyingTicket(data: {
+  refund: {
+    rectifying_invoice_number: string | null;
+    amount: number;
+    total_base: number;
+    total_vat: number;
+    reason: string;
+    items: { product_name: string; qty: number; unit_price: number }[];
+  };
+  originalInvoiceNumber?: string;
+  orderNumber?: string;
+  date?: string;
+  business?: {
+    name: string;
+    trade_name: string;
+    nif: string;
+    address: string;
+    city: string;
+    postal_code: string;
+    province: string;
+    phone?: string;
+  };
+}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/printer/rectifying-ticket`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      signal: controller.signal,
+    });
+    return (await res.json()) as { success: boolean; error?: string };
+  } catch {
+    return { success: false, error: "Error de conexion con la impresora" };
   } finally {
     clearTimeout(timeout);
   }

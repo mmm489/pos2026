@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Order, Business } from "@/types/pos";
-import { queryIngenicoTransaction, printCardReceipt, printTicket, IngenicoResult } from "@/lib/bridge";
+import { Order, Business, Employee, Refund } from "@/types/pos";
+import { printCardReceipt, printKitchenTicket, printRectifyingTicket, printTicket, IngenicoResult } from "@/lib/bridge";
+import RefundModal from "@/components/pos/RefundModal";
 
 const CANCEL_REASONS = [
   { value: "client", label: "Petició del client" },
@@ -32,6 +33,18 @@ export default function AdminOrdersPage() {
   const [reprintingReceipt, setReprintingReceipt] = useState<{ id: number; copy: "merchant" | "customer" } | null>(null);
   const [reprintingTicketId, setReprintingTicketId] = useState<number | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [refundingOrder, setRefundingOrder] = useState<Order | null>(null);
+  const [refundAction, setRefundAction] = useState<{ id: number; action: string } | null>(null);
+  const [incidents, setIncidents] = useState<Array<{
+    id: number;
+    order_number: string;
+    total: number;
+    card_payment_status: string;
+    cashless_operation_id: string;
+    card_payment_error?: string | null;
+    created_at: string;
+  }>>([]);
 
   useEffect(() => {
     loadOrders();
@@ -39,7 +52,22 @@ export default function AdminOrdersPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((b) => b && setBusiness(b))
       .catch(() => {});
+    try {
+      const saved = localStorage.getItem("pos_employee");
+      if (saved) setEmployee(JSON.parse(saved));
+    } catch {}
+    loadIncidents();
   }, []);
+
+  const canLookup = employee?.role === "admin" || employee?.can_post_sale_lookup === true;
+  const canRefund = employee?.role === "admin" || employee?.can_refund_sales === true;
+
+  const loadIncidents = async () => {
+    try {
+      const response = await fetch("/api/pos/card-incidents");
+      if (response.ok) setIncidents(await response.json());
+    } catch {}
+  };
 
   const loadOrders = async () => {
     try {
@@ -56,13 +84,11 @@ export default function AdminOrdersPage() {
 
   const handleCancel = async () => {
     if (!cancellingId) return;
-    const order = orders.find((o) => o.id === cancellingId);
     setCancelLoading(true);
     setCancelError(null);
     const reason = CANCEL_REASONS.find((r) => r.value === cancelReason)?.label || cancelReason;
     const fullReason = cancelNotes ? `${reason}: ${cancelNotes}` : reason;
-    const shouldRefund =
-      refundCard && order?.payment_method === "card" && !!order?.card_reference;
+    const shouldRefund = false;
     try {
       const res = await fetch(`/api/pos/orders/${cancellingId}/cancel`, {
         method: "POST",
@@ -139,18 +165,122 @@ export default function AdminOrdersPage() {
   };
 
   const handleQuery = async (order: Order) => {
-    if (!order.card_reference) return;
+    if (!order.cashless_operation_id) return;
     setQueryingId(order.id);
-    const result = await queryIngenicoTransaction(
-      order.card_reference,
-      String(order.order_number || order.id)
-    );
+    const response = await fetch(`/api/pos/orders/${order.id}/card-query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const data = await response.json();
+    const result = (data.provider || { success: false, error: data.error }) as IngenicoResult;
     setQueryResults((prev) => {
       const next = new Map(prev);
       next.set(order.id, result);
       return next;
     });
     setQueryingId(null);
+  };
+
+  const handleIncident = async (incidentId: number, reconcile: boolean) => {
+    setQueryingId(incidentId);
+    const response = await fetch(`/api/pos/orders/${incidentId}/card-query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reconcile }),
+    });
+    const data = await response.json();
+    if (!response.ok) window.alert(data.error || "No se ha podido comprobar el pago");
+    else if (data.reconciled) {
+      if (!data.reconciled.was_parked && Array.isArray(data.reconciled.items)) {
+        const kitchenResult = await printKitchenTicket({
+          orderNumber: data.reconciled.order_number,
+          items: data.reconciled.items.map((item: NonNullable<Order["items"]>[number]) => ({
+            name: item.product_name || "",
+            qty: Number(item.qty),
+            notes: item.notes || undefined,
+          })),
+          tableNumber: data.reconciled.table_number || undefined,
+          serviceType: data.reconciled.service_type || "dine_in",
+          date: new Date(data.reconciled.created_at).toLocaleString("es-ES"),
+        });
+        if (!kitchenResult.success) {
+          window.alert(`Pago recuperado, pero cocina no ha impreso: ${kitchenResult.error || "error de impresora"}`);
+        }
+      }
+      window.alert("Pago aprobado y comanda regularizada.");
+      await Promise.all([loadOrders(), loadIncidents()]);
+    } else {
+      window.alert(data.provider?.success ? "Comercia confirma el pago. Puedes regularizarlo." : data.provider?.error || "Pago no confirmado.");
+    }
+    setQueryingId(null);
+  };
+
+  const loadFullRefund = async (orderId: number, refundId: number) => {
+    const response = await fetch(`/api/pos/orders/${orderId}/refunds`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se ha podido cargar la devolucion");
+    const refund = (data as Refund[]).find((entry) => Number(entry.id) === refundId);
+    if (!refund) throw new Error("Devolucion no encontrada");
+    return refund;
+  };
+
+  const handleRefundPrint = async (
+    order: Order,
+    refundId: number,
+    action: "rectifying" | "customer" | "merchant",
+  ) => {
+    setRefundAction({ id: refundId, action });
+    try {
+      const refund = await loadFullRefund(order.id, refundId);
+      if (action === "rectifying") {
+        if (!refund.rectifying_invoice_number || !refund.items) throw new Error("La rectificativa aun no esta disponible");
+        await printRectifyingTicket({
+          refund: {
+            rectifying_invoice_number: refund.rectifying_invoice_number,
+            amount: Number(refund.amount),
+            total_base: Number(refund.total_base),
+            total_vat: Number(refund.total_vat),
+            reason: refund.reason,
+            items: refund.items.map((item) => ({
+              product_name: item.product_name,
+              qty: Number(item.qty),
+              unit_price: Number(item.unit_price),
+            })),
+          },
+          originalInvoiceNumber: order.invoice_number,
+          orderNumber: order.order_number,
+          date: new Date(refund.completed_at || refund.requested_at).toLocaleString("es-ES"),
+          business: business || undefined,
+        });
+      } else {
+        if (!refund.receipt_text) throw new Error("El justificante bancario no esta disponible");
+        await printCardReceipt(
+          refund.receipt_text,
+          action,
+          refund.rectifying_invoice_number || order.order_number,
+        );
+      }
+    } catch (cause) {
+      window.alert((cause as Error).message);
+    } finally {
+      setRefundAction(null);
+    }
+  };
+
+  const handleRefundQuery = async (orderId: number, refundId: number) => {
+    setRefundAction({ id: refundId, action: "query" });
+    try {
+      const response = await fetch(`/api/pos/refunds/${refundId}/query`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "No se ha podido comprobar la devolucion");
+      window.alert(data.provider?.success ? "Comercia confirma la devolucion." : data.provider?.error || "La devolucion no consta aprobada.");
+      await loadOrders();
+    } catch (cause) {
+      window.alert((cause as Error).message);
+    } finally {
+      setRefundAction(null);
+    }
   };
 
   const filtered = orders.filter((o) => {
@@ -273,6 +403,29 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
+        {canLookup && incidents.length > 0 && (
+          <section className="mb-6 overflow-hidden rounded-2xl border border-[#ead39b] bg-[#fff8df]">
+            <div className="border-b border-[#ead39b] px-4 py-3">
+              <h2 className="font-semibold text-[#87620d]">Incidencias de tarjeta ({incidents.length})</h2>
+              <p className="text-sm text-[#87620d]">Comprueba estas operaciones antes de volver a cobrar.</p>
+            </div>
+            <div className="divide-y divide-[#ead39b]">
+              {incidents.map((incident) => (
+                <div key={incident.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">{incident.order_number} · {Number(incident.total).toFixed(2)} EUR</p>
+                    <p className="truncate text-xs text-[#87620d]">{incident.card_payment_status} · {incident.cashless_operation_id}</p>
+                  </div>
+                  <button onClick={() => handleIncident(incident.id, false)} disabled={queryingId === incident.id} className="rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm font-semibold">Comprobar</button>
+                  {incident.card_payment_status !== "failed" && (
+                    <button onClick={() => handleIncident(incident.id, true)} disabled={queryingId === incident.id} className="rounded-xl bg-[#2e9e5b] px-3 py-2 text-sm font-semibold text-white">Comprobar y regularizar</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Hourly breakdown */}
         {byHour.size > 0 && (
           <div className="mb-6 rounded-2xl border border-[#ddd4c4] bg-white p-4">
@@ -384,7 +537,7 @@ export default function AdminOrdersPage() {
                     <span className={`text-lg font-semibold ${order.status === "cancelled" ? "text-[#8a8276] line-through" : "text-[#241f1c]"}`}>
                       {Number(order.total).toFixed(2)}€
                     </span>
-                    {order.status !== "cancelled" && (
+                    {order.status !== "cancelled" && !order.invoice_number && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -425,7 +578,7 @@ export default function AdminOrdersPage() {
                     {order.invoice_number && (
                       <p className="mb-2 text-xs text-[#7b7469]">Factura: {order.invoice_number}</p>
                     )}
-                    {order.payment_method === "card" && order.card_reference && (
+                    {order.payment_method === "card" && order.cashless_operation_id && (
                       <div className="mb-3">
                         <div className="flex items-center justify-between gap-3 flex-wrap">
                           <p className="text-xs text-[#8a8276]">
@@ -433,7 +586,7 @@ export default function AdminOrdersPage() {
                             {order.card_authorization && ` · auth ${order.card_authorization}`}
                           </p>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {order.card_receipt_text && (
+                            {canLookup && order.card_receipt_text && (
                               <>
                                 <button
                                   onClick={(e) => {
@@ -467,7 +620,7 @@ export default function AdminOrdersPage() {
                                 </button>
                               </>
                             )}
-                            <button
+                            {canLookup && <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleQuery(order);
@@ -475,8 +628,19 @@ export default function AdminOrdersPage() {
                               disabled={queryingId === order.id}
                               className="rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] px-2.5 py-1 text-xs font-medium text-[#275a8f] transition-colors active:bg-[#d4e7f8] disabled:opacity-50"
                             >
-                              {queryingId === order.id ? "Consultant..." : "Consultar al datàfon"}
-                            </button>
+                              {queryingId === order.id ? "Comprobando..." : "Comprobar pago"}
+                            </button>}
+                            {canRefund && order.invoice_number && Number(order.refunded_amount || 0) < Number(order.total) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setRefundingOrder(order);
+                                }}
+                                className="rounded-xl bg-[#c4423a] px-2.5 py-1 text-xs font-semibold text-white"
+                              >
+                                Devolver productos
+                              </button>
+                            )}
                           </div>
                         </div>
                         {queryResults.has(order.id) && (() => {
@@ -519,7 +683,56 @@ export default function AdminOrdersPage() {
                         })()}
                       </div>
                     )}
-                    {order.items && order.items.length > 0 && (
+                    {order.refunds && order.refunds.length > 0 && (
+                      <div className="mb-3 rounded-xl border border-[#ddd4c4] bg-white px-3 py-2">
+                        <p className="mb-1 text-xs font-semibold uppercase text-[#8a8276]">Devoluciones</p>
+                        {order.refunds.map((refund) => (
+                          <div key={refund.id} className="border-t border-[#eee4d6] py-2 text-sm first:border-0">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>{refund.rectifying_invoice_number || "Pendiente"} · {refund.reason}</span>
+                              <span className={refund.status === "completed" ? "font-semibold text-[#c4423a]" : "font-semibold text-[#87620d]"}>
+                                -{Number(refund.amount).toFixed(2)} EUR · {refund.status}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                              {refund.status === "completed" && canLookup && (
+                                <>
+                                  <button
+                                    onClick={(event) => { event.stopPropagation(); handleRefundPrint(order, refund.id, "rectifying"); }}
+                                    disabled={Boolean(refundAction)}
+                                    className="rounded-xl border border-[#d4cbbb] bg-white px-2.5 py-1 text-xs font-medium text-[#6f665c] disabled:opacity-50"
+                                  >
+                                    {refundAction?.id === refund.id && refundAction.action === "rectifying" ? "Imprimiendo..." : "Rectificativa"}
+                                  </button>
+                                  {refund.receipt_text && (
+                                    <>
+                                      <button
+                                        onClick={(event) => { event.stopPropagation(); handleRefundPrint(order, refund.id, "customer"); }}
+                                        disabled={Boolean(refundAction)}
+                                        className="rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] px-2.5 py-1 text-xs font-medium text-[#275a8f] disabled:opacity-50"
+                                      >Cliente</button>
+                                      <button
+                                        onClick={(event) => { event.stopPropagation(); handleRefundPrint(order, refund.id, "merchant"); }}
+                                        disabled={Boolean(refundAction)}
+                                        className="rounded-xl border border-[#d4cbbb] bg-white px-2.5 py-1 text-xs font-medium text-[#6f665c] disabled:opacity-50"
+                                      >Comercio</button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                              {refund.status === "pending_verification" && canLookup && (
+                                <button
+                                  onClick={(event) => { event.stopPropagation(); handleRefundQuery(order.id, refund.id); }}
+                                  disabled={Boolean(refundAction)}
+                                  className="rounded-xl border border-[#ead39b] bg-[#fbf0cc] px-2.5 py-1 text-xs font-semibold text-[#87620d] disabled:opacity-50"
+                                >{refundAction?.id === refund.id ? "Comprobando..." : "Comprobar devolucion"}</button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {canLookup && order.items && order.items.length > 0 && (
                       <div className="flex justify-end mb-2">
                         <button
                           onClick={(e) => {
@@ -630,7 +843,7 @@ export default function AdminOrdersPage() {
                 className="mb-4 h-20 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
               />
 
-              {isCard && hasCardRef && (
+              {false && isCard && hasCardRef && (
                 <div className="mb-4 rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] p-3">
                   <label className="flex cursor-pointer items-start gap-2">
                     <input
@@ -698,6 +911,14 @@ export default function AdminOrdersPage() {
           </div>
         );
       })()}
+      {refundingOrder && (
+        <RefundModal
+          order={refundingOrder}
+          business={business}
+          onClose={() => setRefundingOrder(null)}
+          onCompleted={loadOrders}
+        />
+      )}
     </div>
   );
 }

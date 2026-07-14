@@ -6,7 +6,9 @@ async function forwardToComercia(operation, body) {
   let data;
 
   try {
-    if (operation === "charge") {
+    if (operation === "prepare") {
+      data = await comercia.createTransaction();
+    } else if (operation === "charge") {
       data = await comercia.charge(body);
     } else if (operation === "refund" || operation === "cancel") {
       data = await comercia.refund({ ...body, operation });
@@ -37,19 +39,19 @@ async function forwardToComercia(operation, body) {
 }
 
 async function handleIngenicoCharge(req, res) {
-  const { amount, orderId } = req.body;
+  const { amount, orderId, transactionId } = req.body;
   if (!amount || amount <= 0) {
     return res.status(400).json({ success: false, error: "Importe invalido" });
   }
 
   console.log(`[Comercia] Cobrament ${amount} EUR (orderId: ${orderId || "-"})`);
-  const data = await forwardToComercia("charge", { amount, orderId });
+  const data = await forwardToComercia("charge", { amount, orderId, transactionId });
   console.log("[Comercia] Resposta charge:", data);
   return res.json(data);
 }
 
 async function handleIngenicoRefund(req, res) {
-  const { amount, orderId, originalReference } = req.body;
+  const { amount, orderId, originalReference, transactionId } = req.body;
   if (!amount || amount <= 0) {
     return res.status(400).json({ success: false, error: "Importe invalido" });
   }
@@ -61,7 +63,7 @@ async function handleIngenicoRefund(req, res) {
   }
 
   console.log(`[Comercia] Devolucion ${amount} EUR (ref: ${originalReference})`);
-  const data = await forwardToComercia("refund", { amount, orderId, originalReference });
+  const data = await forwardToComercia("refund", { amount, orderId, originalReference, transactionId });
   console.log("[Comercia] Resposta refund:", data);
   return res.json(data);
 }
@@ -105,6 +107,11 @@ async function handleIngenicoAbort(_req, res) {
   return res.json(data);
 }
 
+async function handleIngenicoPrepare(_req, res) {
+  const data = await forwardToComercia("prepare", {});
+  return res.json(data);
+}
+
 async function handleCardStatus(_req, res) {
   return res.json(await comercia.status());
 }
@@ -115,6 +122,7 @@ async function handleCardHealth(_req, res) {
 
 module.exports = {
   handleIngenicoCharge,
+  handleIngenicoPrepare,
   handleIngenicoRefund,
   handleIngenicoCancel,
   handleIngenicoQuery,

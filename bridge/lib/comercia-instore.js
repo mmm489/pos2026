@@ -24,9 +24,6 @@ function getConfig() {
     printReceipt: Number(process.env.COMERCIA_PRINT_RECEIPT ?? 1),
     timeoutMs: Number(process.env.COMERCIA_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
     allowSelfSigned,
-    simulator: isTruthy(process.env.COMERCIA_SIMULATOR),
-    simulatorResult: String(process.env.COMERCIA_SIMULATOR_RESULT || "success").toLowerCase(),
-    simulatorDelayMs: Math.max(0, Number(process.env.COMERCIA_SIMULATOR_DELAY_MS || 400)),
   };
 }
 
@@ -87,107 +84,70 @@ function responseError(response) {
   );
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function receiptField(value, maxLength = 80) {
+  if (value === undefined || value === null || value === "") return undefined;
+  return String(value).replace(/[\r\n]+/g, " ").trim().slice(0, maxLength) || undefined;
 }
 
-function simulatorReference(prefix = "SIM") {
-  return `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${Math.random()
-    .toString(36)
-    .slice(2, 8)
-    .toUpperCase()}`;
+function maskedCardNumber(value) {
+  const card = receiptField(value, 64);
+  if (!card) return undefined;
+  const digits = card.replace(/\D/g, "");
+  if (digits.length < 4) return undefined;
+  return `**** **** **** ${digits.slice(-4)}`;
 }
 
-function simulatorReceipt({ amount, reference, operation = "sale" }) {
-  const label = operation === "refund" ? "DEVOLUCION SIMULADA" : "VENTA SIMULADA";
-  return [
-    "COMERCIA INSTORE - SIMULADOR",
-    label,
-    `IMPORTE: ${Number(amount || 0).toFixed(2)} EUR`,
-    `REF: ${reference}`,
-    `FECHA: ${new Date().toLocaleString("es-ES")}`,
-    "SIN VALOR BANCARIO",
-  ].join("\n");
-}
+function buildComerciaReceipt({ raw, additionalData, txData, reference, authorizationCode, amountMinor, operation }) {
+  const merchantName = receiptField(
+    txData?.fucName || txData?.merchantName || additionalData?.merchantName
+  );
+  const merchantId = receiptField(
+    txData?.fucId || txData?.fuc || txData?.fucNumber || txData?.merchantId || additionalData?.merchantId
+  );
+  const terminal = receiptField(
+    txData?.terminal || txData?.terminalId || txData?.acquirerTerminalId
+  );
+  const cardType = receiptField(
+    txData?.cardType || txData?.cardBrand || txData?.network || txData?.appLabel
+  );
+  const card = maskedCardNumber(
+    txData?.cardClient || txData?.card || txData?.cardNumber
+  );
+  const transactionDate = receiptField(
+    txData?.transactionDate || txData?.date || txData?.operationDate
+  );
+  const transactionTime = receiptField(
+    txData?.transactionTime || txData?.time || txData?.operationTime
+  );
+  const transactionType = String(
+    txData?.type || txData?.transactionType || raw?.operation || operation || ""
+  ).toUpperCase();
+  const operationLabel = transactionType.includes("REFUND") || transactionType.includes("DEVOL")
+    ? "DEVOLUCION"
+    : "VENTA";
+  const parsedAmount = Number(amountMinor);
+  const amount = Number.isFinite(parsedAmount)
+    ? `${(parsedAmount / 100).toFixed(2)} EUR`
+    : undefined;
 
-async function simulatorResponse({ amount, orderId, originalReference, operation = "sale" }) {
-  const config = getConfig();
-  await sleep(config.simulatorDelayMs);
-
-  const normalizedResult = ["success", "ok", "approved", "accepted"].includes(config.simulatorResult)
-    ? "success"
-    : ["cancelled", "canceled", "cancel"].includes(config.simulatorResult)
-    ? "cancelled"
-    : "failed";
-  const reference = originalReference || simulatorReference(operation === "refund" ? "SIM-REFUND" : "SIM-CARD");
-  const transactionId = simulatorReference("SIM-TX");
-  const amountNumber = Number(amount || 0);
-
-  if (normalizedResult === "success") {
-    return {
-      success: true,
-      provider: "comercia",
-      simulated: true,
-      operation,
-      reference,
-      transactionId,
-      responseCode: "00",
-      authorizationCode: "SIMOK",
-      result: "SIMULATED_SUCCESS",
-      cashlessOperationId: transactionId,
-      cashlessTransactionNumber: reference,
-      cashlessAmount: amountNumber,
-      cashlessPeripheralId: "SIMULATOR",
-      receipt: simulatorReceipt({ amount: amountNumber, reference, operation }),
-      raw: {
-        simulator: true,
-        result: "SUCCESS",
-        orderId,
-        amount: Math.round(amountNumber * 100),
-        reference,
-      },
-    };
+  const lines = [];
+  if (merchantName) lines.push(merchantName);
+  if (merchantId) lines.push(`COMERCIO: ${merchantId}`);
+  if (terminal) lines.push(`TERMINAL: ${terminal}`);
+  lines.push(operationLabel);
+  if (transactionDate || transactionTime) {
+    lines.push(`FECHA: ${[transactionDate, transactionTime].filter(Boolean).join(" ")}`);
   }
+  if (amount) lines.push(`IMPORTE: ${amount}`);
+  if (cardType) lines.push(`TARJETA: ${cardType}`);
+  if (card) lines.push(`NUMERO: ${card}`);
+  if (authorizationCode) lines.push(`AUTORIZACION: ${receiptField(authorizationCode, 24)}`);
+  if (reference) lines.push(`OPERACION: ${receiptField(reference, 40)}`);
+  if (txData?.isContactless === true) lines.push("LECTURA: CONTACTLESS");
+  if (txData?.isPinAuthenticated === true) lines.push("VERIFICACION: PIN");
+  lines.push("OPERACION ACEPTADA");
 
-  if (normalizedResult === "cancelled") {
-    return {
-      success: false,
-      provider: "comercia",
-      simulated: true,
-      operation,
-      cancelled: true,
-      reference,
-      transactionId,
-      result: "SIMULATED_CANCELLED",
-      error: "Pago simulado cancelado por el usuario",
-      raw: {
-        simulator: true,
-        result: "CANCELLED",
-        orderId,
-        amount: Math.round(amountNumber * 100),
-        reference,
-      },
-    };
-  }
-
-  return {
-    success: false,
-    provider: "comercia",
-    simulated: true,
-    operation,
-    reference,
-    transactionId,
-    responseCode: "99",
-    result: "SIMULATED_FAILED",
-    error: "Pago simulado rechazado",
-    raw: {
-      simulator: true,
-      result: "FAILED",
-      orderId,
-      amount: Math.round(amountNumber * 100),
-      reference,
-    },
-  };
+  return lines.join("\n");
 }
 
 function buildHeaders(config, hasBody = false) {
@@ -294,7 +254,7 @@ function baseOperationBody({ transactionId, amountMinor, orderId, originalRefere
   return body;
 }
 
-function normalizePaymentResponse(raw, transactionId, fallbackReference) {
+function normalizePaymentResponse(raw, transactionId, fallbackReference, operation = "sale") {
   const additionalData = getAdditionalData(raw);
   const txData = getTransactionData(raw);
   const reference =
@@ -314,11 +274,23 @@ function normalizePaymentResponse(raw, transactionId, fallbackReference) {
     null;
   const responseCode = raw?.responseCode || txData?.responseCode || txData?.actionCode || raw?.status || null;
   const amountMinor = Number(raw?.amount ?? txData?.amount);
+  const providerReceipt = raw?.receipt || additionalData?.receipt || txData?.receipt;
+  const receipt = providerReceipt || (accepted(raw)
+    ? buildComerciaReceipt({
+        raw,
+        additionalData,
+        txData,
+        reference,
+        authorizationCode,
+        amountMinor,
+        operation,
+      })
+    : undefined);
 
   return {
     success: accepted(raw),
     provider: "comercia",
-    operation: "sale",
+    operation,
     reference: reference ? String(reference) : undefined,
     transactionId,
     responseCode: responseCode ? String(responseCode) : undefined,
@@ -328,19 +300,20 @@ function normalizePaymentResponse(raw, transactionId, fallbackReference) {
     cashlessTransactionNumber: reference ? String(reference) : undefined,
     cashlessAmount: Number.isFinite(amountMinor) ? amountMinor / 100 : undefined,
     cashlessPeripheralId: raw?.deviceId || txData?.deviceId || undefined,
-    receipt: raw?.receipt || additionalData?.receipt || txData?.receipt || undefined,
+    receipt: receipt || undefined,
     additionalData,
     raw,
     error: accepted(raw) ? undefined : responseError(raw),
   };
 }
 
-async function charge({ amount, orderId }) {
+async function charge({ amount, orderId, transactionId }) {
   const amountMinor = amountToMinorUnits(amount);
   if (!amountMinor) return { success: false, error: "Importe invalido" };
-  if (getConfig().simulator) return simulatorResponse({ amount, orderId, operation: "sale" });
 
-  const tx = await createTransaction();
+  const tx = transactionId
+    ? { success: true, transactionId: String(transactionId) }
+    : await createTransaction();
   if (!tx.success) return { success: false, error: tx.error, raw: tx.raw };
 
   const body = baseOperationBody({ transactionId: tx.transactionId, amountMinor, orderId });
@@ -357,13 +330,14 @@ async function charge({ amount, orderId }) {
   return normalizePaymentResponse(response.data || {}, tx.transactionId);
 }
 
-async function refund({ amount, orderId, originalReference, operation = "refund" }) {
+async function refund({ amount, orderId, originalReference, operation = "refund", transactionId }) {
   const amountMinor = amountToMinorUnits(amount);
   if (!amountMinor) return { success: false, error: "Importe invalido" };
   if (!originalReference) return { success: false, error: "Falta transactionNumber original" };
-  if (getConfig().simulator) return simulatorResponse({ amount, orderId, originalReference, operation });
 
-  const tx = await createTransaction();
+  const tx = transactionId
+    ? { success: true, transactionId: String(transactionId) }
+    : await createTransaction();
   if (!tx.success) return { success: false, error: tx.error, raw: tx.raw };
 
   const body = baseOperationBody({
@@ -383,16 +357,13 @@ async function refund({ amount, orderId, originalReference, operation = "refund"
   }
 
   return {
-    ...normalizePaymentResponse(response.data || {}, tx.transactionId, originalReference),
+    ...normalizePaymentResponse(response.data || {}, tx.transactionId, originalReference, "refund"),
     operation,
   };
 }
 
 async function query({ reference }) {
   if (!reference) return { success: false, error: "Falta reference" };
-  if (getConfig().simulator) {
-    return simulatorResponse({ amount: 0, originalReference: reference, operation: "query" });
-  }
 
   const config = getConfig();
   const body = { transactionId: String(reference) };
@@ -410,10 +381,6 @@ async function query({ reference }) {
 }
 
 async function abort() {
-  if (getConfig().simulator) {
-    return { success: true, cancelled: true, simulated: true, raw: { simulator: true, result: "CANCELLED" } };
-  }
-
   const config = getConfig();
   const body = { paymentApp: config.paymentApp };
   if (config.deviceId) body.deviceId = config.deviceId;
@@ -430,16 +397,6 @@ async function abort() {
 }
 
 async function health() {
-  if (getConfig().simulator) {
-    return {
-      status: "ok",
-      provider: "comercia",
-      simulated: true,
-      pinpadInfo: "Comercia InStore SIMULADOR",
-      raw: { simulator: true, result: "OK" },
-    };
-  }
-
   const response = await requestJson("/getVersion", { timeoutMs: 3_000 });
   if (!response.ok) {
     return {
@@ -461,6 +418,7 @@ async function status() {
 }
 
 module.exports = {
+  createTransaction,
   charge,
   refund,
   query,

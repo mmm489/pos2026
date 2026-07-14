@@ -49,6 +49,8 @@ const TABLES = [
       "next_invoice_number",
       "cookies_invoice_series",
       "next_cookies_invoice_number",
+      "rectifying_invoice_series",
+      "next_rectifying_invoice_number",
       "next_z_number",
     ],
     orderBy: "id",
@@ -63,6 +65,8 @@ const TABLES = [
       "can_access_cashlogy",
       "can_access_supplier_payments",
       "can_access_products",
+      "can_post_sale_lookup",
+      "can_refund_sales",
     ],
     orderBy: "id",
   },
@@ -118,12 +122,15 @@ const TABLES = [
       "cashless_operation_id",
       "cashless_transaction_number",
       "cashless_amount",
+      "card_payment_status",
+      "payment_attempt_id",
+      "card_payment_error",
       "refund_reference",
       "refund_at",
       "synced",
     ],
     orderBy: "id",
-    where: "payment_method <> 'parked'",
+    where: "payment_method <> 'parked' AND (payment_method <> 'card' OR invoice_number IS NOT NULL)",
   },
   {
     name: "order_items",
@@ -144,6 +151,7 @@ const TABLES = [
       FROM pos.orders o
       WHERE o.id = pos.order_items.order_id
         AND o.payment_method <> 'parked'
+        AND (o.payment_method <> 'card' OR o.invoice_number IS NOT NULL)
     )`,
   },
   {
@@ -155,6 +163,74 @@ const TABLES = [
       FROM pos.orders o
       WHERE o.id = pos.kds_events.order_id
         AND o.payment_method <> 'parked'
+        AND (o.payment_method <> 'card' OR o.invoice_number IS NOT NULL)
+    )`,
+  },
+  {
+    name: "refunds",
+    columns: [
+      "id",
+      "order_id",
+      "client_request_id",
+      "rectifying_invoice_number",
+      "status",
+      "amount",
+      "total_base",
+      "total_vat",
+      "reason",
+      "employee_id",
+      "original_transaction_number",
+      "provider_transaction_id",
+      "provider_reference",
+      "provider_authorization",
+      "provider_response_code",
+      "receipt_text",
+      "error_message",
+      "requested_at",
+      "completed_at",
+      "updated_at",
+      "synced",
+    ],
+    orderBy: "id",
+    optional: true,
+  },
+  {
+    name: "refund_items",
+    columns: [
+      "id",
+      "refund_id",
+      "order_item_id",
+      "product_id",
+      "product_name",
+      "qty",
+      "unit_price",
+      "vat_rate",
+      "notes",
+    ],
+    orderBy: "id",
+    optional: true,
+  },
+  {
+    name: "post_sale_audit",
+    columns: [
+      "id",
+      "order_id",
+      "refund_id",
+      "employee_id",
+      "action",
+      "details",
+      "created_at",
+      "synced",
+    ],
+    jsonColumns: ["details"],
+    orderBy: "id",
+    optional: true,
+    where: `order_id IS NULL OR EXISTS (
+      SELECT 1
+      FROM pos.orders o
+      WHERE o.id = pos.post_sale_audit.order_id
+        AND o.payment_method <> 'parked'
+        AND (o.payment_method <> 'card' OR o.invoice_number IS NOT NULL)
     )`,
   },
   {
@@ -289,6 +365,13 @@ const TABLES = [
     jsonColumns: ["request", "response"],
     orderBy: "id",
     optional: true,
+    where: `order_id IS NULL OR EXISTS (
+      SELECT 1
+      FROM pos.orders o
+      WHERE o.id = pos.card_transactions.order_id
+        AND o.payment_method <> 'parked'
+        AND (o.payment_method <> 'card' OR o.invoice_number IS NOT NULL)
+    )`,
   },
 ];
 
@@ -385,10 +468,20 @@ async function ensureEmployeeAccessSchema(db) {
     ADD COLUMN IF NOT EXISTS can_access_products BOOLEAN NOT NULL DEFAULT false
   `);
   await db.query(`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_post_sale_lookup BOOLEAN NOT NULL DEFAULT true
+  `);
+  await db.query(`
+    ALTER TABLE pos.employees
+    ADD COLUMN IF NOT EXISTS can_refund_sales BOOLEAN NOT NULL DEFAULT false
+  `);
+  await db.query(`
     UPDATE pos.employees
     SET can_access_products = true,
         can_access_cashlogy = true,
-        can_access_supplier_payments = true
+        can_access_supplier_payments = true,
+        can_post_sale_lookup = true,
+        can_refund_sales = true
     WHERE role = 'admin'
   `);
 }
@@ -420,10 +513,21 @@ async function ensureOrderBusinessUnitSchema(db) {
     ALTER TABLE pos.business
     ADD COLUMN IF NOT EXISTS next_cookies_invoice_number INTEGER NOT NULL DEFAULT 1
   `);
+  await db.query(`
+    ALTER TABLE pos.business
+    ADD COLUMN IF NOT EXISTS rectifying_invoice_series VARCHAR(10) NOT NULL DEFAULT 'R'
+  `);
+  await db.query(`
+    ALTER TABLE pos.business
+    ADD COLUMN IF NOT EXISTS next_rectifying_invoice_number INTEGER NOT NULL DEFAULT 1
+  `);
   await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_peripheral_id VARCHAR(120)`);
   await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_operation_id VARCHAR(120)`);
   await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_transaction_number VARCHAR(120)`);
   await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_amount NUMERIC(10,2)`);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS card_payment_status VARCHAR(24) NOT NULL DEFAULT 'not_applicable'`);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS payment_attempt_id UUID`);
+  await db.query(`ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS card_payment_error TEXT`);
 }
 
 async function ensureLocalModifierSchema(local) {
@@ -828,6 +932,10 @@ function employeeAccessFromPayload(payload, role) {
         : Boolean(payload.can_access_supplier_payments),
     canAccessProducts:
       payload.can_access_products == null ? isAdmin : Boolean(payload.can_access_products),
+    canPostSaleLookup:
+      payload.can_post_sale_lookup == null ? true : Boolean(payload.can_post_sale_lookup),
+    canRefundSales:
+      payload.can_refund_sales == null ? isAdmin : Boolean(payload.can_refund_sales),
   };
 }
 
@@ -866,10 +974,11 @@ async function applyEmployeeChange(local, change) {
     const pin = cleanEmployeePin(payload.pin, true);
     const result = await local.query(
       `INSERT INTO pos.employees (
-         name, pin, role, active,
-         can_access_cashlogy, can_access_supplier_payments, can_access_products
+       name, pin, role, active,
+         can_access_cashlogy, can_access_supplier_payments, can_access_products,
+         can_post_sale_lookup, can_refund_sales
        )
-       VALUES ($1, $2, $3, TRUE, $4, $5, $6)
+       VALUES ($1, $2, $3, TRUE, $4, $5, $6, $7, $8)
        RETURNING id`,
       [
         name,
@@ -878,6 +987,8 @@ async function applyEmployeeChange(local, change) {
         access.canAccessCashlogy,
         access.canAccessSupplierPayments,
         access.canAccessProducts,
+        access.canPostSaleLookup,
+        access.canRefundSales,
       ],
     );
     return Number(result.rows[0].id);
@@ -899,8 +1010,10 @@ async function applyEmployeeChange(local, change) {
            pin = COALESCE($3, pin),
            can_access_cashlogy = $4,
            can_access_supplier_payments = $5,
-           can_access_products = $6
-       WHERE id = $7
+           can_access_products = $6,
+           can_post_sale_lookup = $7,
+           can_refund_sales = $8
+       WHERE id = $9
        RETURNING id`,
       [
         name,
@@ -909,6 +1022,8 @@ async function applyEmployeeChange(local, change) {
         access.canAccessCashlogy,
         access.canAccessSupplierPayments,
         access.canAccessProducts,
+        access.canPostSaleLookup,
+        access.canRefundSales,
         id,
       ],
     );
@@ -1014,6 +1129,26 @@ async function deleteCloudParkedOrders(cloud) {
   return deleted;
 }
 
+async function deleteCloudNonFiscalCardDrafts(cloud) {
+  const predicate = `payment_method = 'card' AND invoice_number IS NULL`;
+  await cloud.query(
+    `DELETE FROM pos.post_sale_audit WHERE order_id IN (SELECT id FROM pos.orders WHERE ${predicate})`,
+  );
+  await cloud.query(
+    `DELETE FROM pos.card_transactions WHERE order_id IN (SELECT id FROM pos.orders WHERE ${predicate})`,
+  );
+  await cloud.query(
+    `DELETE FROM pos.kds_events WHERE order_id IN (SELECT id FROM pos.orders WHERE ${predicate})`,
+  );
+  await cloud.query(
+    `DELETE FROM pos.order_items WHERE order_id IN (SELECT id FROM pos.orders WHERE ${predicate})`,
+  );
+  const result = await cloud.query(`DELETE FROM pos.orders WHERE ${predicate}`);
+  const deleted = result.rowCount || 0;
+  if (deleted > 0) log(`orders: ${deleted} intentos de tarjeta no fiscales retirados del dashboard cloud`);
+  return deleted;
+}
+
 async function upsertBatch(cloud, table, rows) {
   if (!rows.length) return 0;
 
@@ -1101,6 +1236,7 @@ async function runSync() {
     await ensureEmployeeAccessSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
     counts.cloud_parked_orders_deleted = await deleteCloudParkedOrders(cloud);
+    counts.cloud_non_fiscal_card_drafts_deleted = await deleteCloudNonFiscalCardDrafts(cloud);
 
     if (cloud.supportsTransactions) await cloud.query("BEGIN");
     for (const table of TABLES) {

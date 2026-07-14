@@ -810,6 +810,67 @@ async function handlePrintCardReceipt(req, res) {
   }
 }
 
+async function handlePrintRectifyingTicket(req, res) {
+  const { refund, originalInvoiceNumber, orderNumber, business, date } = req.body || {};
+  if (!refund?.rectifying_invoice_number || !Array.isArray(refund.items)) {
+    return res.status(400).json({ success: false, error: "Faltan datos de la factura rectificativa" });
+  }
+  const biz = business || {};
+  try {
+    const printer = createReceiptPrinter();
+    const isConnected = isReceiptWindowsPrinter() || await printer.isPrinterConnected();
+    printer.alignCenter();
+    printer.setTextSize(1, 1);
+    printer.bold(true);
+    printer.println(biz.trade_name || "HI CREAM");
+    printer.bold(false);
+    printer.setTextNormal();
+    printer.println(biz.name || "APOLO HOLDINGS 2020, S.L.U.");
+    printer.println(`NIF: ${biz.nif || ""}`);
+    printer.println(biz.address || "");
+    printer.println(`${biz.postal_code || ""} ${biz.city || ""} (${biz.province || ""})`);
+    if (biz.phone) printer.println(`Tel: ${biz.phone}`);
+    printer.drawLine();
+    printer.bold(true);
+    printer.println("FACTURA RECTIFICATIVA");
+    printer.bold(false);
+    printer.println(`N.: ${refund.rectifying_invoice_number}`);
+    if (originalInvoiceNumber) printer.println(`Rectifica: ${originalInvoiceNumber}`);
+    if (orderNumber) printer.println(`Pedido original: ${orderNumber}`);
+    printer.println(date || new Date().toLocaleString("es-ES"));
+    printer.drawLine();
+    printer.alignLeft();
+    for (const item of refund.items) {
+      const qty = Number(item.qty || 0);
+      const unit = Number(item.unit_price || 0);
+      printer.println(item.product_name || "Producto");
+      printer.println(rightAlign(`  -${qty} x ${unit.toFixed(2)}`, `-${(qty * unit).toFixed(2)} EUR`));
+    }
+    printer.drawLine();
+    printer.println(rightAlign("Base imponible:", `-${Number(refund.total_base).toFixed(2)} EUR`));
+    printer.println(rightAlign("IVA:", `-${Number(refund.total_vat).toFixed(2)} EUR`));
+    printer.bold(true);
+    printer.println(rightAlign("TOTAL DEVUELTO:", `-${Number(refund.amount).toFixed(2)} EUR`));
+    printer.bold(false);
+    printer.drawLine();
+    printer.println(`Motivo: ${refund.reason || "Devolucion"}`);
+    printer.alignCenter();
+    printer.println("Documento rectificativo");
+    printer.newLine();
+    printer.cut();
+    if (isReceiptWindowsPrinter()) {
+      await printRawBufferToWindowsPrinter(getReceiptPrinterName(), printer.getBuffer());
+    } else if (isConnected) {
+      await printer.execute();
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[Printer rectifying] Error:", err.message);
+    logPrintError("rectifying", { orderNumber, total: refund.amount, items: refund.items }, err);
+    return res.json({ success: false, error: err.message });
+  }
+}
+
 async function handlePrintZReport(req, res) {
   const c = req.body || {};
   if (!c.z_label || c.total_sales === undefined) {
@@ -965,6 +1026,7 @@ module.exports = {
   handlePrintTicket,
   handlePrintKitchenTicket,
   handlePrintCardReceipt,
+  handlePrintRectifyingTicket,
   handlePrintZReport,
   handlePrinterStatus,
 };

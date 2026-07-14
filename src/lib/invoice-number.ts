@@ -30,3 +30,16 @@ export async function allocateInvoiceNumber(
   const { invoice_series, invoice_num } = result.rows[0];
   return `${invoice_series}-${currentMadridYear()}/${String(invoice_num).padStart(6, "0")}`;
 }
+
+export async function allocateRectifyingInvoiceNumber(
+  client: PoolClient,
+): Promise<string> {
+  const result = await client.query(
+    `UPDATE pos.business
+     SET next_rectifying_invoice_number = next_rectifying_invoice_number + 1
+     RETURNING rectifying_invoice_series AS invoice_series,
+               next_rectifying_invoice_number - 1 AS invoice_num`,
+  );
+  const { invoice_series, invoice_num } = result.rows[0];
+  return `${invoice_series}-${currentMadridYear()}/${String(invoice_num).padStart(6, "0")}`;
+}

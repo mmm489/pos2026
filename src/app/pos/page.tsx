@@ -1050,10 +1050,19 @@ export default function PosPage() {
 
   // Restore session
   useEffect(() => {
-    const saved = localStorage.getItem("pos_employee");
-    if (saved) {
-      setEmployee(JSON.parse(saved));
-    }
+    fetch("/api/pos/auth")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("expired");
+        return response.json();
+      })
+      .then((sessionEmployee) => {
+        setEmployee(sessionEmployee);
+        localStorage.setItem("pos_employee", JSON.stringify(sessionEmployee));
+      })
+      .catch(() => {
+        localStorage.removeItem("pos_employee");
+        setEmployee(null);
+      });
   }, []);
 
   useEffect(() => {
@@ -1164,6 +1173,7 @@ export default function PosPage() {
     const reset = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
+        fetch("/api/pos/auth", { method: "DELETE" }).catch(() => {});
         setEmployee(null);
         localStorage.removeItem("pos_employee");
         dispatch({ type: "CLEAR" });
@@ -1202,6 +1212,7 @@ export default function PosPage() {
   };
 
   const handleLogout = () => {
+    fetch("/api/pos/auth", { method: "DELETE" }).catch(() => {});
     setEmployee(null);
     localStorage.removeItem("pos_employee");
     dispatch({ type: "CLEAR" });

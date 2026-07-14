@@ -57,8 +57,13 @@ export interface Order {
   cashless_operation_id?: string | null;
   cashless_transaction_number?: string | null;
   cashless_amount?: number | null;
+  card_payment_status?: "not_applicable" | "awaiting" | "approved" | "failed" | "unknown";
+  payment_attempt_id?: string | null;
+  card_payment_error?: string | null;
   refund_reference?: string | null; // Card provider reference returned by refund/cancel op
   refund_at?: string | null;
+  refunded_amount?: number;
+  refunds?: Refund[];
   items?: OrderItem[];
 }
 
@@ -97,6 +102,44 @@ export interface Employee {
   can_access_cashlogy?: boolean;
   can_access_supplier_payments?: boolean;
   can_access_products?: boolean;
+  can_post_sale_lookup?: boolean;
+  can_refund_sales?: boolean;
+}
+
+export interface RefundItem {
+  id: number;
+  refund_id: number;
+  order_item_id: number;
+  product_id: number;
+  product_name: string;
+  qty: number;
+  unit_price: number;
+  vat_rate: number;
+  notes: string | null;
+}
+
+export interface Refund {
+  id: number;
+  order_id: number;
+  client_request_id: string;
+  rectifying_invoice_number: string | null;
+  status: "processing" | "completed" | "failed" | "pending_verification";
+  amount: number;
+  total_base: number;
+  total_vat: number;
+  reason: string;
+  employee_id: number;
+  employee_name?: string | null;
+  original_transaction_number: string;
+  provider_transaction_id: string | null;
+  provider_reference: string | null;
+  provider_authorization: string | null;
+  provider_response_code: string | null;
+  receipt_text: string | null;
+  error_message: string | null;
+  requested_at: string;
+  completed_at: string | null;
+  items?: RefundItem[];
 }
 
 export interface KdsEvent {

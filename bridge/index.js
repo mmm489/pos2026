@@ -27,6 +27,7 @@ const {
 } = require("./routes/cashlogy");
 const {
   handleIngenicoCharge,
+  handleIngenicoPrepare,
   handleIngenicoRefund,
   handleIngenicoCancel,
   handleIngenicoQuery,
@@ -38,6 +39,7 @@ const {
   handlePrintTicket,
   handlePrintKitchenTicket,
   handlePrintCardReceipt,
+  handlePrintRectifyingTicket,
   handlePrintZReport,
   handlePrinterStatus,
 } = require("./routes/printer");
@@ -89,6 +91,7 @@ app.get("/cashlogy/cert/config", handleCashlogyCertConfig);
 app.get("/cashlogy/cert/traffic", handleCashlogyCertTraffic);
 app.post("/cashlogy/cert/traffic/clear", handleCashlogyCertTrafficClear);
 app.post("/ingenico/charge", handleIngenicoCharge);
+app.post("/ingenico/prepare", handleIngenicoPrepare);
 app.post("/ingenico/refund", handleIngenicoRefund);
 app.post("/ingenico/cancel", handleIngenicoCancel);
 app.post("/ingenico/query", handleIngenicoQuery);
@@ -98,6 +101,7 @@ app.get("/ingenico/health", handleCardHealth);
 app.post("/printer/ticket", handlePrintTicket);
 app.post("/printer/kitchen", handlePrintKitchenTicket);
 app.post("/printer/card-receipt", handlePrintCardReceipt);
+app.post("/printer/rectifying-ticket", handlePrintRectifyingTicket);
 app.post("/printer/z-report", handlePrintZReport);
 app.get("/printer/status", handlePrinterStatus);
 

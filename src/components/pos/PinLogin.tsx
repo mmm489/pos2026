@@ -11,6 +11,8 @@ interface PinLoginProps {
     can_access_cashlogy?: boolean;
     can_access_supplier_payments?: boolean;
     can_access_products?: boolean;
+    can_post_sale_lookup?: boolean;
+    can_refund_sales?: boolean;
   }) => void;
 }
 
@@ -44,8 +46,10 @@ export default function PinLogin({ onLogin }: PinLoginProps) {
     can_access_cashlogy?: boolean;
     can_access_supplier_payments?: boolean;
     can_access_products?: boolean;
+    can_post_sale_lookup?: boolean;
+    can_refund_sales?: boolean;
   }> = {
-    "0000": { id: 1, name: "Admin (Demo)", role: "admin", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: true },
+    "0000": { id: 1, name: "Admin (Demo)", role: "admin", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: true, can_post_sale_lookup: true, can_refund_sales: true },
     "1234": { id: 2, name: "María (Demo)", role: "employee", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: false },
     "5678": { id: 3, name: "Carlos (Demo)", role: "employee", can_access_cashlogy: true, can_access_supplier_payments: true, can_access_products: false },
   };

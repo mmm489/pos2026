@@ -4,6 +4,7 @@ import { allocateOrderNumber } from "@/lib/order-number";
 import { allocateInvoiceNumber } from "@/lib/invoice-number";
 import { getPusherServer, CHANNEL_ORDERS, EVENT_NEW_ORDER } from "@/lib/pusher";
 import { ensureOrderBusinessUnitSchema, normalizeBusinessUnit } from "@/lib/business-unit";
+import { ensurePostSaleSchema } from "@/lib/post-sale-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,7 @@ export async function GET(request: NextRequest) {
     await ensureKdsReadyColumns();
     await ensureCashlessAuditColumns();
     await ensureOrderServiceTypeColumn();
+    await ensurePostSaleSchema();
     const sql = getDb();
     const { searchParams } = new URL(request.url);
     const statusFilter = searchParams.get("status");
@@ -140,18 +142,20 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       const statuses = statusFilter.split(",");
       orders = await rawQuery(
-        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, card_payment_status, payment_attempt_id, card_payment_error, refund_reference, refund_at
          FROM pos.orders
          WHERE status = ANY($1)
            AND ($2::text IS NULL OR COALESCE(business_unit, 'hicream') = $2)
+           AND (invoice_number IS NOT NULL OR payment_method <> 'card')
          ORDER BY created_at ASC`,
         [statuses, businessUnit]
       );
     } else {
       orders = await rawQuery(
-        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, refund_reference, refund_at
+        `SELECT id, order_number, invoice_number, status, total, total_base, total_vat, payment_method, business_unit, service_type, employee_id, table_number, created_at, completed_at, cancelled_at, cancellation_reason, cancelled_by, card_reference, card_authorization, card_receipt_text, cashless_peripheral_id, cashless_operation_id, cashless_transaction_number, cashless_amount, card_payment_status, payment_attempt_id, card_payment_error, refund_reference, refund_at
          FROM pos.orders
          WHERE ($1::text IS NULL OR COALESCE(business_unit, 'hicream') = $1)
+           AND (invoice_number IS NOT NULL OR payment_method <> 'card')
          ORDER BY created_at DESC
          LIMIT 500`,
         [businessUnit]
@@ -179,6 +183,28 @@ export async function GET(request: NextRequest) {
 
       for (const order of orders) {
         (order as Record<string, unknown>).items = itemsByOrder.get(order.id as number) || [];
+      }
+
+      const refunds = await rawQuery(
+        `SELECT r.*, e.name AS employee_name
+         FROM pos.refunds r
+         LEFT JOIN pos.employees e ON e.id = r.employee_id
+         WHERE r.order_id = ANY($1::int[])
+         ORDER BY r.requested_at DESC`,
+        [orderIds],
+      );
+      const refundsByOrder = new Map<number, typeof refunds>();
+      for (const refund of refunds) {
+        const list = refundsByOrder.get(Number(refund.order_id)) || [];
+        list.push(refund);
+        refundsByOrder.set(Number(refund.order_id), list);
+      }
+      for (const order of orders) {
+        const orderRefunds = refundsByOrder.get(Number(order.id)) || [];
+        (order as Record<string, unknown>).refunds = orderRefunds;
+        (order as Record<string, unknown>).refunded_amount = orderRefunds
+          .filter((refund) => refund.status === "completed")
+          .reduce((sum, refund) => sum + Number(refund.amount || 0), 0);
       }
     }
 

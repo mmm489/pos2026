@@ -54,8 +54,13 @@ CREATE TABLE IF NOT EXISTS pos.business (
   next_invoice_number INTEGER NOT NULL DEFAULT 1,
   cookies_invoice_series VARCHAR(10) NOT NULL DEFAULT 'C',
   next_cookies_invoice_number INTEGER NOT NULL DEFAULT 1,
+  rectifying_invoice_series VARCHAR(10) NOT NULL DEFAULT 'R',
+  next_rectifying_invoice_number INTEGER NOT NULL DEFAULT 1,
   next_z_number INTEGER NOT NULL DEFAULT 1
 );
+
+ALTER TABLE pos.business ADD COLUMN IF NOT EXISTS rectifying_invoice_series VARCHAR(10) NOT NULL DEFAULT 'R';
+ALTER TABLE pos.business ADD COLUMN IF NOT EXISTS next_rectifying_invoice_number INTEGER NOT NULL DEFAULT 1;
 
 CREATE TABLE IF NOT EXISTS pos.employees (
   id INTEGER PRIMARY KEY,
@@ -65,16 +70,22 @@ CREATE TABLE IF NOT EXISTS pos.employees (
   active BOOLEAN NOT NULL DEFAULT true,
   can_access_cashlogy BOOLEAN NOT NULL DEFAULT true,
   can_access_supplier_payments BOOLEAN NOT NULL DEFAULT true,
-  can_access_products BOOLEAN NOT NULL DEFAULT false
+  can_access_products BOOLEAN NOT NULL DEFAULT false,
+  can_post_sale_lookup BOOLEAN NOT NULL DEFAULT true,
+  can_refund_sales BOOLEAN NOT NULL DEFAULT false
 );
 
 ALTER TABLE pos.employees ADD COLUMN IF NOT EXISTS can_access_cashlogy BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE pos.employees ADD COLUMN IF NOT EXISTS can_access_supplier_payments BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE pos.employees ADD COLUMN IF NOT EXISTS can_access_products BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE pos.employees ADD COLUMN IF NOT EXISTS can_post_sale_lookup BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE pos.employees ADD COLUMN IF NOT EXISTS can_refund_sales BOOLEAN NOT NULL DEFAULT false;
 UPDATE pos.employees
 SET can_access_products = true,
     can_access_cashlogy = true,
-    can_access_supplier_payments = true
+    can_access_supplier_payments = true,
+    can_post_sale_lookup = true,
+    can_refund_sales = true
 WHERE role = 'admin';
 
 CREATE TABLE IF NOT EXISTS pos.orders (
@@ -102,6 +113,9 @@ CREATE TABLE IF NOT EXISTS pos.orders (
   cashless_operation_id VARCHAR(120),
   cashless_transaction_number VARCHAR(120),
   cashless_amount NUMERIC(10,2),
+  card_payment_status VARCHAR(24) NOT NULL DEFAULT 'not_applicable',
+  payment_attempt_id UUID,
+  card_payment_error TEXT,
   refund_reference VARCHAR(20),
   refund_at TIMESTAMPTZ,
   synced BOOLEAN NOT NULL DEFAULT true
@@ -115,6 +129,9 @@ ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_peripheral_id VARCHAR(1
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_operation_id VARCHAR(120);
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_transaction_number VARCHAR(120);
 ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS cashless_amount NUMERIC(10,2);
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS card_payment_status VARCHAR(24) NOT NULL DEFAULT 'not_applicable';
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS payment_attempt_id UUID;
+ALTER TABLE pos.orders ADD COLUMN IF NOT EXISTS card_payment_error TEXT;
 
 CREATE TABLE IF NOT EXISTS pos.order_items (
   id INTEGER PRIMARY KEY,
@@ -126,6 +143,53 @@ CREATE TABLE IF NOT EXISTS pos.order_items (
   notes TEXT,
   kds_ready BOOLEAN NOT NULL DEFAULT false,
   kds_ready_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS pos.refunds (
+  id BIGINT PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES pos.orders(id),
+  client_request_id UUID NOT NULL UNIQUE,
+  rectifying_invoice_number VARCHAR(24) UNIQUE,
+  status VARCHAR(24) NOT NULL,
+  amount NUMERIC(10,2) NOT NULL,
+  total_base NUMERIC(10,2) NOT NULL,
+  total_vat NUMERIC(10,2) NOT NULL,
+  reason TEXT NOT NULL,
+  employee_id INTEGER NOT NULL REFERENCES pos.employees(id),
+  original_transaction_number VARCHAR(120) NOT NULL,
+  provider_transaction_id VARCHAR(120),
+  provider_reference VARCHAR(120),
+  provider_authorization VARCHAR(120),
+  provider_response_code VARCHAR(80),
+  receipt_text TEXT,
+  error_message TEXT,
+  requested_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL,
+  synced BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS pos.refund_items (
+  id BIGINT PRIMARY KEY,
+  refund_id BIGINT NOT NULL REFERENCES pos.refunds(id) ON DELETE CASCADE,
+  order_item_id INTEGER NOT NULL REFERENCES pos.order_items(id),
+  product_id INTEGER NOT NULL REFERENCES pos.products(id),
+  product_name VARCHAR(200) NOT NULL,
+  qty INTEGER NOT NULL,
+  unit_price NUMERIC(10,2) NOT NULL,
+  vat_rate NUMERIC(5,2) NOT NULL,
+  notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pos.post_sale_audit (
+  id BIGINT PRIMARY KEY,
+  order_id INTEGER REFERENCES pos.orders(id),
+  refund_id BIGINT REFERENCES pos.refunds(id),
+  employee_id INTEGER NOT NULL REFERENCES pos.employees(id),
+  action VARCHAR(60) NOT NULL,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL,
+  synced BOOLEAN NOT NULL DEFAULT true
 );
 
 CREATE TABLE IF NOT EXISTS pos.kds_events (
@@ -274,6 +338,12 @@ CREATE INDEX IF NOT EXISTS idx_cloud_orders_payment ON pos.orders(payment_method
 CREATE INDEX IF NOT EXISTS idx_cloud_orders_business_unit ON pos.orders(business_unit);
 CREATE INDEX IF NOT EXISTS idx_cloud_order_items_order ON pos.order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_cloud_order_items_product ON pos.order_items(product_id);
+CREATE INDEX IF NOT EXISTS idx_cloud_orders_card_payment_status ON pos.orders(card_payment_status, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cloud_orders_payment_attempt_id ON pos.orders(payment_attempt_id) WHERE payment_attempt_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_cloud_refunds_order ON pos.refunds(order_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_refunds_status ON pos.refunds(status, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cloud_refund_items_refund ON pos.refund_items(refund_id);
+CREATE INDEX IF NOT EXISTS idx_cloud_post_sale_audit_order ON pos.post_sale_audit(order_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_product_modifier_groups_group ON pos.product_modifier_groups(group_id);
 CREATE INDEX IF NOT EXISTS idx_cloud_cash_closings_closed ON pos.cash_closings(closed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_cloud_card_tx_created ON pos.card_transactions(created_at DESC);
