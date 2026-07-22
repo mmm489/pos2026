@@ -14,6 +14,10 @@ type Props = {
 };
 
 export default function RefundModal({ order, business, onClose, onCompleted }: Props) {
+  const providerRefund =
+    order.payment_method === "card" &&
+    Boolean(order.cashless_operation_id) &&
+    Boolean(order.cashless_transaction_number || order.card_reference);
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Map<number, number>>(new Map());
@@ -152,7 +156,9 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
         <header className="flex items-center justify-between border-b border-[#ddd4c4] px-6 py-4">
           <div>
             <p className="text-xs font-semibold uppercase text-[#8a8276]">Factura {order.invoice_number}</p>
-            <h2 className="text-2xl font-semibold">Devolver productos</h2>
+            <h2 className="text-2xl font-semibold">
+              {providerRefund ? "Devolver productos" : "Rectificar venta"}
+            </h2>
           </div>
           <button onClick={onClose} className="h-11 w-11 rounded-xl border border-[#d4cbbb] bg-white text-xl">&#10005;</button>
         </header>
@@ -164,7 +170,9 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
             <div className="space-y-5 text-center">
               <div className="text-5xl text-[#2e9e5b]">&#10003;</div>
               <div>
-                <h3 className="text-2xl font-semibold">Devolucion aprobada</h3>
+                <h3 className="text-2xl font-semibold">
+                  {providerRefund ? "Devolucion aprobada" : "Rectificacion creada"}
+                </h3>
                 <p className="mt-1 text-[#6f665c]">{result.rectifying_invoice_number} · {Number(result.amount).toFixed(2)} EUR</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -181,8 +189,15 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
             </div>
           ) : (
             <>
+              {!providerRefund && (
+                <div className="mb-4 rounded-xl border border-[#e7c97b] bg-[#fff7dd] px-4 py-3 text-sm text-[#76550c]">
+                  {order.payment_method === "cash"
+                    ? "La rectificativa quedara registrada, pero el efectivo debe devolverse al cliente manualmente. No se enviara ninguna orden a Cashlogy."
+                    : "La rectificativa quedara registrada sin contactar con el datafono. Si hubo un cobro externo, su devolucion debe hacerse por ese mismo medio."}
+                </div>
+              )}
               <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm text-[#6f665c]">Los complementos se devuelven siempre con su producto.</p>
+                <p className="text-sm text-[#6f665c]">Los complementos se rectifican siempre con su producto.</p>
                 <button onClick={selectAll} className="rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] px-3 py-2 text-sm font-semibold text-[#275a8f]">Seleccionar todo</button>
               </div>
               <div className="divide-y divide-[#eee4d6] rounded-xl border border-[#ddd4c4] bg-white">
@@ -222,7 +237,7 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
             <button onClick={onClose} className="rounded-xl border border-[#d4cbbb] bg-white px-5 py-3 font-semibold">Cerrar</button>
             {!result && (
               <button onClick={submit} disabled={submitting || selected.size === 0} className="rounded-xl bg-[#c4423a] px-5 py-3 font-semibold text-white disabled:opacity-40">
-                {submitting ? "Procesando..." : "Confirmar devolucion"}
+                {submitting ? "Procesando..." : providerRefund ? "Confirmar devolucion" : "Crear rectificativa"}
               </button>
             )}
           </div>
@@ -231,4 +246,3 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
     </div>
   );
 }
-

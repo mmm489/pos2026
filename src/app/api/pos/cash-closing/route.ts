@@ -145,8 +145,16 @@ async function computeSummary(
     [since]
   );
 
-  const [refundStats] = await exec<{ amount: number; total_base: number; total_vat: number }>(
+  const [refundStats] = await exec<{
+    amount: number;
+    cash_amount: number;
+    card_amount: number;
+    total_base: number;
+    total_vat: number;
+  }>(
     `SELECT COALESCE(SUM(r.amount), 0)::float AS amount,
+            COALESCE(SUM(CASE WHEN o.payment_method = 'cash' THEN r.amount ELSE 0 END), 0)::float AS cash_amount,
+            COALESCE(SUM(CASE WHEN o.payment_method IN ('card', 'manual') THEN r.amount ELSE 0 END), 0)::float AS card_amount,
             COALESCE(SUM(r.total_base), 0)::float AS total_base,
             COALESCE(SUM(r.total_vat), 0)::float AS total_vat
      FROM pos.refunds r
@@ -199,8 +207,8 @@ async function computeSummary(
     Math.round(supplierPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * 100) / 100;
 
   return {
-    total_cash: totals.total_cash,
-    total_card: Math.round((totals.total_card - refundStats.amount) * 100) / 100,
+    total_cash: Math.round((totals.total_cash - refundStats.cash_amount) * 100) / 100,
+    total_card: Math.round((totals.total_card - refundStats.card_amount) * 100) / 100,
     total_sales: Math.round((totals.total_sales - refundStats.amount) * 100) / 100,
     total_base: Math.round((totals.total_base - refundStats.total_base) * 100) / 100,
     total_vat: Math.round((totals.total_vat - refundStats.total_vat) * 100) / 100,
@@ -213,7 +221,7 @@ async function computeSummary(
     supplier_payments_total: supplierPaymentsTotal,
     supplier_payments_count: supplierPayments.length,
     expected_cash_after_supplier_payments:
-      Math.round((Number(totals.total_cash || 0) - supplierPaymentsTotal) * 100) / 100,
+      Math.round((Number(totals.total_cash || 0) - refundStats.cash_amount - supplierPaymentsTotal) * 100) / 100,
     supplier_payments: supplierPayments,
     first_invoice: range.first_invoice,
     last_invoice: range.last_invoice,

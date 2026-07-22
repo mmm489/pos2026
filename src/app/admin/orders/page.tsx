@@ -630,17 +630,6 @@ export default function AdminOrdersPage() {
                             >
                               {queryingId === order.id ? "Comprobando..." : "Comprobar pago"}
                             </button>}
-                            {canRefund && order.invoice_number && Number(order.refunded_amount || 0) < Number(order.total) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setRefundingOrder(order);
-                                }}
-                                className="rounded-xl bg-[#c4423a] px-2.5 py-1 text-xs font-semibold text-white"
-                              >
-                                Devolver productos
-                              </button>
-                            )}
                           </div>
                         </div>
                         {queryResults.has(order.id) && (() => {
@@ -681,6 +670,23 @@ export default function AdminOrdersPage() {
                             </div>
                           );
                         })()}
+                      </div>
+                    )}
+                    {canRefund && order.status !== "cancelled" && order.invoice_number && Number(order.refunded_amount || 0) < Number(order.total) && (
+                      <div className="mb-3 flex justify-end">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRefundingOrder(order);
+                          }}
+                          className="rounded-xl bg-[#c4423a] px-3 py-2 text-xs font-semibold text-white"
+                        >
+                          {order.payment_method === "card" &&
+                          order.cashless_operation_id &&
+                          (order.cashless_transaction_number || order.card_reference)
+                            ? "Devolver productos"
+                            : "Rectificar venta"}
+                        </button>
                       </div>
                     )}
                     {order.refunds && order.refunds.length > 0 && (

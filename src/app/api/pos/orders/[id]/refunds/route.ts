@@ -21,6 +21,15 @@ type DbOrderItem = {
 
 type RefundLine = DbOrderItem & { refundQty: number };
 
+type RefundOrder = {
+  id: number;
+  invoice_number: string | null;
+  payment_method: string;
+  cashless_operation_id: string | null;
+  cashless_transaction_number: string | null;
+  card_reference: string | null;
+};
+
 function getBridgeUrl() {
   return (process.env.BRIDGE_URL || process.env.NEXT_PUBLIC_BRIDGE_URL || "http://127.0.0.1:3006").replace(/\/$/, "");
 }
@@ -81,14 +90,42 @@ export async function POST(
     const existing = await rawQuery(`SELECT id FROM pos.refunds WHERE client_request_id = $1`, [requestId]);
     if (existing[0]) return NextResponse.json((await loadRefunds(orderId)).find((r) => Number(r.id) === Number(existing[0].id)));
 
-    const prepared = await fetch(`${getBridgeUrl()}/ingenico/prepare`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-      signal: AbortSignal.timeout(15_000),
-    }).then((response) => response.json());
-    if (!prepared.success || !prepared.transactionId) {
-      return NextResponse.json({ error: prepared.error || "No s'ha pogut preparar la devolucio" }, { status: 502 });
+    await ensurePostSaleSchema();
+    const [refundOrder] = await rawQuery<RefundOrder>(
+      `SELECT id, invoice_number, payment_method, cashless_operation_id,
+              cashless_transaction_number, card_reference
+       FROM pos.orders
+       WHERE id = $1`,
+      [orderId],
+    );
+    if (!refundOrder || !refundOrder.invoice_number) {
+      return NextResponse.json({ error: "La venda no te una factura emesa" }, { status: 400 });
+    }
+
+    // Only a real Comercia charge has both its operation UUID and banking
+    // transaction number. Manual/card entries without those identifiers and
+    // cash sales are rectified locally without contacting the terminal.
+    const providerRefund =
+      refundOrder.payment_method === "card" &&
+      Boolean(refundOrder.cashless_operation_id) &&
+      Boolean(refundOrder.cashless_transaction_number || refundOrder.card_reference);
+
+    let prepared: { success?: boolean; transactionId?: string; error?: string } | null = null;
+    if (providerRefund) {
+      const prepareResult = await fetch(`${getBridgeUrl()}/ingenico/prepare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(15_000),
+      }).then((response) => response.json()) as {
+        success?: boolean;
+        transactionId?: string;
+        error?: string;
+      };
+      if (!prepareResult.success || !prepareResult.transactionId) {
+        return NextResponse.json({ error: prepareResult.error || "No s'ha pogut preparar la devolucio" }, { status: 502 });
+      }
+      prepared = prepareResult;
     }
 
     const created = await withTransaction(async (client) => {
@@ -99,11 +136,20 @@ export async function POST(
           [orderId],
         )
       ).rows[0];
-      if (!order || order.payment_method !== "card" || !order.invoice_number) {
-        throw new Error("Nomes es poden retornar vendes cobrades realment amb Comercia");
+      if (!order || !order.invoice_number) {
+        throw new Error("La venda no te una factura emesa");
       }
-      const originalTransactionNumber = String(order.cashless_transaction_number || order.card_reference || "");
-      if (!originalTransactionNumber) throw new Error("Falta la referencia bancaria original");
+      const lockedProviderRefund =
+        order.payment_method === "card" &&
+        Boolean(order.cashless_operation_id) &&
+        Boolean(order.cashless_transaction_number || order.card_reference);
+      if (lockedProviderRefund !== providerRefund) {
+        throw new Error("La venda ha canviat. Torna a carregar-la.");
+      }
+      const originalTransactionNumber = providerRefund
+        ? String(order.cashless_transaction_number || order.card_reference || "")
+        : `LOCAL:${order.invoice_number}`;
+      if (providerRefund && !originalTransactionNumber) throw new Error("Falta la referencia bancaria original");
       const blocking = await client.query(
         `SELECT id FROM pos.refunds
          WHERE order_id = $1 AND status IN ('processing', 'pending_verification')
@@ -182,15 +228,19 @@ export async function POST(
       totalBase = Math.round(totalBase * 100) / 100;
       totalVat = Math.round(totalVat * 100) / 100;
 
+      const rectifying = providerRefund ? null : await allocateRectifyingInvoiceNumber(client);
       const refund = (
         await client.query(
           `INSERT INTO pos.refunds
-             (order_id, client_request_id, status, amount, total_base, total_vat, reason,
-              employee_id, original_transaction_number, provider_transaction_id)
-           VALUES ($1, $2, 'processing', $3, $4, $5, $6, $7, $8, $9)
+             (order_id, client_request_id, rectifying_invoice_number, status,
+              amount, total_base, total_vat, reason, employee_id,
+              original_transaction_number, provider_transaction_id, completed_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+                   CASE WHEN $4 = 'completed' THEN NOW() ELSE NULL END)
            RETURNING *`,
-          [orderId, requestId, amount, totalBase, totalVat, reason, employee.id,
-           originalTransactionNumber, String(prepared.transactionId)],
+          [orderId, requestId, rectifying, providerRefund ? "processing" : "completed",
+           amount, totalBase, totalVat, reason, employee.id, originalTransactionNumber,
+           providerRefund ? String(prepared?.transactionId || "") : null],
         )
       ).rows[0];
       for (const line of lines) {
@@ -202,8 +252,27 @@ export async function POST(
            line.unit_price, line.vat_rate, line.notes],
         );
       }
-      return { refund, originalTransactionNumber, amount };
+      if (!providerRefund) {
+        await client.query(
+          `INSERT INTO pos.post_sale_audit (order_id, refund_id, employee_id, action, details)
+           VALUES ($1, $2, $3, 'local_rectification_completed', $4::jsonb)`,
+          [orderId, refund.id, employee.id, JSON.stringify({
+            amount,
+            rectifying,
+            payment_method: order.payment_method,
+          })],
+        );
+      }
+      return { refund, originalTransactionNumber, amount, providerRefund };
     });
+
+    if (!created.providerRefund) {
+      const completedRefund = (await loadRefunds(orderId)).find(
+        (refund) => Number(refund.id) === Number(created.refund.id),
+      );
+      return NextResponse.json({ ...completedRefund, provider: null }, { status: 201 });
+    }
+
     createdRefundId = Number(created.refund.id);
 
     let provider;
@@ -215,7 +284,7 @@ export async function POST(
           amount: created.amount,
           orderId: String(orderId),
           originalReference: created.originalTransactionNumber,
-          transactionId: prepared.transactionId,
+          transactionId: prepared?.transactionId,
         }),
         signal: AbortSignal.timeout(150_000),
       }).then((response) => response.json());
