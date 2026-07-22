@@ -545,7 +545,7 @@ export default function AdminOrdersPage() {
                         }}
                         className="rounded-xl bg-[#fdeceb] px-2.5 py-1 text-xs font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
                       >
-                        Anul·lar
+                        Anul·lar comanda
                       </button>
                     )}
                     <span className="text-[#8a8276]">

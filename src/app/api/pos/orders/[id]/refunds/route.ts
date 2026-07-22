@@ -235,8 +235,8 @@ export async function POST(
              (order_id, client_request_id, rectifying_invoice_number, status,
               amount, total_base, total_vat, reason, employee_id,
               original_transaction_number, provider_transaction_id, completed_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-                   CASE WHEN $4 = 'completed' THEN NOW() ELSE NULL END)
+           VALUES ($1, $2, $3, $4::text, $5, $6, $7, $8, $9, $10, $11,
+                   CASE WHEN $4::text = 'completed' THEN NOW() ELSE NULL END)
            RETURNING *`,
           [orderId, requestId, rectifying, providerRefund ? "processing" : "completed",
            amount, totalBase, totalVat, reason, employee.id, originalTransactionNumber,
