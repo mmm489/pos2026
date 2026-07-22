@@ -5,14 +5,6 @@ import { Order, Business, Employee, Refund } from "@/types/pos";
 import { printCardReceipt, printKitchenTicket, printRectifyingTicket, printTicket, IngenicoResult } from "@/lib/bridge";
 import RefundModal from "@/components/pos/RefundModal";
 
-const CANCEL_REASONS = [
-  { value: "client", label: "Petició del client" },
-  { value: "error", label: "Error en la comanda" },
-  { value: "duplicate", label: "Comanda duplicada" },
-  { value: "payment", label: "Problema amb el pagament" },
-  { value: "other", label: "Altre motiu" },
-];
-
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,13 +13,6 @@ export default function AdminOrdersPage() {
   const [dateFilter, setDateFilter] = useState(
     new Date().toISOString().split("T")[0]
   );
-  const [cancellingId, setCancellingId] = useState<number | null>(null);
-  const [cancelReason, setCancelReason] = useState("client");
-  const [cancelNotes, setCancelNotes] = useState("");
-  const [cancelLoading, setCancelLoading] = useState(false);
-  const [refundCard, setRefundCard] = useState(true);
-  const [preferRefund, setPreferRefund] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
   const [queryingId, setQueryingId] = useState<number | null>(null);
   const [queryResults, setQueryResults] = useState<Map<number, IngenicoResult>>(new Map());
   const [reprintingReceipt, setReprintingReceipt] = useState<{ id: number; copy: "merchant" | "customer" } | null>(null);
@@ -80,42 +65,6 @@ export default function AdminOrdersPage() {
       // API not available
     }
     setLoading(false);
-  };
-
-  const handleCancel = async () => {
-    if (!cancellingId) return;
-    setCancelLoading(true);
-    setCancelError(null);
-    const reason = CANCEL_REASONS.find((r) => r.value === cancelReason)?.label || cancelReason;
-    const fullReason = cancelNotes ? `${reason}: ${cancelNotes}` : reason;
-    const shouldRefund = false;
-    try {
-      const res = await fetch(`/api/pos/orders/${cancellingId}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reason: fullReason,
-          refund_card: shouldRefund,
-          prefer_refund: preferRefund,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) => (o.id === data.id ? { ...o, ...data } : o))
-        );
-        setCancellingId(null);
-        setCancelReason("client");
-        setCancelNotes("");
-        setRefundCard(true);
-        setPreferRefund(false);
-      } else {
-        setCancelError(data.error || "Error al anul·lar la comanda");
-      }
-    } catch {
-      setCancelError("Error de connexió al anul·lar la comanda");
-    }
-    setCancelLoading(false);
   };
 
   const handleReprintTicket = async (order: Order) => {
@@ -537,15 +486,18 @@ export default function AdminOrdersPage() {
                     <span className={`text-lg font-semibold ${order.status === "cancelled" ? "text-[#8a8276] line-through" : "text-[#241f1c]"}`}>
                       {Number(order.total).toFixed(2)}€
                     </span>
-                    {order.status !== "cancelled" && !order.invoice_number && (
+                    {canRefund &&
+                      order.status !== "cancelled" &&
+                      order.invoice_number &&
+                      Number(order.refunded_amount || 0) < Number(order.total) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setCancellingId(order.id);
+                          setRefundingOrder(order);
                         }}
                         className="rounded-xl bg-[#fdeceb] px-2.5 py-1 text-xs font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
                       >
-                        Anul·lar comanda
+                        Rectificar
                       </button>
                     )}
                     <span className="text-[#8a8276]">
@@ -672,23 +624,6 @@ export default function AdminOrdersPage() {
                         })()}
                       </div>
                     )}
-                    {canRefund && order.status !== "cancelled" && order.invoice_number && Number(order.refunded_amount || 0) < Number(order.total) && (
-                      <div className="mb-3 flex justify-end">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRefundingOrder(order);
-                          }}
-                          className="rounded-xl bg-[#c4423a] px-3 py-2 text-xs font-semibold text-white"
-                        >
-                          {order.payment_method === "card" &&
-                          order.cashless_operation_id &&
-                          (order.cashless_transaction_number || order.card_reference)
-                            ? "Devolver productos"
-                            : "Rectificar venta"}
-                        </button>
-                      </div>
-                    )}
                     {order.refunds && order.refunds.length > 0 && (
                       <div className="mb-3 rounded-xl border border-[#ddd4c4] bg-white px-3 py-2">
                         <p className="mb-1 text-xs font-semibold uppercase text-[#8a8276]">Devoluciones</p>
@@ -795,128 +730,6 @@ export default function AdminOrdersPage() {
         )}
       </div>
 
-      {/* Cancel confirmation modal */}
-      {cancellingId !== null && (() => {
-        const cancellingOrder = orders.find((o) => o.id === cancellingId);
-        const isCard = cancellingOrder?.payment_method === "card";
-        const hasCardRef = !!cancellingOrder?.card_reference;
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#10131b]/72 p-3">
-            <div className="mx-4 w-full max-w-md rounded-2xl border border-[#ddd4c4] bg-[#faf9f6] p-6 text-[#241f1c]">
-              <h3 className="mb-1 text-xl font-medium text-[#241f1c]">Anul·lar comanda</h3>
-              <p className="mb-4 text-sm text-[#7b7469]">
-                Comanda {cancellingOrder?.order_number}
-                {cancellingOrder?.invoice_number && (
-                  <span className="block text-xs text-[#8a8276]">
-                    Factura: {cancellingOrder?.invoice_number}
-                  </span>
-                )}
-                {isCard && hasCardRef && (
-                  <span className="block text-xs text-[#8a8276]">
-                    Targeta — ref {cancellingOrder?.card_reference}
-                  </span>
-                )}
-              </p>
-
-              {cancellingOrder?.status === "completed" && (
-                <div className="mb-4 rounded-xl border border-[#ead39b] bg-[#fbf0cc] px-3 py-2.5 text-sm text-[#87620d]">
-                  <strong>⚠ Atenció:</strong> Aquesta comanda ja està completada i té factura emesa. L&apos;anul·lació quedarà registrada però no s&apos;esborra la factura.
-                </div>
-              )}
-
-              {isCard && !hasCardRef && (
-                <div className="mb-4 rounded-xl border border-[#ddd4c4] bg-white px-3 py-2.5 text-xs text-[#6f665c]">
-                  Aquesta comanda no té referència de targeta guardada (es va cobrar abans d&apos;activar el seguiment), per això no es pot tornar diners automàticament al datàfon.
-                </div>
-              )}
-
-              <label className="mb-1 block text-sm font-medium text-[#6f665c]">Motiu</label>
-              <select
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-                className="mb-3 w-full rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
-              >
-                {CANCEL_REASONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-
-              <label className="mb-1 block text-sm font-medium text-[#6f665c]">Notes (opcional)</label>
-              <textarea
-                value={cancelNotes}
-                onChange={(e) => setCancelNotes(e.target.value)}
-                placeholder="Detalls addicionals..."
-                className="mb-4 h-20 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-sm text-[#241f1c] outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
-              />
-
-              {false && isCard && hasCardRef && (
-                <div className="mb-4 rounded-xl border border-[#bfd5ee] bg-[#e4f0fb] p-3">
-                  <label className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      checked={refundCard}
-                      onChange={(e) => setRefundCard(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-[#275a8f]">
-                        Tornar diners al datàfon
-                      </span>
-                      <p className="mt-0.5 text-xs text-[#275a8f]">
-                        El client haurà de tornar a passar la targeta. S&apos;intentarà
-                        primer una anul·lació (gratuïta, mateix dia) i si no, una devolució.
-                      </p>
-                    </div>
-                  </label>
-                  {refundCard && (
-                    <label className="ml-6 mt-2 flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={preferRefund}
-                        onChange={(e) => setPreferRefund(e.target.checked)}
-                      />
-                      <span className="text-xs text-[#275a8f]">
-                        Forçar devolució (la venda ja està liquidada / no és del mateix dia)
-                      </span>
-                    </label>
-                  )}
-                </div>
-              )}
-
-              {cancelError && (
-                <div className="mb-4 rounded-xl border border-[#f0bdb4] bg-[#fdeceb] px-3 py-2 text-sm text-[#c4423a]">
-                  {cancelError}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setCancellingId(null);
-                    setCancelReason("client");
-                    setCancelNotes("");
-                    setRefundCard(true);
-                    setPreferRefund(false);
-                    setCancelError(null);
-                  }}
-                  className="flex-1 rounded-xl border border-[#d4cbbb] bg-white py-2.5 text-sm font-medium text-[#6f665c] transition-colors active:bg-[#f1eee7]"
-                >
-                  Tornar
-                </button>
-                <button
-                  onClick={handleCancel}
-                  disabled={cancelLoading}
-                  className="flex-1 rounded-xl bg-[#c4423a] py-2.5 text-sm font-semibold text-white transition-colors active:bg-[#a93630] disabled:opacity-50"
-                >
-                  {cancelLoading
-                    ? (isCard && refundCard && hasCardRef ? "Tornant al datàfon..." : "Anul·lant...")
-                    : "Confirmar anul·lació"}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
       {refundingOrder && (
         <RefundModal
           order={refundingOrder}
