@@ -13,6 +13,7 @@ import SupplierPaymentsModal from "@/components/pos/SupplierPaymentsModal";
 import ParkedTicketsModal from "@/components/pos/ParkedTicketsModal";
 import SplitParkedTicketModal, { type SplitSelection } from "@/components/pos/SplitParkedTicketModal";
 import TimeClockModal from "@/components/pos/TimeClockModal";
+import RefundModal from "@/components/pos/RefundModal";
 import { MOCK_PRODUCTS, MOCK_CATEGORIES } from "@/lib/mock-data";
 import {
   buildBaseLineNote,
@@ -393,6 +394,8 @@ interface Employee {
   can_access_cashlogy?: boolean;
   can_access_supplier_payments?: boolean;
   can_access_products?: boolean;
+  can_post_sale_lookup?: boolean;
+  can_refund_sales?: boolean;
 }
 
 type CashlogyStartupInitState = {
@@ -505,6 +508,8 @@ export default function PosPage() {
   const [shuttingDown, setShuttingDown] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [cancelReason, setCancelReason] = useState("client");
+  const [refundingOrder, setRefundingOrder] = useState<Order | null>(null);
+  const [refundBusiness, setRefundBusiness] = useState<Business | null>(null);
   const [loading, setLoading] = useState(true);
   const [modifiersFor, setModifiersFor] = useState<Product | null>(null);
   const [editingCartGroup, setEditingCartGroup] = useState<EditingCartGroup | null>(null);
@@ -734,17 +739,33 @@ export default function PosPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason, employee_id: employee?.id }),
       });
+      const data = await res.json().catch(() => null);
       if (res.ok) {
         setRecentOrders((prev) =>
           prev.map((o) =>
             o.id === cancellingId ? { ...o, status: "cancelled" as const, cancellation_reason: reason } : o
           )
         );
+      } else {
+        window.alert(data?.error || "No s'ha pogut anul·lar la comanda");
       }
-    } catch { /* Error */ }
+    } catch {
+      window.alert("Error de connexio al anul·lar la comanda");
+    }
     setCancellingId(null);
     setCancelReason("client");
   }, [cancellingId, cancelReason, employee]);
+
+  const handleStartRectification = useCallback(async (order: Order) => {
+    setRefundBusiness(null);
+    try {
+      const response = await fetch("/api/pos/business");
+      if (response.ok) setRefundBusiness(await response.json());
+    } catch {
+      // The rectification can still be created without loading print metadata.
+    }
+    setRefundingOrder(order);
+  }, []);
 
   const saveParkedTickets = useCallback((tickets: ParkedTicket[]) => {
     const today = localBusinessDate();
@@ -1703,7 +1724,18 @@ export default function PosPage() {
                         <span className={`font-semibold ${order.status === "cancelled" ? "text-[#8a8276] line-through" : "text-[#241f1c]"}`}>
                           {Number(order.total).toFixed(2)}€
                         </span>
-                        {order.status !== "cancelled" && (
+                        {order.status !== "cancelled" &&
+                          order.invoice_number &&
+                          employee?.can_refund_sales &&
+                          Number(order.refunded_amount || 0) < Number(order.total) && (
+                          <button
+                            onClick={() => void handleStartRectification(order)}
+                            className="rounded-xl bg-[#fdeceb] px-2.5 py-1 text-xs font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
+                          >
+                            Rectificar
+                          </button>
+                        )}
+                        {order.status !== "cancelled" && !order.invoice_number && (
                           <button
                             onClick={() => setCancellingId(order.id)}
                             className="rounded-xl bg-[#fdeceb] px-2.5 py-1 text-xs font-medium text-[#c4423a] transition-colors active:bg-[#fad6d3]"
@@ -1751,6 +1783,15 @@ export default function PosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {refundingOrder && (
+        <RefundModal
+          order={refundingOrder}
+          business={refundBusiness}
+          onClose={() => setRefundingOrder(null)}
+          onCompleted={() => void loadRecentOrders()}
+        />
       )}
     </div>
   );
