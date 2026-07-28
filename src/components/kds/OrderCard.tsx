@@ -140,9 +140,14 @@ export default function OrderCard({
                       {getModifierDisplayName(base.product_name || "", base.notes)}
                     </span>
                     {visibleBaseNote && (
-                      <p className="truncate text-sm font-semibold leading-tight text-orange-600">
-                        Nota: {visibleBaseNote}
-                      </p>
+                      <div className="mt-1 flex items-start gap-1.5 rounded-md border border-violet-300 bg-violet-100 px-2 py-1.5">
+                        <span className="mt-0.5 flex-shrink-0 rounded bg-violet-600 px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-white">
+                          Nota
+                        </span>
+                        <p className="min-w-0 break-words text-base font-black leading-snug text-violet-950">
+                          {visibleBaseNote}
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
