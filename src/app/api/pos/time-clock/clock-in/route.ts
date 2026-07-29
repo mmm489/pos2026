@@ -13,7 +13,11 @@ export async function POST(request: NextRequest) {
     const result = await clockIn(String(pin));
     if (!result.ok) {
       return NextResponse.json(
-        { error: result.error },
+        {
+          error: result.error,
+          code: "code" in result ? result.code : null,
+          scheduleUrl: "scheduleUrl" in result ? result.scheduleUrl : null,
+        },
         { status: result.status }
       );
     }

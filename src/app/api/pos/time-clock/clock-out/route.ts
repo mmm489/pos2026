@@ -13,7 +13,12 @@ export async function POST(request: NextRequest) {
     const result = await clockOut(String(pin));
     if (!result.ok) {
       return NextResponse.json(
-        { error: result.error, employee: "employee" in result ? result.employee : null },
+        {
+          error: result.error,
+          employee: "employee" in result ? result.employee : null,
+          code: "code" in result ? result.code : null,
+          scheduleUrl: "scheduleUrl" in result ? result.scheduleUrl : null,
+        },
         { status: result.status }
       );
     }

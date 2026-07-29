@@ -1,9 +1,10 @@
 /**
  * Hi Cream POS - reporting sync
  *
- * Copies the local POS database into a cloud Postgres database used only by
- * the Vercel dashboard. The local POS remains the source of truth and this
- * script never writes to the local database.
+ * Copies the local POS database into a cloud Postgres database used by the
+ * Vercel dashboard. The local POS remains the source of truth. The only
+ * cloud-to-local writes are approved catalog changes, schedule cache data,
+ * and approved time-clock corrections.
  */
 
 require("dotenv").config();
@@ -698,6 +699,240 @@ async function ensureLocalTimeClockSchema(local) {
     CREATE INDEX IF NOT EXISTS idx_time_clock_audit_synced
     ON pos.time_clock_audit(synced)
   `);
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.employee_operational_schedule_cache (
+      id TEXT PRIMARY KEY,
+      employee_id INTEGER NOT NULL REFERENCES pos.employees(id) ON DELETE CASCADE,
+      business_date DATE NOT NULL,
+      shift_start VARCHAR(5) NOT NULL,
+      shift_end VARCHAR(5) NOT NULL,
+      share_token TEXT,
+      cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await local.query(`
+    CREATE INDEX IF NOT EXISTS idx_employee_operational_schedule_cache_lookup
+    ON pos.employee_operational_schedule_cache(employee_id, business_date, shift_start)
+  `);
+  await local.query(`
+    CREATE TABLE IF NOT EXISTS pos.time_clock_correction_applied (
+      request_id TEXT PRIMARY KEY,
+      session_id INTEGER REFERENCES pos.time_clock_sessions(id) ON DELETE SET NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+async function refreshOperationalScheduleCache(local, cloud) {
+  const result = await cloud.query(
+    `SELECT s.id, s.employee_id, s.business_date, s.shift_start, s.shift_end, l.token AS share_token
+     FROM employee_schedule_shifts s
+     LEFT JOIN employee_schedule_links l ON l.employee_id = s.employee_id
+     WHERE s.schedule_kind = 'operational'
+       AND s.business_date BETWEEN
+         ((NOW() AT TIME ZONE 'Europe/Madrid')::date - INTERVAL '2 days')::date
+         AND ((NOW() AT TIME ZONE 'Europe/Madrid')::date + INTERVAL '21 days')::date
+     ORDER BY s.business_date, s.shift_start`,
+  );
+
+  await local.query("BEGIN");
+  try {
+    await local.query(
+      `DELETE FROM pos.employee_operational_schedule_cache
+       WHERE business_date BETWEEN
+         ((NOW() AT TIME ZONE 'Europe/Madrid')::date - INTERVAL '2 days')::date
+         AND ((NOW() AT TIME ZONE 'Europe/Madrid')::date + INTERVAL '21 days')::date`,
+    );
+    let saved = 0;
+    for (const row of result.rows) {
+      const employeeId = Number(row.employee_id);
+      if (!Number.isInteger(employeeId) || employeeId <= 0) continue;
+      const employee = await local.query(
+        `SELECT id FROM pos.employees WHERE id = $1 AND active = TRUE LIMIT 1`,
+        [employeeId],
+      );
+      if (!employee.rowCount) continue;
+      await local.query(
+        `INSERT INTO pos.employee_operational_schedule_cache (
+           id, employee_id, business_date, shift_start, shift_end, share_token, cached_at
+         )
+         VALUES ($1, $2, $3::date, $4, $5, $6, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           employee_id = EXCLUDED.employee_id,
+           business_date = EXCLUDED.business_date,
+           shift_start = EXCLUDED.shift_start,
+           shift_end = EXCLUDED.shift_end,
+           share_token = EXCLUDED.share_token,
+           cached_at = NOW()`,
+        [
+          String(row.id),
+          employeeId,
+          row.business_date,
+          String(row.shift_start),
+          String(row.shift_end),
+          row.share_token == null ? null : String(row.share_token),
+        ],
+      );
+      saved += 1;
+    }
+    await local.query("COMMIT");
+    log(`employee_operational_schedule_cache: ${saved} turnos`);
+    return saved;
+  } catch (error) {
+    await local.query("ROLLBACK");
+    throw error;
+  }
+}
+
+async function applyTimeClockCorrection(local, request) {
+  const alreadyApplied = await local.query(
+    `SELECT session_id FROM pos.time_clock_correction_applied WHERE request_id = $1 LIMIT 1`,
+    [request.id],
+  );
+  if (alreadyApplied.rows[0]) return alreadyApplied.rows[0].session_id;
+
+  const employeeId = Number(request.employee_id);
+  if (!Number.isInteger(employeeId) || employeeId <= 0) {
+    throw new Error("Empleado no valido");
+  }
+  const employee = await local.query(
+    `SELECT id FROM pos.employees WHERE id = $1 AND active = TRUE LIMIT 1`,
+    [employeeId],
+  );
+  if (!employee.rowCount) throw new Error(`Empleado ${employeeId} no encontrado en el POS`);
+
+  let session;
+  let previousData = null;
+  if (request.request_type === "clock_in") {
+    const open = await local.query(
+      `SELECT * FROM pos.time_clock_sessions WHERE employee_id = $1 AND status = 'open' LIMIT 1`,
+      [employeeId],
+    );
+    if (open.rowCount) throw new Error("El empleado ya tiene una jornada abierta");
+    session = await local.query(
+      `INSERT INTO pos.time_clock_sessions (
+         employee_id, business_date, clock_in_at, status, source, device_name, synced
+       )
+       VALUES ($1, $2::date, $3, 'open', 'employee_correction', 'horari-link', FALSE)
+       RETURNING *`,
+      [employeeId, request.business_date, request.requested_clock_in_at],
+    );
+  } else if (request.request_type === "clock_out") {
+    const open = await local.query(
+      `SELECT * FROM pos.time_clock_sessions
+       WHERE employee_id = $1 AND status = 'open'
+       ORDER BY clock_in_at DESC
+       LIMIT 1`,
+      [employeeId],
+    );
+    if (!open.rowCount) throw new Error("No hay una jornada abierta para aplicar la salida");
+    previousData = open.rows[0];
+    if (new Date(request.requested_clock_out_at).getTime() < new Date(previousData.clock_in_at).getTime()) {
+      throw new Error("La salida solicitada es anterior a la entrada");
+    }
+    session = await local.query(
+      `UPDATE pos.time_clock_sessions
+       SET clock_out_at = $2,
+           status = 'closed',
+           source = 'employee_correction',
+           updated_at = NOW(),
+           synced = FALSE
+       WHERE id = $1
+       RETURNING *`,
+      [previousData.id, request.requested_clock_out_at],
+    );
+  } else if (request.request_type === "full_session") {
+    const existing = await local.query(
+      `SELECT id FROM pos.time_clock_sessions
+       WHERE employee_id = $1 AND business_date = $2::date
+       LIMIT 1`,
+      [employeeId, request.business_date],
+    );
+    if (existing.rowCount) throw new Error("Ya existe un fichaje para ese empleado y dia");
+    session = await local.query(
+      `INSERT INTO pos.time_clock_sessions (
+         employee_id, business_date, clock_in_at, clock_out_at,
+         status, source, device_name, synced
+       )
+       VALUES ($1, $2::date, $3, $4, 'closed', 'employee_correction', 'horari-link', FALSE)
+       RETURNING *`,
+      [
+        employeeId,
+        request.business_date,
+        request.requested_clock_in_at,
+        request.requested_clock_out_at,
+      ],
+    );
+  } else {
+    throw new Error(`Tipo de correccion no soportado: ${request.request_type}`);
+  }
+
+  const saved = session.rows[0];
+  await local.query(
+    `INSERT INTO pos.time_clock_audit (
+       session_id, employee_id, action, previous_data, new_data, reason, synced
+     )
+     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, FALSE)`,
+    [
+      saved.id,
+      employeeId,
+      `approved_${request.request_type}`,
+      previousData ? JSON.stringify(previousData) : null,
+      JSON.stringify(saved),
+      `Solicitud ${request.id}: ${request.reason}`,
+    ],
+  );
+  await local.query(
+    `INSERT INTO pos.time_clock_correction_applied (request_id, session_id)
+     VALUES ($1, $2)
+     ON CONFLICT (request_id) DO NOTHING`,
+    [request.id, saved.id],
+  );
+  return saved.id;
+}
+
+async function applyApprovedTimeClockCorrections(local, cloud) {
+  const pending = await cloud.query(
+    `SELECT *
+     FROM time_clock_correction_requests
+     WHERE status = 'approved' AND applied_at IS NULL
+     ORDER BY reviewed_at ASC, created_at ASC
+     LIMIT 50`,
+  );
+  let applied = 0;
+  for (const request of pending.rows) {
+    try {
+      await local.query("BEGIN");
+      const sessionId = await applyTimeClockCorrection(local, request);
+      await local.query("COMMIT");
+      await cloud.query(
+        `UPDATE time_clock_correction_requests
+         SET status = 'applied', applied_at = NOW(), apply_error = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [request.id],
+      );
+      applied += 1;
+      log(`time_clock_correction ${request.id}: aplicada en sesion ${sessionId}`);
+    } catch (error) {
+      try {
+        await local.query("ROLLBACK");
+      } catch {
+        // Ignore rollback failures.
+      }
+      const message = String(error?.message || error).slice(0, 500);
+      await cloud.query(
+        `UPDATE time_clock_correction_requests
+         SET status = 'failed', apply_error = $2, updated_at = NOW()
+         WHERE id = $1`,
+        [request.id, message],
+      );
+      log(`time_clock_correction ${request.id}: error ${message}`);
+    }
+  }
+  if (pending.rows.length) {
+    log(`time_clock_corrections: ${applied}/${pending.rows.length} aplicadas`);
+  }
+  return applied;
 }
 
 function asPayload(value) {
@@ -1235,6 +1470,18 @@ async function runSync() {
     await ensureEmployeeAccessSchema(local);
     await ensureEmployeeAccessSchema(cloud);
     await applyPendingCatalogChanges(local, cloud);
+    try {
+      counts.operational_schedule_cache = await refreshOperationalScheduleCache(local, cloud);
+    } catch (error) {
+      counts.operational_schedule_cache = 0;
+      log(`employee_operational_schedule_cache: no actualizado (${String(error?.message || error)})`);
+    }
+    try {
+      counts.time_clock_corrections = await applyApprovedTimeClockCorrections(local, cloud);
+    } catch (error) {
+      counts.time_clock_corrections = 0;
+      log(`time_clock_corrections: no procesadas (${String(error?.message || error)})`);
+    }
     counts.cloud_parked_orders_deleted = await deleteCloudParkedOrders(cloud);
     counts.cloud_non_fiscal_card_drafts_deleted = await deleteCloudNonFiscalCardDrafts(cloud);
 

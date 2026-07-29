@@ -41,6 +41,22 @@ const TIME_CLOCK_SCHEMA_SQL = [
    ON pos.time_clock_audit(session_id, created_at DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_time_clock_audit_synced
    ON pos.time_clock_audit(synced)`,
+  `CREATE TABLE IF NOT EXISTS pos.employee_operational_schedule_cache (
+    id TEXT PRIMARY KEY,
+    employee_id INTEGER NOT NULL REFERENCES pos.employees(id) ON DELETE CASCADE,
+    business_date DATE NOT NULL,
+    shift_start VARCHAR(5) NOT NULL,
+    shift_end VARCHAR(5) NOT NULL,
+    share_token TEXT,
+    cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_employee_operational_schedule_cache_lookup
+   ON pos.employee_operational_schedule_cache(employee_id, business_date, shift_start)`,
+  `CREATE TABLE IF NOT EXISTS pos.time_clock_correction_applied (
+    request_id TEXT PRIMARY KEY,
+    session_id INTEGER REFERENCES pos.time_clock_sessions(id) ON DELETE SET NULL,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 type Queryable = PoolClient | null;
@@ -63,6 +79,15 @@ export interface TimeClockSessionRow {
   device_name: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface OperationalScheduleWindow {
+  business_date: string;
+  shift_start: string;
+  shift_end: string;
+  share_token: string | null;
+  start_at: string;
+  end_at: string;
 }
 
 async function exec<T = Record<string, unknown>>(
@@ -152,6 +177,94 @@ export async function lookupTimeClockPin(pin: string) {
   return { employee, openSession };
 }
 
+async function getOperationalScheduleWindows(
+  employeeId: number,
+  client: Queryable,
+): Promise<OperationalScheduleWindow[]> {
+  return exec<OperationalScheduleWindow>(
+    client,
+    `SELECT business_date::text,
+            shift_start,
+            shift_end,
+            share_token,
+            ((business_date + shift_start::time) AT TIME ZONE 'Europe/Madrid')::text AS start_at,
+            ((
+              business_date
+              + shift_end::time
+              + CASE
+                  WHEN shift_end::time <= shift_start::time THEN INTERVAL '1 day'
+                  ELSE INTERVAL '0 days'
+                END
+            ) AT TIME ZONE 'Europe/Madrid')::text AS end_at
+     FROM pos.employee_operational_schedule_cache
+     WHERE employee_id = $1
+       AND business_date BETWEEN
+         ((NOW() AT TIME ZONE 'Europe/Madrid')::date - INTERVAL '1 day')::date
+         AND ((NOW() AT TIME ZONE 'Europe/Madrid')::date + INTERVAL '1 day')::date
+     ORDER BY business_date ASC, shift_start ASC`,
+    [employeeId],
+  );
+}
+
+async function getScheduleRestriction(input: {
+  employeeId: number;
+  action: "clock_in" | "clock_out";
+  openSession?: TimeClockSessionRow | null;
+  client: Queryable;
+}) {
+  const windows = await getOperationalScheduleWindows(input.employeeId, input.client);
+  if (windows.length === 0) return null;
+
+  const now = Date.now();
+  const toleranceMs = 20 * 60 * 1000;
+  let selected: OperationalScheduleWindow | undefined;
+
+  if (input.action === "clock_in") {
+    const current = windows
+      .filter((window) => {
+        const start = new Date(window.start_at).getTime();
+        const end = new Date(window.end_at).getTime();
+        return start <= now && now <= end + toleranceMs;
+      })
+      .at(-1);
+    const next = windows.find((window) => new Date(window.start_at).getTime() > now);
+    const previous = windows
+      .filter((window) => new Date(window.start_at).getTime() <= now)
+      .at(-1);
+    selected = current ?? next ?? previous;
+    if (!selected) return null;
+    const deadline = new Date(selected.start_at).getTime() + toleranceMs;
+    if (now <= deadline) return null;
+  } else {
+    const clockInAt = input.openSession
+      ? new Date(input.openSession.clock_in_at).getTime()
+      : now;
+    selected = windows
+      .map((window) => ({
+        window,
+        distance: Math.abs(new Date(window.start_at).getTime() - clockInAt),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0]?.window;
+    if (!selected) return null;
+    const deadline = new Date(selected.end_at).getTime() + toleranceMs;
+    if (now <= deadline) return null;
+  }
+
+  const publicBaseUrl = (
+    process.env.HORARI_PUBLIC_BASE_URL || "https://horari-brown.vercel.app"
+  ).replace(/\/+$/, "");
+  return {
+    code: "SCHEDULE_CORRECTION_REQUIRED",
+    status: 422,
+    error: input.action === "clock_in"
+      ? "Han passat mes de 20 minuts des de l'inici del torn. Envia la correccio des del teu enllac d'horari."
+      : "Han passat mes de 20 minuts des del final del torn. Envia la correccio des del teu enllac d'horari.",
+    scheduleUrl: selected.share_token
+      ? `${publicBaseUrl}/${selected.share_token}?week=${selected.business_date}`
+      : null,
+  };
+}
+
 export async function clockIn(pin: string) {
   return withTransaction(async (client) => {
     await ensureTimeClockSchema(client);
@@ -167,6 +280,13 @@ export async function clockIn(pin: string) {
         session: existing,
       };
     }
+
+    const restriction = await getScheduleRestriction({
+      employeeId: employee.id,
+      action: "clock_in",
+      client,
+    });
+    if (restriction) return { ok: false as const, ...restriction, employee };
 
     const result = await client.query<TimeClockSessionRow>(
       `INSERT INTO pos.time_clock_sessions
@@ -208,6 +328,14 @@ export async function clockOut(pin: string) {
         employee,
       };
     }
+
+    const restriction = await getScheduleRestriction({
+      employeeId: employee.id,
+      action: "clock_out",
+      openSession,
+      client,
+    });
+    if (restriction) return { ok: false as const, ...restriction, employee };
 
     const result = await client.query<TimeClockSessionRow>(
       `UPDATE pos.time_clock_sessions
