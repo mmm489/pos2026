@@ -306,6 +306,7 @@ CREATE TABLE IF NOT EXISTS pos.time_clock_audit (
 CREATE TABLE IF NOT EXISTS time_clock_correction_requests (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL,
+  schedule_shift_id TEXT,
   business_date DATE NOT NULL,
   request_type TEXT NOT NULL CHECK (request_type IN ('clock_in', 'clock_out', 'full_session')),
   requested_clock_in_at TIMESTAMPTZ,
@@ -322,10 +323,15 @@ CREATE TABLE IF NOT EXISTS time_clock_correction_requests (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE time_clock_correction_requests
+  ADD COLUMN IF NOT EXISTS schedule_shift_id TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_time_clock_corrections_status
   ON time_clock_correction_requests(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_time_clock_corrections_employee_date
   ON time_clock_correction_requests(employee_id, business_date DESC);
+CREATE INDEX IF NOT EXISTS idx_time_clock_corrections_schedule_shift
+  ON time_clock_correction_requests(schedule_shift_id, status);
 
 CREATE TABLE IF NOT EXISTS pos.catalog_change_queue (
   id TEXT PRIMARY KEY,
