@@ -828,7 +828,19 @@ async function applyTimeClockCorrection(local, request) {
     );
     if (!open.rowCount) throw new Error("No hay una jornada abierta para aplicar la salida");
     previousData = open.rows[0];
-    if (new Date(request.requested_clock_out_at).getTime() < new Date(previousData.clock_in_at).getTime()) {
+    const clockInAt = new Date(previousData.clock_in_at);
+    let requestedClockOutAt = new Date(request.requested_clock_out_at);
+    if (requestedClockOutAt.getTime() < clockInAt.getTime()) {
+      const nextDayClockOutAt = new Date(requestedClockOutAt.getTime() + 24 * 60 * 60 * 1000);
+      const maximumReasonableShiftEnd = clockInAt.getTime() + 36 * 60 * 60 * 1000;
+      if (
+        nextDayClockOutAt.getTime() >= clockInAt.getTime()
+        && nextDayClockOutAt.getTime() <= maximumReasonableShiftEnd
+      ) {
+        requestedClockOutAt = nextDayClockOutAt;
+      }
+    }
+    if (requestedClockOutAt.getTime() < clockInAt.getTime()) {
       throw new Error("La salida solicitada es anterior a la entrada");
     }
     session = await local.query(
@@ -840,7 +852,7 @@ async function applyTimeClockCorrection(local, request) {
            synced = FALSE
        WHERE id = $1
        RETURNING *`,
-      [previousData.id, request.requested_clock_out_at],
+      [previousData.id, requestedClockOutAt],
     );
   } else if (request.request_type === "full_session") {
     const existing = await local.query(
