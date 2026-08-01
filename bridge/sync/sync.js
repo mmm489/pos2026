@@ -61,6 +61,7 @@ const TABLES = [
     columns: [
       "id",
       "name",
+      "pin",
       "role",
       "active",
       "can_access_cashlogy",
