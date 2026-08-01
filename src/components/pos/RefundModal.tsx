@@ -6,6 +6,16 @@ import { printCardReceipt, printRectifyingTicket } from "@/lib/bridge";
 import { getModifierDisplayName, groupItemsWithModifiers } from "@/lib/item-grouping";
 import type { Business, Order, Refund } from "@/types/pos";
 
+import TouchKeyboard from "./TouchKeyboard";
+
+const REFUND_REASON_SHORTCUTS = [
+  "producte equivocat",
+  "client canvia d'opinio",
+  "problema de qualitat",
+  "import incorrecte",
+  "altres",
+];
+
 type Props = {
   order: Order;
   business: Business | null;
@@ -26,6 +36,7 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
   const [error, setError] = useState("");
   const [result, setResult] = useState<Refund | null>(null);
   const [printing, setPrinting] = useState("");
+  const [showReasonKeyboard, setShowReasonKeyboard] = useState(false);
 
   useEffect(() => {
     fetch(`/api/pos/orders/${order.id}/refunds`)
@@ -225,7 +236,26 @@ export default function RefundModal({ order, business, onClose, onCompleted }: P
               </div>
               {refundableGroups.length === 0 && <p className="py-8 text-center text-[#7b7469]">No quedan productos por devolver.</p>}
               <label className="mt-5 block text-sm font-semibold text-[#6f665c]">Motivo obligatorio</label>
-              <textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-2 h-20 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2" placeholder="Ej. Producto devuelto por el cliente" />
+              <textarea
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                onFocus={() => setShowReasonKeyboard(true)}
+                onClick={() => setShowReasonKeyboard(true)}
+                inputMode="none"
+                className="mt-2 h-20 w-full resize-none rounded-xl border border-[#d4cbbb] bg-white px-3 py-2 text-lg outline-none focus:border-[#2e9e5b] focus:ring-2 focus:ring-[#2e9e5b]/15"
+                placeholder="Toca aqui per escriure el motiu"
+              />
+              {showReasonKeyboard && (
+                <div className="mt-3">
+                  <TouchKeyboard
+                    value={reason}
+                    onChange={setReason}
+                    onDone={() => setShowReasonKeyboard(false)}
+                    compact
+                    quickTexts={REFUND_REASON_SHORTCUTS}
+                  />
+                </div>
+              )}
             </>
           )}
           {error && <p className="mt-4 rounded-xl border border-[#f0bdb4] bg-[#fdeceb] px-3 py-2 text-sm font-medium text-[#c4423a]">{error}</p>}

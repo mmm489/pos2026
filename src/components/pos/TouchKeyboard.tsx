@@ -15,6 +15,7 @@ interface TouchKeyboardProps {
   onChange: (value: string) => void;
   onDone?: () => void;
   compact?: boolean;
+  quickTexts?: string[];
 }
 
 function appendText(value: string, text: string) {
@@ -29,6 +30,7 @@ export default function TouchKeyboard({
   onChange,
   onDone,
   compact = false,
+  quickTexts = QUICK_TEXTS,
 }: TouchKeyboardProps) {
   const [shift, setShift] = useState(false);
 
@@ -48,7 +50,7 @@ export default function TouchKeyboard({
   return (
     <div className="rounded-xl border border-[#ddd4c4] bg-[#f4f0e8] p-2">
       <div className="mb-2 flex flex-wrap gap-1.5">
-        {QUICK_TEXTS.map((text) => (
+        {quickTexts.map((text) => (
           <button
             key={text}
             type="button"
