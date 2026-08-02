@@ -729,7 +729,7 @@ async function refreshOperationalScheduleCache(local, cloud) {
     `SELECT s.id, s.employee_id, s.business_date, s.shift_start, s.shift_end, l.token AS share_token
      FROM employee_schedule_shifts s
      LEFT JOIN employee_schedule_links l ON l.employee_id = s.employee_id
-     WHERE s.schedule_kind = 'operational'
+     WHERE s.schedule_kind = 'contractual'
        AND s.business_date BETWEEN
          ((NOW() AT TIME ZONE 'Europe/Madrid')::date - INTERVAL '2 days')::date
          AND ((NOW() AT TIME ZONE 'Europe/Madrid')::date + INTERVAL '21 days')::date
