@@ -819,13 +819,23 @@ async function applyTimeClockCorrection(local, request) {
       [employeeId, request.business_date, request.requested_clock_in_at],
     );
   } else if (request.request_type === "clock_out") {
-    const open = await local.query(
-      `SELECT * FROM pos.time_clock_sessions
-       WHERE employee_id = $1 AND status = 'open'
-       ORDER BY clock_in_at DESC
-       LIMIT 1`,
-      [employeeId],
-    );
+    const open = request.schedule_starts_at
+      ? await local.query(
+        `SELECT * FROM pos.time_clock_sessions
+         WHERE employee_id = $1
+           AND business_date = $2::date
+           AND status = 'open'
+         ORDER BY ABS(EXTRACT(EPOCH FROM (clock_in_at - $3::timestamptz))) ASC
+         LIMIT 1`,
+        [employeeId, request.business_date, request.schedule_starts_at],
+      )
+      : await local.query(
+        `SELECT * FROM pos.time_clock_sessions
+         WHERE employee_id = $1 AND status = 'open'
+         ORDER BY clock_in_at DESC
+         LIMIT 1`,
+        [employeeId],
+      );
     if (!open.rowCount) throw new Error("No hay una jornada abierta para aplicar la salida");
     previousData = open.rows[0];
     const clockInAt = new Date(previousData.clock_in_at);
@@ -857,11 +867,17 @@ async function applyTimeClockCorrection(local, request) {
   } else if (request.request_type === "full_session") {
     const existing = await local.query(
       `SELECT id FROM pos.time_clock_sessions
-       WHERE employee_id = $1 AND business_date = $2::date
+       WHERE employee_id = $1
+         AND clock_in_at < $3::timestamptz
+         AND COALESCE(clock_out_at, 'infinity'::timestamptz) > $2::timestamptz
        LIMIT 1`,
-      [employeeId, request.business_date],
+      [
+        employeeId,
+        request.requested_clock_in_at,
+        request.requested_clock_out_at,
+      ],
     );
-    if (existing.rowCount) throw new Error("Ya existe un fichaje para ese empleado y dia");
+    if (existing.rowCount) throw new Error("Ya existe un fichaje que se solapa con ese turno");
     session = await local.query(
       `INSERT INTO pos.time_clock_sessions (
          employee_id, business_date, clock_in_at, clock_out_at,
@@ -906,10 +922,15 @@ async function applyTimeClockCorrection(local, request) {
 
 async function applyApprovedTimeClockCorrections(local, cloud) {
   const pending = await cloud.query(
-    `SELECT *
-     FROM time_clock_correction_requests
-     WHERE status = 'approved' AND applied_at IS NULL
-     ORDER BY reviewed_at ASC, created_at ASC
+    `SELECT r.*,
+            CASE
+              WHEN s.id IS NULL THEN NULL
+              ELSE (s.business_date + s.shift_start::time) AT TIME ZONE 'Europe/Madrid'
+            END AS schedule_starts_at
+     FROM time_clock_correction_requests r
+     LEFT JOIN employee_schedule_shifts s ON s.id = r.schedule_shift_id
+     WHERE r.status = 'approved' AND r.applied_at IS NULL
+     ORDER BY r.reviewed_at ASC, r.created_at ASC
      LIMIT 50`,
   );
   let applied = 0;
