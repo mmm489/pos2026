@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Order, Business, Employee, Refund } from "@/types/pos";
-import { printCardReceipt, printKitchenTicket, printRectifyingTicket, printTicket, IngenicoResult } from "@/lib/bridge";
+import {
+  printCardReceipt,
+  printIngenicoReceiptCopy,
+  printKitchenTicket,
+  printRectifyingTicket,
+  printTicket,
+  IngenicoResult,
+} from "@/lib/bridge";
 import RefundModal from "@/components/pos/RefundModal";
 
 export default function AdminOrdersPage() {
@@ -16,6 +23,7 @@ export default function AdminOrdersPage() {
   const [queryingId, setQueryingId] = useState<number | null>(null);
   const [queryResults, setQueryResults] = useState<Map<number, IngenicoResult>>(new Map());
   const [reprintingReceipt, setReprintingReceipt] = useState<{ id: number; copy: "merchant" | "customer" } | null>(null);
+  const [printingProviderReceiptId, setPrintingProviderReceiptId] = useState<number | null>(null);
   const [reprintingTicketId, setReprintingTicketId] = useState<number | null>(null);
   const [business, setBusiness] = useState<Business | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
@@ -129,6 +137,16 @@ export default function AdminOrdersPage() {
       return next;
     });
     setQueryingId(null);
+  };
+
+  const handleProviderReceipt = async (order: Order) => {
+    if (!order.cashless_transaction_number) return;
+    setPrintingProviderReceiptId(order.id);
+    const result = await printIngenicoReceiptCopy(order.cashless_transaction_number);
+    if (!result.success) {
+      window.alert(result.error || "El datafon no ha pogut imprimir la copia");
+    }
+    setPrintingProviderReceiptId(null);
   };
 
   const handleIncident = async (incidentId: number, reconcile: boolean) => {
@@ -571,6 +589,20 @@ export default function AdminOrdersPage() {
                                     : "Re-imprimir client"}
                                 </button>
                               </>
+                            )}
+                            {canLookup && order.cashless_transaction_number && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleProviderReceipt(order);
+                                }}
+                                disabled={printingProviderReceiptId === order.id}
+                                className="rounded-xl border border-[#d9c897] bg-[#fff7dc] px-2.5 py-1 text-xs font-medium text-[#765f20] transition-colors active:bg-[#f7ebc5] disabled:opacity-50"
+                              >
+                                {printingProviderReceiptId === order.id
+                                  ? "Enviant..."
+                                  : "Copia al datafon"}
+                              </button>
                             )}
                             {canLookup && <button
                               onClick={(e) => {

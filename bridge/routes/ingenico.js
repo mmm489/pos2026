@@ -1,11 +1,23 @@
 const txLog = require("../lib/transaction-log");
 const comercia = require("../lib/comercia-instore");
 
+let activeOperation = null;
+
 async function forwardToComercia(operation, body) {
+  const exclusive = ["charge", "refund", "cancel", "query", "print-receipt"].includes(operation);
+  if (exclusive && activeOperation) {
+    return {
+      success: false,
+      busy: true,
+      error: `Hay otra operacion en curso (${activeOperation})`,
+    };
+  }
+
   const start = Date.now();
   let data;
 
   try {
+    if (exclusive) activeOperation = operation;
     if (operation === "prepare") {
       data = await comercia.createTransaction();
     } else if (operation === "charge") {
@@ -16,6 +28,8 @@ async function forwardToComercia(operation, body) {
       data = await comercia.query(body);
     } else if (operation === "abort") {
       data = await comercia.abort();
+    } else if (operation === "print-receipt") {
+      data = await comercia.printReceiptCopy(body);
     } else {
       data = { success: false, error: `Operacion Comercia no soportada: ${operation}` };
     }
@@ -24,6 +38,8 @@ async function forwardToComercia(operation, body) {
       success: false,
       error: `No se ha podido comunicar con Comercia InStore: ${err.message}`,
     };
+  } finally {
+    if (exclusive) activeOperation = null;
   }
 
   txLog
@@ -39,15 +55,15 @@ async function forwardToComercia(operation, body) {
 }
 
 async function handleIngenicoCharge(req, res) {
-  const { amount, orderId, transactionId } = req.body;
+  const { amount, orderId, transactionId, transactionNumber } = req.body;
   if (!amount || amount <= 0) {
     return res.status(400).json({ success: false, error: "Importe invalido" });
   }
 
   console.log(`[Comercia] Cobrament ${amount} EUR (orderId: ${orderId || "-"})`);
-  const data = await forwardToComercia("charge", { amount, orderId, transactionId });
-  console.log("[Comercia] Resposta charge:", data);
-  return res.json(data);
+  const data = await forwardToComercia("charge", { amount, orderId, transactionId, transactionNumber });
+  logResult("charge", data);
+  return res.status(data.busy ? 409 : 200).json(data);
 }
 
 async function handleIngenicoRefund(req, res) {
@@ -64,8 +80,8 @@ async function handleIngenicoRefund(req, res) {
 
   console.log(`[Comercia] Devolucion ${amount} EUR (ref: ${originalReference})`);
   const data = await forwardToComercia("refund", { amount, orderId, originalReference, transactionId });
-  console.log("[Comercia] Resposta refund:", data);
-  return res.json(data);
+  logResult("refund", data);
+  return res.status(data.busy ? 409 : 200).json(data);
 }
 
 async function handleIngenicoCancel(req, res) {
@@ -82,23 +98,33 @@ async function handleIngenicoCancel(req, res) {
 
   console.log(`[Comercia] Anulacion ${amount} EUR (ref: ${originalReference})`);
   const data = await forwardToComercia("cancel", { amount, orderId, originalReference });
-  console.log("[Comercia] Resposta cancel:", data);
-  return res.json(data);
+  logResult("cancel", data);
+  return res.status(data.busy ? 409 : 200).json(data);
 }
 
 async function handleIngenicoQuery(req, res) {
-  const { reference, orderId } = req.body;
-  if (!reference) {
+  const { transactionId, orderId } = req.body;
+  if (!transactionId) {
     return res.status(400).json({
       success: false,
-      error: "Falta reference (referencia de la transaccion a consultar)",
+      error: "Falta transactionId (UUID de la transaccion a consultar)",
     });
   }
 
-  console.log(`[Comercia] Consulta ref ${reference}`);
-  const data = await forwardToComercia("query", { reference, orderId });
-  console.log("[Comercia] Resposta query:", data);
-  return res.json(data);
+  console.log(`[Comercia] Consulta transactionId ${transactionId}`);
+  const data = await forwardToComercia("query", { transactionId, orderId });
+  logResult("query", data);
+  return res.status(data.busy ? 409 : 200).json(data);
+}
+
+async function handleIngenicoPrintReceipt(req, res) {
+  const { transactionNumber } = req.body;
+  if (!transactionNumber) {
+    return res.status(400).json({ success: false, error: "Falta transactionNumber" });
+  }
+  const data = await forwardToComercia("print-receipt", { transactionNumber });
+  logResult("print-receipt", data);
+  return res.status(data.busy ? 409 : 200).json(data);
 }
 
 async function handleIngenicoAbort(_req, res) {
@@ -120,6 +146,12 @@ async function handleCardHealth(_req, res) {
   return res.json(await comercia.health());
 }
 
+function logResult(operation, data) {
+  console.log(
+    `[Comercia] ${operation}: success=${Boolean(data?.success)} result=${data?.result ?? "-"} reference=${data?.reference || "-"}`
+  );
+}
+
 module.exports = {
   handleIngenicoCharge,
   handleIngenicoPrepare,
@@ -127,6 +159,7 @@ module.exports = {
   handleIngenicoCancel,
   handleIngenicoQuery,
   handleIngenicoAbort,
+  handleIngenicoPrintReceipt,
   handleCardStatus,
   handleCardHealth,
 };

@@ -21,8 +21,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const provider = await fetch(`${getBridgeUrl()}/ingenico/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reference: refund.provider_transaction_id, orderId: String(refund.order_id) }),
-      signal: AbortSignal.timeout(35_000),
+      body: JSON.stringify({ transactionId: refund.provider_transaction_id, orderId: String(refund.order_id) }),
+      signal: AbortSignal.timeout(135_000),
     }).then((response) => response.json());
     let reconciledRectifying: string | null = refund.rectifying_invoice_number
       ? String(refund.rectifying_invoice_number)

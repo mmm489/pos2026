@@ -102,6 +102,9 @@ export interface IngenicoResult {
   cashlessTransactionNumber?: string | null;
   cashlessAmount?: number | null;
   unknown?: boolean;
+  cancelled?: boolean;
+  busy?: boolean;
+  queryCompleted?: boolean;
   error?: string;
 }
 
@@ -136,6 +139,7 @@ export async function chargeIngenico(
   amount: number,
   orderId?: string,
   transactionId?: string,
+  transactionNumber?: string,
 ): Promise<IngenicoResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), INGENICO_TIMEOUT_MS);
@@ -144,7 +148,7 @@ export async function chargeIngenico(
     const res = await fetch(`${BRIDGE_URL}/ingenico/charge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, orderId, transactionId }),
+      body: JSON.stringify({ amount, orderId, transactionId, transactionNumber }),
       signal: controller.signal,
     });
     return (await res.json()) as IngenicoResult;
@@ -249,12 +253,12 @@ export async function abortIngenico(): Promise<{ success: boolean; cancelled?: b
 }
 
 /**
- * Read-only consultation: ask the datáfono what the card provider recorded for a given reference.
+ * Read-only consultation: ask the datáfono what the card provider recorded for a given transaction UUID.
  * Use this to recover from crashes mid-payment when the local order state is uncertain.
  * Does NOT modify any local state — caller decides what to do with the result.
  */
 export async function queryIngenicoTransaction(
-  reference: string,
+  transactionId: string,
   orderId?: string
 ): Promise<IngenicoResult> {
   const controller = new AbortController();
@@ -264,7 +268,7 @@ export async function queryIngenicoTransaction(
     const res = await fetch(`${BRIDGE_URL}/ingenico/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reference, orderId }),
+      body: JSON.stringify({ transactionId, orderId }),
       signal: controller.signal,
     });
     return (await res.json()) as IngenicoResult;
@@ -330,6 +334,31 @@ export interface CashlogyChargeStatus {
   warning?: string | null;
   chargeId?: string | null;
   depositId?: string | null;
+}
+
+export async function printIngenicoReceiptCopy(
+  transactionNumber: string,
+): Promise<{ success: boolean; result?: number; busy?: boolean; error?: string }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 35_000);
+  try {
+    const res = await fetch(`${BRIDGE_URL}/ingenico/print-receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transactionNumber }),
+      signal: controller.signal,
+    });
+    return await res.json();
+  } catch (error) {
+    return {
+      success: false,
+      error: (error as Error).name === "AbortError"
+        ? "Timeout imprimint la copia al datafon"
+        : "No s'ha pogut contactar amb el datafon",
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function getCashlogyChargeStatus(): Promise<CashlogyChargeStatus> {

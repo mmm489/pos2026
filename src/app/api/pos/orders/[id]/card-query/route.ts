@@ -38,8 +38,8 @@ export async function POST(
     const response = await fetch(`${getBridgeUrl()}/ingenico/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reference: order.cashless_operation_id, orderId: String(order.id) }),
-      signal: AbortSignal.timeout(35_000),
+      body: JSON.stringify({ transactionId: order.cashless_operation_id, orderId: String(order.id) }),
+      signal: AbortSignal.timeout(135_000),
     });
     const result = await response.json();
 

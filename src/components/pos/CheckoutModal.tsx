@@ -324,7 +324,12 @@ export default function CheckoutModal({
           return;
         }
         cardDraft = await draftResponse.json();
-        paymentResult = await chargeIngenico(total, String(cardDraft!.id), providerTransactionId);
+        paymentResult = await chargeIngenico(
+          total,
+          String(cardDraft!.id),
+          providerTransactionId,
+          cardDraft!.order_number,
+        );
       }
       if (!paymentResult.success) {
         if (paymentMethod === "card" && cardDraft) {

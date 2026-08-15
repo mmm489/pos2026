@@ -2,7 +2,7 @@ const http = require("node:http");
 const https = require("node:https");
 
 const DEFAULT_BASE_URL = "https://127.0.0.1:3010/v1";
-const DEFAULT_TIMEOUT_MS = 135_000;
+const OPERATION_TIMEOUT_MS = 120_000;
 
 function isTruthy(value) {
   return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
@@ -21,10 +21,16 @@ function getConfig() {
     apiKey: process.env.COMERCIA_API_KEY || process.env.APPCONECTOR_KEY || "",
     paymentApp: process.env.COMERCIA_PAYMENT_APP || "comercia",
     deviceId: process.env.COMERCIA_DEVICE_ID || "",
-    printReceipt: Number(process.env.COMERCIA_PRINT_RECEIPT ?? 1),
-    timeoutMs: Number(process.env.COMERCIA_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
+    // InStore REST uses 0 = print merchant + customer, 1 = do not print.
+    printReceipt: normalizePrintReceiptMode(process.env.COMERCIA_PRINT_RECEIPT),
+    timeoutMs: OPERATION_TIMEOUT_MS,
     allowSelfSigned,
   };
+}
+
+function normalizePrintReceiptMode(value) {
+  if (value == null || value === "") return 1;
+  return Number(value) === 0 ? 0 : 1;
 }
 
 function amountToMinorUnits(amount) {
@@ -70,9 +76,47 @@ function accepted(response) {
   );
 }
 
+function isCancelledResponse(response) {
+  const result = String(response?.result ?? response?.getResult ?? "").toUpperCase();
+  const status = String(response?.status ?? response?.getStatus ?? "").toUpperCase();
+  const txResult = String(getTransactionData(response)?.result || "").toUpperCase();
+
+  return (
+    (result === "101" && status === "-1020") ||
+    ["CANCELLED", "CANCELED", "ABORTED"].includes(result) ||
+    ["CANCELLED", "CANCELED", "ABORTED"].includes(txResult)
+  );
+}
+
+function isUnknownResponse(response) {
+  const status = String(
+    response?.status ?? response?.getStatus ?? response?.responseCode ?? ""
+  ).toUpperCase();
+  const txResult = String(getTransactionData(response)?.result || "").toUpperCase();
+  return ["-1", "-1021"].includes(status) || ["UNKNOWN", "PENDING", "IN_PROGRESS"].includes(txResult);
+}
+
 function responseError(response) {
+  if (isCancelledResponse(response)) return "Operacion cancelada por el usuario";
   const additionalData = getAdditionalData(response);
   const txData = getTransactionData(response);
+  const status = String(
+    response?.status ??
+    response?.getStatus ??
+    response?.responseCode ??
+    txData?.responseCode ??
+    ""
+  );
+  const statusMessages = {
+    "-1": "Estado de la transaccion desconocido; consulta el pago antes de repetirlo",
+    "-1010": "Operacion denegada por error de comunicacion",
+    "-1011": "Operacion denegada sin conexion",
+    "-1021": "Tiempo de espera agotado; consulta el pago antes de repetirlo",
+    "-1036": "Transaccion no encontrada",
+    "-1038": "Error en el entorno de pago",
+    "-1039": "La aplicacion de pago esta ocupada",
+  };
+  if (statusMessages[status]) return statusMessages[status];
   return (
     response?.error ||
     response?.message ||
@@ -82,6 +126,54 @@ function responseError(response) {
     txData?.result ||
     "Operacion no aceptada por Comercia"
   );
+}
+
+function apiError(response, fallback) {
+  if (!response || typeof response !== "object") return fallback;
+  const description = response.error || response.errDescription || response.message || response.description;
+  const code = response.errCode == null ? "" : ` (${response.errCode})`;
+  return description ? `${description}${code}` : fallback;
+}
+
+function maskCardValue(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 4 ? `**** **** **** ${digits.slice(-4)}` : "[REDACTED]";
+}
+
+function sanitizeProviderData(value, key = "") {
+  const normalizedKey = String(key).toLowerCase();
+  const sensitiveKeys = new Set([
+    "apikey",
+    "x-apikey",
+    "track1",
+    "track2",
+    "cardholder",
+    "pandata",
+    "pantoken",
+    "securedata",
+    "pinpaddata",
+  ]);
+  if (["card", "cardclient", "cardnumber", "pan"].includes(normalizedKey)) {
+    return maskCardValue(value);
+  }
+  if (sensitiveKeys.has(normalizedKey)) return "[REDACTED]";
+  if (typeof value === "string" && ["additionaldata", "transactiondata"].includes(normalizedKey)) {
+    try {
+      return sanitizeProviderData(JSON.parse(value), key);
+    } catch {
+      return value;
+    }
+  }
+  if (Array.isArray(value)) return value.map((item) => sanitizeProviderData(item));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([childKey, childValue]) => [
+        childKey,
+        sanitizeProviderData(childValue, childKey),
+      ])
+    );
+  }
+  return value;
 }
 
 function receiptField(value, maxLength = 80) {
@@ -165,7 +257,7 @@ async function requestJson(path, { method = "GET", body, timeoutMs } = {}) {
     return {
       ok: false,
       status: 0,
-      data: { error: "Falta COMERCIA_API_KEY en bridge/.env" },
+      data: { error: "Falta configurar la API key de Comercia" },
     };
   }
 
@@ -227,20 +319,21 @@ async function createTransaction() {
   if (!response.ok || !transactionId) {
     return {
       success: false,
-      error: response.data?.error || `No se pudo crear transactionId (HTTP ${response.status})`,
-      raw: response.data,
+      error: apiError(response.data, `No se pudo crear transactionId (HTTP ${response.status})`),
+      raw: sanitizeProviderData(response.data),
     };
   }
   return { success: true, transactionId: String(transactionId) };
 }
 
-function baseOperationBody({ transactionId, amountMinor, orderId, originalReference }) {
+function baseOperationBody({ transactionId, amountMinor, orderId, originalReference, transactionNumber }) {
   const config = getConfig();
   const body = {
     transactionId,
     paymentApp: config.paymentApp,
     amount: amountMinor,
     currencyCode: "EUR",
+    transactionNumber: String(originalReference || transactionNumber || orderId || transactionId),
     otherData: {
       printReceipt: config.printReceipt,
       posId: "pos2026",
@@ -249,8 +342,6 @@ function baseOperationBody({ transactionId, amountMinor, orderId, originalRefere
   };
 
   if (config.deviceId) body.deviceId = config.deviceId;
-  if (originalReference) body.transactionNumber = String(originalReference);
-
   return body;
 }
 
@@ -274,6 +365,8 @@ function normalizePaymentResponse(raw, transactionId, fallbackReference, operati
     null;
   const responseCode = raw?.responseCode || txData?.responseCode || txData?.actionCode || raw?.status || null;
   const amountMinor = Number(raw?.amount ?? txData?.amount);
+  const cancelled = isCancelledResponse(raw);
+  const unknown = !accepted(raw) && !cancelled && isUnknownResponse(raw);
   const providerReceipt = raw?.receipt || additionalData?.receipt || txData?.receipt;
   const receipt = providerReceipt || (accepted(raw)
     ? buildComerciaReceipt({
@@ -289,6 +382,8 @@ function normalizePaymentResponse(raw, transactionId, fallbackReference, operati
 
   return {
     success: accepted(raw),
+    cancelled: cancelled || undefined,
+    unknown: unknown || undefined,
     provider: "comercia",
     operation,
     reference: reference ? String(reference) : undefined,
@@ -301,13 +396,13 @@ function normalizePaymentResponse(raw, transactionId, fallbackReference, operati
     cashlessAmount: Number.isFinite(amountMinor) ? amountMinor / 100 : undefined,
     cashlessPeripheralId: raw?.deviceId || txData?.deviceId || undefined,
     receipt: receipt || undefined,
-    additionalData,
-    raw,
+    additionalData: sanitizeProviderData(additionalData),
+    raw: sanitizeProviderData(raw),
     error: accepted(raw) ? undefined : responseError(raw),
   };
 }
 
-async function charge({ amount, orderId, transactionId }) {
+async function charge({ amount, orderId, transactionId, transactionNumber }) {
   const amountMinor = amountToMinorUnits(amount);
   if (!amountMinor) return { success: false, error: "Importe invalido" };
 
@@ -316,14 +411,15 @@ async function charge({ amount, orderId, transactionId }) {
     : await createTransaction();
   if (!tx.success) return { success: false, error: tx.error, raw: tx.raw };
 
-  const body = baseOperationBody({ transactionId: tx.transactionId, amountMinor, orderId });
+  const body = baseOperationBody({ transactionId: tx.transactionId, amountMinor, orderId, transactionNumber });
   const response = await requestJson("/payment", { method: "POST", body });
   if (!response.ok) {
     return {
       success: false,
       transactionId: tx.transactionId,
-      error: response.data?.error || `Comercia /payment devolvio HTTP ${response.status}`,
-      raw: response.data,
+      unknown: response.status === 0 || undefined,
+      error: apiError(response.data, `Comercia /payment devolvio HTTP ${response.status}`),
+      raw: sanitizeProviderData(response.data),
     };
   }
 
@@ -351,8 +447,9 @@ async function refund({ amount, orderId, originalReference, operation = "refund"
     return {
       success: false,
       transactionId: tx.transactionId,
-      error: response.data?.error || `Comercia /refund devolvio HTTP ${response.status}`,
-      raw: response.data,
+      unknown: response.status === 0 || undefined,
+      error: apiError(response.data, `Comercia /refund devolvio HTTP ${response.status}`),
+      raw: sanitizeProviderData(response.data),
     };
   }
 
@@ -362,22 +459,25 @@ async function refund({ amount, orderId, originalReference, operation = "refund"
   };
 }
 
-async function query({ reference }) {
-  if (!reference) return { success: false, error: "Falta reference" };
+async function query({ transactionId }) {
+  if (!transactionId) return { success: false, error: "Falta transactionId" };
 
   const config = getConfig();
-  const body = { transactionId: String(reference) };
+  const body = { transactionId: String(transactionId) };
   if (config.deviceId) body.deviceId = config.deviceId;
 
-  const response = await requestJson("/getTransaction", { method: "POST", body, timeoutMs: 30_000 });
+  const response = await requestJson("/getTransaction", { method: "GET", body, timeoutMs: config.timeoutMs });
   if (!response.ok) {
     return {
       success: false,
-      error: response.data?.error || `Comercia /getTransaction devolvio HTTP ${response.status}`,
-      raw: response.data,
+      error: apiError(response.data, `Comercia /getTransaction devolvio HTTP ${response.status}`),
+      raw: sanitizeProviderData(response.data),
     };
   }
-  return normalizePaymentResponse(response.data || {}, String(reference), String(reference));
+  return {
+    ...normalizePaymentResponse(response.data || {}, String(transactionId), String(transactionId)),
+    queryCompleted: true,
+  };
 }
 
 async function abort() {
@@ -389,11 +489,52 @@ async function abort() {
   if (!response.ok) {
     return {
       success: false,
-      error: response.data?.error || `Comercia /cancelTransaction devolvio HTTP ${response.status}`,
-      raw: response.data,
+      error: apiError(response.data, `Comercia /cancelTransaction devolvio HTTP ${response.status}`),
+      raw: sanitizeProviderData(response.data),
     };
   }
-  return { success: true, cancelled: true, raw: response.data };
+  const result = Number(response.data?.result);
+  const errors = {
+    2: "No hay ninguna transaccion en curso",
+    3: "La transaccion ya no se puede cancelar remotamente",
+    4: "La transaccion activa no es remota",
+    5: "La aplicacion de pago no permite cancelar",
+  };
+  return {
+    success: result === 1,
+    cancelled: result === 1,
+    result,
+    error: result === 1 ? undefined : errors[result] || "Comercia no confirmo la cancelacion",
+    raw: sanitizeProviderData(response.data),
+  };
+}
+
+async function printReceiptCopy({ transactionNumber }) {
+  if (!transactionNumber) return { success: false, error: "Falta transactionNumber" };
+
+  const config = getConfig();
+  const body = {
+    paymentApp: config.paymentApp,
+    transactionNumber: String(transactionNumber),
+  };
+  if (config.deviceId) body.deviceId = config.deviceId;
+
+  const response = await requestJson("/printReceiptCopy", { method: "POST", body, timeoutMs: 30_000 });
+  if (!response.ok) {
+    return {
+      success: false,
+      error: apiError(response.data, `Comercia /printReceiptCopy devolvio HTTP ${response.status}`),
+      raw: sanitizeProviderData(response.data),
+    };
+  }
+
+  const result = Number(response.data?.result);
+  return {
+    success: result === 0,
+    result,
+    error: result === 0 ? undefined : "El datafono no pudo imprimir la copia",
+    raw: sanitizeProviderData(response.data),
+  };
 }
 
 async function health() {
@@ -402,7 +543,7 @@ async function health() {
     return {
       status: "offline",
       provider: "comercia",
-      error: response.data?.error || `HTTP ${response.status}`,
+      error: apiError(response.data, `HTTP ${response.status}`),
     };
   }
   return {
@@ -423,6 +564,7 @@ module.exports = {
   refund,
   query,
   abort,
+  printReceiptCopy,
   health,
   status,
 };

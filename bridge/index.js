@@ -32,6 +32,7 @@ const {
   handleIngenicoCancel,
   handleIngenicoQuery,
   handleIngenicoAbort,
+  handleIngenicoPrintReceipt,
   handleCardStatus,
   handleCardHealth,
 } = require("./routes/ingenico");
@@ -96,6 +97,7 @@ app.post("/ingenico/refund", handleIngenicoRefund);
 app.post("/ingenico/cancel", handleIngenicoCancel);
 app.post("/ingenico/query", handleIngenicoQuery);
 app.post("/ingenico/abort", handleIngenicoAbort);
+app.post("/ingenico/print-receipt", handleIngenicoPrintReceipt);
 app.get("/ingenico/status", handleCardStatus);
 app.get("/ingenico/health", handleCardHealth);
 app.post("/printer/ticket", handlePrintTicket);

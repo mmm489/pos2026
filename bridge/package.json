@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "test:comercia": "node tests/comercia-contract.test.js",
     "sync": "node sync/sync-runner.js",
     "sync:once": "node sync/sync.js"
   },
