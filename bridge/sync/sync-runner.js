@@ -5,7 +5,7 @@
 
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 
-const { runSync } = require("./sync");
+const { runLocalMaintenance, runSync } = require("./sync");
 
 const TIME_ZONE = process.env.DASHBOARD_SYNC_TIMEZONE || "Europe/Madrid";
 const DAY_INTERVAL_MS = Number(process.env.DASHBOARD_SYNC_DAY_INTERVAL_MS || 30 * 60 * 1000);
@@ -92,7 +92,12 @@ async function tick() {
       log(`Error inesperado: ${error instanceof Error ? error.message : String(error)}`);
     }
   } else {
-    log("Heladeria cerrada (01:00-07:00 Europe/Madrid) - Neon no se consulta");
+    try {
+      await runLocalMaintenance();
+    } catch (error) {
+      log(`Error de mantenimiento local: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    log("Heladeria cerrada (01:00-07:00 Europe/Madrid) - solo mantenimiento local, Neon no se consulta");
   }
 
   const nextSchedule = getSchedule();

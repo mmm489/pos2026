@@ -1605,7 +1605,23 @@ async function runSync() {
   }
 }
 
-module.exports = { runSync };
+async function runLocalMaintenance() {
+  let local;
+  try {
+    local = await connect(LOCAL_DB_URL, "local POS maintenance");
+    await ensureLocalTimeClockSchema(local);
+    const timeClockAutoCutoffs = await closeExpiredTimeClockSessions(local);
+    return { ok: true, timeClockAutoCutoffs };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(`Mantenimiento local: ${message}`);
+    return { ok: false, error: message };
+  } finally {
+    if (local) await local.end();
+  }
+}
+
+module.exports = { runSync, runLocalMaintenance };
 
 if (require.main === module) {
   runSync().then((result) => {
