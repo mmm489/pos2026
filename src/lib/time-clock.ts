@@ -1,6 +1,9 @@
 import type { PoolClient } from "pg";
 import { rawQuery, withTransaction } from "@/lib/db";
 
+const TIME_CLOCK_CUTOFF_HOUR = 2;
+export const AUTO_CUTOFF_PENDING_SOURCE = "auto_cutoff_pending";
+
 const TIME_CLOCK_SCHEMA_SQL = [
   `CREATE TABLE IF NOT EXISTS pos.time_clock_sessions (
     id SERIAL PRIMARY KEY,
@@ -109,7 +112,56 @@ export async function ensureTimeClockSchema(client: Queryable = null) {
 }
 
 export function businessDateExpression() {
-  return "((NOW() AT TIME ZONE 'Europe/Madrid') - INTERVAL '4 hours')::date";
+  return `((NOW() AT TIME ZONE 'Europe/Madrid') - INTERVAL '${TIME_CLOCK_CUTOFF_HOUR} hours')::date`;
+}
+
+export async function closeExpiredTimeClockSessions(client: Queryable = null) {
+  const rows = await exec<{ session_id: number }>(
+    client,
+    `WITH expired AS (
+       SELECT s.id,
+              s.employee_id,
+              to_jsonb(s) AS previous_data,
+              ((s.clock_in_at AT TIME ZONE 'Europe/Madrid') - INTERVAL '2 hours')::date
+                AS corrected_business_date,
+              (
+                (
+                  ((s.clock_in_at AT TIME ZONE 'Europe/Madrid') - INTERVAL '2 hours')::date
+                  + 1
+                  + TIME '02:00'
+                ) AT TIME ZONE 'Europe/Madrid'
+              ) AS cutoff_at
+       FROM pos.time_clock_sessions s
+       WHERE s.status = 'open'
+     ),
+     updated AS (
+       UPDATE pos.time_clock_sessions s
+       SET business_date = e.corrected_business_date,
+           clock_out_at = e.cutoff_at,
+           status = 'closed',
+           source = '${AUTO_CUTOFF_PENDING_SOURCE}',
+           updated_at = NOW(),
+           synced = false
+       FROM expired e
+       WHERE s.id = e.id
+         AND s.status = 'open'
+         AND NOW() >= e.cutoff_at
+       RETURNING s.id AS session_id, s.employee_id, to_jsonb(s) AS new_data
+     )
+     INSERT INTO pos.time_clock_audit
+       (session_id, employee_id, action, previous_data, new_data, reason, synced)
+     SELECT u.session_id,
+            u.employee_id,
+            'auto_cutoff_pending',
+            e.previous_data,
+            u.new_data,
+            'Tancament provisional automatic al tall laboral de les 02:00. Sortida pendent de revisio.',
+            false
+     FROM updated u
+     JOIN expired e ON e.id = u.session_id
+     RETURNING session_id`
+  );
+  return rows.length;
 }
 
 export async function findEmployeeByPin(
@@ -146,6 +198,7 @@ export async function getOpenSession(
 
 export async function listTimeClockSummary(client: Queryable = null) {
   await ensureTimeClockSchema(client);
+  await closeExpiredTimeClockSessions(client);
 
   const openSessions = await exec<TimeClockSessionRow>(
     client,
@@ -171,6 +224,7 @@ export async function listTimeClockSummary(client: Queryable = null) {
 
 export async function lookupTimeClockPin(pin: string) {
   await ensureTimeClockSchema();
+  await closeExpiredTimeClockSessions();
   const employee = await findEmployeeByPin(pin);
   if (!employee) return null;
   const openSession = await getOpenSession(employee.id);
@@ -268,6 +322,7 @@ async function getScheduleRestriction(input: {
 export async function clockIn(pin: string) {
   return withTransaction(async (client) => {
     await ensureTimeClockSchema(client);
+    await closeExpiredTimeClockSessions(client);
     const employee = await findEmployeeByPin(pin, client);
     if (!employee) return { ok: false as const, status: 401, error: "PIN incorrecto" };
 
@@ -316,6 +371,7 @@ export async function clockIn(pin: string) {
 export async function clockOut(pin: string) {
   return withTransaction(async (client) => {
     await ensureTimeClockSchema(client);
+    await closeExpiredTimeClockSessions(client);
     const employee = await findEmployeeByPin(pin, client);
     if (!employee) return { ok: false as const, status: 401, error: "PIN incorrecto" };
 

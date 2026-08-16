@@ -724,6 +724,58 @@ async function ensureLocalTimeClockSchema(local) {
   `);
 }
 
+async function closeExpiredTimeClockSessions(local) {
+  const result = await local.query(`
+    WITH expired AS (
+      SELECT s.id,
+             s.employee_id,
+             to_jsonb(s) AS previous_data,
+             ((s.clock_in_at AT TIME ZONE 'Europe/Madrid') - INTERVAL '2 hours')::date
+               AS corrected_business_date,
+             (
+               (
+                 ((s.clock_in_at AT TIME ZONE 'Europe/Madrid') - INTERVAL '2 hours')::date
+                 + 1
+                 + TIME '02:00'
+               ) AT TIME ZONE 'Europe/Madrid'
+             ) AS cutoff_at
+      FROM pos.time_clock_sessions s
+      WHERE s.status = 'open'
+    ),
+    updated AS (
+      UPDATE pos.time_clock_sessions s
+      SET business_date = e.corrected_business_date,
+          clock_out_at = e.cutoff_at,
+          status = 'closed',
+          source = 'auto_cutoff_pending',
+          updated_at = NOW(),
+          synced = FALSE
+      FROM expired e
+      WHERE s.id = e.id
+        AND s.status = 'open'
+        AND NOW() >= e.cutoff_at
+      RETURNING s.id AS session_id, s.employee_id, to_jsonb(s) AS new_data
+    )
+    INSERT INTO pos.time_clock_audit (
+      session_id, employee_id, action, previous_data, new_data, reason, synced
+    )
+    SELECT u.session_id,
+           u.employee_id,
+           'auto_cutoff_pending',
+           e.previous_data,
+           u.new_data,
+           'Tancament provisional automatic al tall laboral de les 02:00. Sortida pendent de revisio.',
+           FALSE
+    FROM updated u
+    JOIN expired e ON e.id = u.session_id
+    RETURNING session_id
+  `);
+  if (result.rowCount) {
+    log(`time_clock_auto_cutoff: ${result.rowCount} jornades pendents de revisio`);
+  }
+  return result.rowCount || 0;
+}
+
 async function refreshOperationalScheduleCache(local, cloud) {
   const result = await cloud.query(
     `SELECT s.id, s.employee_id, s.business_date, s.shift_start, s.shift_end, l.token AS share_token
@@ -824,19 +876,21 @@ async function applyTimeClockCorrection(local, request) {
         `SELECT * FROM pos.time_clock_sessions
          WHERE employee_id = $1
            AND business_date = $2::date
-           AND status = 'open'
+           AND (status = 'open' OR source = 'auto_cutoff_pending')
          ORDER BY ABS(EXTRACT(EPOCH FROM (clock_in_at - $3::timestamptz))) ASC
          LIMIT 1`,
         [employeeId, request.business_date, request.schedule_starts_at],
       )
       : await local.query(
         `SELECT * FROM pos.time_clock_sessions
-         WHERE employee_id = $1 AND status = 'open'
+         WHERE employee_id = $1
+           AND business_date = $2::date
+           AND (status = 'open' OR source = 'auto_cutoff_pending')
          ORDER BY clock_in_at DESC
          LIMIT 1`,
-        [employeeId],
+        [employeeId, request.business_date],
       );
-    if (!open.rowCount) throw new Error("No hay una jornada abierta para aplicar la salida");
+    if (!open.rowCount) throw new Error("No hay una jornada abierta o pendiente para aplicar la salida");
     previousData = open.rows[0];
     const clockInAt = new Date(previousData.clock_in_at);
     let requestedClockOutAt = new Date(request.requested_clock_out_at);
@@ -1498,6 +1552,7 @@ async function runSync() {
     await ensureLocalSupplierPaymentSchema(local);
     await ensureLocalCashlogyStateSnapshotSchema(local);
     await ensureLocalTimeClockSchema(local);
+    counts.time_clock_auto_cutoffs = await closeExpiredTimeClockSessions(local);
     await ensureCloudSchema(cloud);
     await ensureOrderBusinessUnitSchema(local);
     await ensureOrderBusinessUnitSchema(cloud);
