@@ -479,17 +479,14 @@ export default function CheckoutModal({
         await printKitchenFallback(order);
       }
 
-      // Card payments: always print the merchant copy (we need it for our records),
-      // and stash the receipt text so the success screen can ask the customer
-      // if they want a copy too. Some providers return the formatted receipt
-      // as text via paymentResult.receipt.
+      // Keep the receipt available after payment, but never print automatically.
+      // The cashier can choose whether to print the fiscal ticket or card copy.
       const cardReceipt =
         paymentMethod === "card" && "receipt" in paymentResult
           ? (paymentResult as { receipt?: string }).receipt
           : null;
       if (cardReceipt) {
         setCardReceiptError("");
-        printCardReceipt(cardReceipt, "merchant", order.order_number).catch(() => {});
         setPendingCustomerReceipt(cardReceipt);
       }
 
