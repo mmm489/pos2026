@@ -174,14 +174,21 @@ export default function KdsPage() {
     }
   }, []);
 
+  const handleCloseKds = useCallback(() => {
+    if (!window.confirm("Cerrar la pantalla de cocina?")) return;
+
+    window.open("", "_self");
+    window.close();
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
+    <div className="h-dvh overflow-hidden bg-gray-900 flex flex-col">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700 flex-shrink-0">
         <h1 className="text-lg font-bold text-white">
           Hi Cream — Cocina
         </h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-base font-semibold text-yellow-400">
             {orders.length} actiu{orders.length !== 1 ? "s" : ""}
           </span>
@@ -191,6 +198,15 @@ export default function KdsPage() {
               minute: "2-digit",
             })}
           </span>
+          <button
+            type="button"
+            onClick={handleCloseKds}
+            className="flex h-9 w-9 items-center justify-center border border-gray-600 bg-gray-700 text-2xl leading-none text-white transition-colors hover:bg-red-600 active:bg-red-700"
+            aria-label="Cerrar KDS"
+            title="Cerrar KDS"
+          >
+            &times;
+          </button>
         </div>
       </header>
 
