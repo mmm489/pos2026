@@ -216,14 +216,9 @@ export default function KdsPage() {
           <div
             className="grid gap-2 h-full"
             style={{
-              gridTemplateColumns: `repeat(${
-                orders.length <= 2 ? orders.length
-                : orders.length <= 4 ? 2
-                : orders.length <= 6 ? 3
-                : 4
-              }, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${Math.min(orders.length, 4)}, minmax(0, 1fr))`,
               gridTemplateRows: `repeat(${
-                orders.length <= 2 ? 1
+                orders.length <= 4 ? 1
                 : 2
               }, minmax(0, 1fr))`,
             }}
