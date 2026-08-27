@@ -70,3 +70,11 @@ button {
 .pos-menu-scroll::-webkit-scrollbar {
   display: none;
 }
+
+.kds-order-scroller {
+  scrollbar-width: none;
+}
+
+.kds-order-scroller::-webkit-scrollbar {
+  display: none;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Order } from "@/types/pos";
 import {
   getModifierDisplayName,
@@ -11,6 +11,8 @@ import {
 
 interface OrderCardProps {
   order: Order;
+  wide?: boolean;
+  onNeedsMoreSpace?: (orderId: number) => void;
   onStatusChange: (orderId: number, status: string) => void;
   onItemReadyChange: (orderId: number, itemId: number, ready: boolean) => void;
 }
@@ -35,12 +37,26 @@ function serviceLabel(serviceType?: string | null) {
   return serviceType === "takeaway" ? "Llevar" : "Aquí";
 }
 
+function compactModifierLabel(name: string) {
+  return name
+    .replace(/^Sabor gelat\s*:/i, "Gelat:")
+    .replace(/^Bola gelat\s*:/i, "Bola:");
+}
+
+type CardDensity = "normal" | "dense" | "ultra";
+
 export default function OrderCard({
   order,
+  wide = false,
+  onNeedsMoreSpace,
   onStatusChange,
   onItemReadyChange,
 }: OrderCardProps) {
   const [elapsed, setElapsed] = useState(getElapsedSeconds(order.created_at));
+  const totalItems = order.items?.length || 0;
+  const initialDensity: CardDensity = totalItems >= 14 ? "dense" : "normal";
+  const [density, setDensity] = useState<CardDensity>(initialDensity);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -50,14 +66,50 @@ export default function OrderCard({
   }, [order.created_at]);
 
   const timerColor = getTimerColor(elapsed);
-  const totalItems = order.items?.length || 0;
   const readyCount = order.items?.filter((item) => item.kds_ready).length || 0;
   const allReady = totalItems > 0 && readyCount === totalItems;
-  const groupedItems = groupItemsWithModifiers(
-    order.items || [],
-    (item) => item.product_name || "",
-    (item) => item.notes
+  const groupedItems = useMemo(
+    () =>
+      groupItemsWithModifiers(
+        order.items || [],
+        (item) => item.product_name || "",
+        (item) => item.notes
+      ),
+    [order.items]
   );
+
+  useEffect(() => {
+    setDensity(totalItems >= 14 ? "dense" : "normal");
+  }, [order.id, totalItems]);
+
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    const measure = () => {
+      if (content.scrollHeight <= content.clientHeight + 2) return;
+      if (density === "normal") {
+        setDensity("dense");
+        return;
+      }
+      if (density === "dense") {
+        setDensity("ultra");
+        return;
+      }
+      if (!wide) onNeedsMoreSpace?.(order.id);
+    };
+
+    const frame = window.requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(content);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [density, groupedItems, onNeedsMoreSpace, order.id, wide]);
+
+  const isDense = density !== "normal";
+  const isUltra = density === "ultra";
 
   const toggleItem = (itemId: number) => {
     const item = order.items?.find((candidate) => candidate.id === itemId);
@@ -72,7 +124,7 @@ export default function OrderCard({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-0">
+    <div className="h-full bg-white rounded-lg shadow-md overflow-hidden flex flex-col min-h-0">
       <div
         className={`${timerColor} px-2 py-1 flex items-center justify-between flex-shrink-0`}
       >
@@ -103,8 +155,8 @@ export default function OrderCard({
         </div>
       )}
 
-      <div className="flex-1 p-1 overflow-y-auto min-h-0">
-        <ul className="space-y-1">
+      <div ref={contentRef} className="flex-1 p-1 overflow-hidden min-h-0">
+        <ul className={wide ? "columns-2 gap-1" : "space-y-1"}>
           {groupedItems.map(({ base, modifiers, isOrphanModifier }) => {
             const groupItems = [base, ...modifiers];
             const groupReady = groupItems.every((item) => item.kds_ready);
@@ -116,7 +168,7 @@ export default function OrderCard({
             return (
               <li
                 key={base.id}
-                className={`rounded-md border transition-all select-none ${
+                className={`break-inside-avoid rounded-md border transition-all select-none ${wide ? "mb-1" : ""} ${
                   groupReady
                     ? "bg-green-100 border-green-300"
                     : groupPartial
@@ -126,13 +178,22 @@ export default function OrderCard({
               >
                 <div
                   onClick={() => toggleGroup(groupItems)}
-                  className="flex cursor-pointer items-center gap-1.5 px-1.5 py-1 active:scale-[0.98]"
+                  className={`flex cursor-pointer items-center active:scale-[0.98] ${
+                    isUltra ? "gap-1 px-1 py-0.5" : "gap-1.5 px-1.5 py-1"
+                  }`}
                 >
-                  <ReadyBadge ready={groupReady} partial={groupPartial} qty={base.qty} />
+                  <ReadyBadge
+                    ready={groupReady}
+                    partial={groupPartial}
+                    qty={base.qty}
+                    density={density}
+                  />
 
                   <div className="min-w-0 flex-1">
                     <span
-                      className={`block truncate text-sm font-black leading-tight transition-colors ${
+                      className={`block truncate font-black leading-tight transition-colors ${
+                        isUltra ? "text-xs" : "text-sm"
+                      } ${
                         groupReady ? "text-green-700 line-through" : "text-gray-900"
                       }`}
                     >
@@ -140,11 +201,11 @@ export default function OrderCard({
                       {getModifierDisplayName(base.product_name || "", base.notes)}
                     </span>
                     {visibleBaseNote && (
-                      <div className="mt-0.5 flex items-start gap-1 rounded border border-violet-300 bg-violet-100 px-1.5 py-1">
+                      <div className={`mt-0.5 flex items-start gap-1 rounded border border-violet-300 bg-violet-100 ${isUltra ? "px-1 py-0.5" : "px-1.5 py-1"}`}>
                         <span className="mt-px flex-shrink-0 rounded bg-violet-600 px-1 py-0.5 text-[9px] font-black uppercase leading-none text-white">
                           Nota
                         </span>
-                        <p className="min-w-0 break-words text-sm font-black leading-tight text-violet-950">
+                        <p className={`min-w-0 break-words font-black leading-tight text-violet-950 ${isUltra ? "text-xs" : "text-sm"}`}>
                           {visibleBaseNote}
                         </p>
                       </div>
@@ -153,11 +214,11 @@ export default function OrderCard({
                 </div>
 
                 {modifiers.length > 0 && (
-                  <div className="ml-7 mr-1.5 mb-1 border-l-2 border-orange-300 pl-1.5">
-                    <p className="mb-0.5 text-[9px] font-black uppercase leading-none text-orange-600">
-                      Va amb aquest producte
+                  <div className={`${isUltra ? "ml-5 pl-1" : "ml-7 pl-1.5"} mr-1 mb-1 border-l-2 border-orange-300`}>
+                    <p className="mb-0.5 text-[8px] font-black uppercase leading-none text-orange-600">
+                      Complements
                     </p>
-                    <div className="grid grid-cols-3 gap-x-1 gap-y-0.5">
+                    <div className="flex flex-wrap gap-0.5">
                       {modifiers.map((modifier) => {
                         const modifierReady = Boolean(modifier.kds_ready);
                         return (
@@ -167,21 +228,35 @@ export default function OrderCard({
                               event.stopPropagation();
                               toggleItem(modifier.id);
                             }}
-                            className={`flex min-h-7 cursor-pointer items-center gap-1 border-b px-0.5 py-0.5 transition-colors ${
+                            className={`flex cursor-pointer items-center gap-0.5 rounded border px-0.5 transition-colors ${
+                              isUltra ? "min-h-5 py-0" : "min-h-6 py-0.5"
+                            } ${
                               modifierReady
                                 ? "border-green-200 bg-green-50"
-                                : "border-gray-100 bg-transparent"
+                                : "border-gray-200 bg-white"
                             }`}
                           >
-                            <ReadyBadge ready={modifierReady} qty={modifier.qty} small />
+                            <ReadyBadge
+                              ready={modifierReady}
+                              qty={modifier.qty}
+                              small
+                              density={density}
+                            />
                             <span
-                              className={`min-w-0 flex-1 text-xs font-bold leading-tight ${
+                              className={`whitespace-nowrap font-bold leading-none ${
+                                isUltra ? "text-[10px]" : isDense ? "text-[11px]" : "text-xs"
+                              } ${
                                 modifierReady
                                   ? "text-green-700 line-through"
                                   : "text-gray-700"
                               }`}
                             >
-                              + {getModifierDisplayName(modifier.product_name || "", modifier.notes)}
+                              {compactModifierLabel(
+                                getModifierDisplayName(
+                                  modifier.product_name || "",
+                                  modifier.notes
+                                )
+                              )}
                             </span>
                           </div>
                         );
@@ -243,15 +318,26 @@ function ReadyBadge({
   partial = false,
   qty,
   small = false,
+  density = "normal",
 }: {
   ready: boolean;
   partial?: boolean;
   qty: number;
   small?: boolean;
+  density?: CardDensity;
 }) {
+  const isUltra = density === "ultra";
+  const dimensions = small
+    ? isUltra
+      ? "w-4 h-4"
+      : "w-5 h-5"
+    : isUltra
+    ? "w-5 h-5"
+    : "w-7 h-7";
+
   return (
     <div
-      className={`${small ? "w-5 h-5" : "w-7 h-7"} rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
+      className={`${dimensions} rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
         ready
           ? "bg-green-500 text-white"
           : partial
@@ -260,13 +346,13 @@ function ReadyBadge({
       }`}
     >
       {ready ? (
-        <span className={`${small ? "text-xs" : "text-sm"} font-black`}>
+        <span className={`${small || isUltra ? "text-[10px]" : "text-sm"} font-black`}>
           &#10003;
         </span>
       ) : partial ? (
-        <span className={`${small ? "text-xs" : "text-sm"} font-black`}>...</span>
+        <span className={`${small || isUltra ? "text-[10px]" : "text-sm"} font-black`}>...</span>
       ) : (
-        <span className={`${small ? "text-[10px]" : "text-sm"} font-black`}>{qty}</span>
+        <span className={`${small || isUltra ? "text-[9px]" : "text-sm"} font-black`}>{qty}</span>
       )}
     </div>
   );

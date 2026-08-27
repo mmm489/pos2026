@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { Order } from "@/types/pos";
 import { onDemoEvent, broadcastOrderUpdated } from "@/lib/demo-channel";
 import OrderCard from "@/components/kds/OrderCard";
@@ -25,7 +25,12 @@ export default function KdsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [clock, setClock] = useState(new Date());
+  const [visibleRange, setVisibleRange] = useState({ start: 0, end: 0 });
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [wideOrderIds, setWideOrderIds] = useState<Set<number>>(new Set());
   const prevCountRef = useRef(0);
+  const ordersScrollerRef = useRef<HTMLDivElement>(null);
   const localReadyRef = useRef(new Map<string, boolean>());
   const lastReadyToggleRef = useRef(new Map<string, number>());
 
@@ -181,6 +186,90 @@ export default function KdsPage() {
     window.close();
   }, []);
 
+  const updateVisibleRange = useCallback(() => {
+    const scroller = ordersScrollerRef.current;
+    if (!scroller) return;
+
+    const scrollerRect = scroller.getBoundingClientRect();
+    const cards = Array.from(
+      scroller.querySelectorAll<HTMLElement>("[data-kds-order-index]")
+    );
+    const fullyVisible = cards.filter((card) => {
+      const rect = card.getBoundingClientRect();
+      return rect.left >= scrollerRect.left - 1 && rect.right <= scrollerRect.right + 1;
+    });
+    const partiallyVisible = cards.filter((card) => {
+      const rect = card.getBoundingClientRect();
+      return rect.right > scrollerRect.left + 1 && rect.left < scrollerRect.right - 1;
+    });
+    const visibleCards = fullyVisible.length > 0 ? fullyVisible : partiallyVisible;
+    const indexes = visibleCards
+      .map((card) => Number(card.dataset.kdsOrderIndex))
+      .filter(Number.isFinite);
+
+    setVisibleRange({
+      start: indexes.length > 0 ? Math.min(...indexes) : 0,
+      end: indexes.length > 0 ? Math.max(...indexes) : 0,
+    });
+    setCanScrollLeft(scroller.scrollLeft > 2);
+    setCanScrollRight(
+      scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 2
+    );
+  }, []);
+
+  useEffect(() => {
+    setWideOrderIds((current) => {
+      const activeIds = new Set(orders.map((order) => order.id));
+      const next = new Set(Array.from(current).filter((id) => activeIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+
+    const frame = window.requestAnimationFrame(updateVisibleRange);
+    return () => window.cancelAnimationFrame(frame);
+  }, [orders, updateVisibleRange]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateVisibleRange);
+    return () => window.removeEventListener("resize", updateVisibleRange);
+  }, [updateVisibleRange]);
+
+  const handleOrderOverflow = useCallback((orderId: number) => {
+    setWideOrderIds((current) => {
+      if (current.has(orderId)) return current;
+      const next = new Set(current);
+      next.add(orderId);
+      return next;
+    });
+  }, []);
+
+  const scrollOrders = useCallback(
+    (direction: -1 | 1) => {
+      const scroller = ordersScrollerRef.current;
+      if (!scroller) return;
+
+      const targetIndex = Math.max(
+        0,
+        Math.min(
+          orders.length - 1,
+          direction > 0 ? visibleRange.end + 1 : visibleRange.start - 1
+        )
+      );
+      const target = scroller.querySelector<HTMLElement>(
+        `[data-kds-order-index="${targetIndex}"]`
+      );
+      target?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+    },
+    [orders.length, visibleRange]
+  );
+
+  const rangeLabel = orders.length
+    ? `${visibleRange.start + 1}-${Math.min(visibleRange.end + 1, orders.length)} de ${orders.length}`
+    : "0 de 0";
+
+  const scrollerStyle = {
+    "--kds-card-width": "max(220px, calc((100vw - 110px) / 5))",
+  } as CSSProperties;
+
   return (
     <div className="h-dvh overflow-hidden bg-gray-900 flex flex-col">
       {/* Header */}
@@ -192,6 +281,11 @@ export default function KdsPage() {
           <span className="text-base font-semibold text-yellow-400">
             {orders.length} actiu{orders.length !== 1 ? "s" : ""}
           </span>
+          {orders.length > 0 && (
+            <span className="rounded bg-gray-700 px-2 py-1 text-sm font-black text-white">
+              {rangeLabel}
+            </span>
+          )}
           <span className="text-base font-mono text-gray-300">
             {clock.toLocaleTimeString("es-ES", {
               hour: "2-digit",
@@ -211,7 +305,7 @@ export default function KdsPage() {
       </header>
 
       {/* Orders grid */}
-      <main className="flex-1 p-3 min-h-0">
+      <main className="relative flex-1 min-h-0 p-2">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-xl text-gray-500">Cargando pedidos...</p>
@@ -229,24 +323,59 @@ export default function KdsPage() {
             </div>
           </div>
         ) : (
-          <div
-            className="grid gap-2 h-full"
-            style={{
-              gridTemplateColumns: `repeat(${Math.min(orders.length, 4)}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${
-                orders.length <= 4 ? 1
-                : 2
-              }, minmax(0, 1fr))`,
-            }}
-          >
-            {orders.slice(0, 8).map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onStatusChange={handleStatusChange}
-                onItemReadyChange={handleItemReadyChange}
-              />
-            ))}
+          <div className="relative h-full">
+            <div
+              ref={ordersScrollerRef}
+              onScroll={updateVisibleRange}
+              className="kds-order-scroller flex h-full snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden touch-pan-x"
+              style={scrollerStyle}
+            >
+              {orders.map((order, index) => {
+                const wide = wideOrderIds.has(order.id);
+                return (
+                  <div
+                    key={order.id}
+                    data-kds-order-index={index}
+                    data-kds-wide={wide ? "true" : "false"}
+                    className="h-full flex-none snap-start"
+                    style={{
+                      width: wide
+                        ? "calc(var(--kds-card-width) + var(--kds-card-width) + 0.5rem)"
+                        : "var(--kds-card-width)",
+                    }}
+                  >
+                    <OrderCard
+                      order={order}
+                      wide={wide}
+                      onNeedsMoreSpace={handleOrderOverflow}
+                      onStatusChange={handleStatusChange}
+                      onItemReadyChange={handleItemReadyChange}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            {canScrollLeft && (
+              <button
+                type="button"
+                onClick={() => scrollOrders(-1)}
+                className="absolute left-1 top-1/2 z-20 flex h-20 w-11 -translate-y-1/2 items-center justify-center border border-white/40 bg-gray-900/85 text-4xl font-black text-white shadow-lg active:bg-gray-700"
+                aria-label="Ver comandas anteriores"
+              >
+                &#8249;
+              </button>
+            )}
+            {canScrollRight && (
+              <button
+                type="button"
+                onClick={() => scrollOrders(1)}
+                className="absolute right-1 top-1/2 z-20 flex h-20 w-11 -translate-y-1/2 items-center justify-center border border-white/40 bg-gray-900/85 text-4xl font-black text-white shadow-lg active:bg-gray-700"
+                aria-label="Ver més comandas"
+              >
+                &#8250;
+              </button>
+            )}
           </div>
         )}
       </main>
