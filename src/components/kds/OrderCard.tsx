@@ -342,6 +342,8 @@ function ReadyBadge({
           ? "bg-green-500 text-white"
           : partial
           ? "bg-yellow-400 text-white"
+          : qty > 1
+          ? "bg-orange-500 text-white ring-2 ring-orange-200"
           : "bg-gray-200 text-gray-700"
       }`}
     >
