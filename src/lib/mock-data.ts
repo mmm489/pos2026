@@ -178,6 +178,7 @@ export const MOCK_PRODUCTS: Product[] = [
   { id: 115, name: "MILK MANGO", category_id: 12, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 7, category_name: "ICE DRINKS", category_color: "#06B6D4" },
   { id: 116, name: "MILK MARACUIA", category_id: 12, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 8, category_name: "ICE DRINKS", category_color: "#06B6D4" },
   { id: 308, name: "ICED COCO", category_id: 12, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 9, category_name: "ICE DRINKS", category_color: "#06B6D4" },
+  { id: 309, name: "ICED FRAMBUESA", category_id: 12, price: 4.90, vat_rate: 10, image_url: null, active: true, sort_order: 10, category_name: "ICE DRINKS", category_color: "#06B6D4" },
 
   // ── RECEPTES (cat 13) — all 7.30€ ──
   { id: 117, name: "COOKIES CREAM", category_id: 13, price: 7.30, vat_rate: 10, image_url: null, active: true, sort_order: 1, category_name: "RECEPTES", category_color: "#F43F5E" },

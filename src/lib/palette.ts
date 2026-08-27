@@ -167,6 +167,7 @@ export const ITEM_COLORS: Record<string, string> = {
   "Smoothie maracuya": "#F0B83E",
   "Iced cafe": "#7B5436",
   "Iced coco": "#EDE7DA",
+  "Iced frambuesa": "#D9577A",
   "Iced llimona": "#EBD24A",
   "Iced maduixa": "#E36A86",
   "Iced mango": "#F1A93C",
