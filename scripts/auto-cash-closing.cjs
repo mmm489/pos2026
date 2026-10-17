@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
+const { closingSalesWhere } = require("../src/lib/closing-sales.cjs");
 
 const args = new Set(process.argv.slice(2));
 const repoRoot = path.resolve(__dirname, "..");
@@ -110,14 +111,14 @@ async function ensureSchema(client) {
   `);
 }
 
-async function computeSummary(client, since, until = null) {
-  const params = until ? [since, until] : [since];
-  const untilOrderClause = until ? " AND o.created_at < $2::timestamptz" : "";
-  const untilItemClause = until ? " AND o.created_at < $2::timestamptz" : "";
-  const untilSupplierClause = until ? " AND created_at < $2::timestamptz" : "";
-  const untilRefundClause = until ? " AND r.completed_at < $2::timestamptz" : "";
+async function computeSummary(client, since, until) {
+  if (!until || !Number.isFinite(new Date(until).getTime())) throw new Error("Invalid closing cutoff");
+  const params = [since, until];
+  const untilOrderClause = " AND o.created_at < $2::timestamptz";
+  const untilSupplierClause = " AND created_at < $2::timestamptz";
+  const untilRefundClause = " AND r.completed_at < $2::timestamptz";
   const activeWhere =
-    `o.created_at >= $1::timestamptz${untilOrderClause} AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked' AND COALESCE(o.business_unit, 'hicream') = 'hicream'`;
+    `o.created_at >= $1::timestamptz${untilOrderClause} AND ${closingSalesWhere()}`;
 
   const totalsRes = await client.query(
     `SELECT
@@ -209,14 +210,10 @@ async function computeSummary(client, since, until = null) {
 
   const rangeRes = await client.query(
     `SELECT
-       (SELECT invoice_number FROM pos.orders
-        WHERE created_at >= $1::timestamptz${untilItemClause} AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
-          AND COALESCE(business_unit, 'hicream') = 'hicream'
-        ORDER BY created_at ASC LIMIT 1) AS first_invoice,
-       (SELECT invoice_number FROM pos.orders
-        WHERE created_at >= $1::timestamptz${untilItemClause} AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
-          AND COALESCE(business_unit, 'hicream') = 'hicream'
-        ORDER BY created_at DESC LIMIT 1) AS last_invoice`,
+       (SELECT invoice_number FROM pos.orders o WHERE ${activeWhere}
+        ORDER BY created_at ASC, id ASC LIMIT 1) AS first_invoice,
+       (SELECT invoice_number FROM pos.orders o WHERE ${activeWhere}
+        ORDER BY created_at DESC, id DESC LIMIT 1) AS last_invoice`,
     params
   );
   const range = rangeRes.rows[0];
@@ -311,6 +308,7 @@ async function main() {
   try {
     await client.query("BEGIN");
     await ensureSchema(client);
+    await client.query(`SELECT id FROM pos.business LIMIT 1 FOR UPDATE`);
 
     const lastRes = await client.query(`SELECT closed_at FROM pos.cash_closings ORDER BY closed_at DESC LIMIT 1`);
     const since = lastRes.rows[0]?.closed_at || new Date().toISOString().split("T")[0] + "T00:00:00Z";
@@ -323,8 +321,9 @@ async function main() {
     }
 
     const closingUntil = explicitUntil || (recoverCutoff ? recoverCutoff.toISOString() : null);
-    const closedAt = closingUntil || new Date().toISOString();
-    const summary = await computeSummary(client, since, closingUntil);
+    const cutoff = await client.query(`SELECT clock_timestamp() AS closed_at`);
+    const closedAt = closingUntil || new Date(cutoff.rows[0].closed_at).toISOString();
+    const summary = await computeSummary(client, since, closedAt);
 
     log(
       `${dryRun ? "DRY-RUN" : recoverMissed ? "RECOVERY" : "AUTO"} desde ${new Date(since).toISOString()}` +
@@ -435,7 +434,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  log(`ERROR: ${error.message || error}`);
-  process.exitCode = 1;
-});
+module.exports = { computeSummary };
+
+if (require.main === module) {
+  main().catch((error) => {
+    log(`ERROR: ${error.message || error}`);
+    process.exitCode = 1;
+  });
+}

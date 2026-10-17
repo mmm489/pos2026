@@ -5,6 +5,7 @@ import type { PoolClient } from "pg";
 import type { VatBreakdown } from "@/types/pos";
 import { ensureOrderBusinessUnitSchema } from "@/lib/business-unit";
 import { ensurePostSaleSchema } from "@/lib/post-sale-schema";
+import { closingSalesWhere } from "@/lib/closing-sales.cjs";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
  */
 async function computeSummary(
   client: PoolClient | null,
-  since: string
+  since: string,
+  until: string,
 ): Promise<{
   total_cash: number;
   total_card: number;
@@ -50,8 +52,8 @@ async function computeSummary(
     return rawQuery<T>(text, values);
   };
 
-  // Active Hi Cream orders only (exclude pending, cancelled, parked and other business units).
-  const activeWhere = `o.created_at >= $1::timestamptz AND o.status NOT IN ('pending', 'cancelled') AND o.payment_method <> 'parked' AND COALESCE(o.business_unit, 'hicream') = 'hicream'`;
+  const params = [since, until];
+  const activeWhere = `o.created_at >= $1::timestamptz AND o.created_at < $2::timestamptz AND ${closingSalesWhere()}`;
 
   const [totals] = await exec<{
     total_cash: number;
@@ -74,7 +76,7 @@ async function computeSummary(
        COUNT(*) FILTER (WHERE o.payment_method IN ('card', 'manual'))::int AS card_count
      FROM pos.orders o
      WHERE ${activeWhere}`,
-    [since]
+    params
   );
 
   // Per-rate VAT breakdown computed from order_items so we can split mixed VAT tickets.
@@ -89,7 +91,7 @@ async function computeSummary(
      WHERE ${activeWhere}
      GROUP BY oi.vat_rate
      ORDER BY oi.vat_rate`,
-    [since]
+    params
   );
   const vat_breakdown: VatBreakdown = {};
   for (const r of vatRows) {
@@ -105,22 +107,18 @@ async function computeSummary(
        COUNT(*) FILTER (WHERE o.status = 'cancelled')::int AS cancelled_count,
        COALESCE(SUM(CASE WHEN o.refund_reference IS NOT NULL THEN o.total END), 0)::float AS total_refunded
      FROM pos.orders o
-     WHERE o.created_at >= $1::timestamptz AND o.status = 'cancelled'
+     WHERE o.created_at >= $1::timestamptz AND o.created_at < $2::timestamptz AND o.status = 'cancelled'
        AND COALESCE(o.business_unit, 'hicream') = 'hicream'`,
-    [since]
+    params
   );
 
   const [range] = await exec<{ first_invoice: string | null; last_invoice: string | null }>(
     `SELECT
-       (SELECT invoice_number FROM pos.orders
-        WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
-          AND COALESCE(business_unit, 'hicream') = 'hicream'
-        ORDER BY created_at ASC LIMIT 1) AS first_invoice,
-       (SELECT invoice_number FROM pos.orders
-        WHERE created_at >= $1::timestamptz AND status NOT IN ('pending', 'cancelled') AND invoice_number IS NOT NULL
-          AND COALESCE(business_unit, 'hicream') = 'hicream'
-        ORDER BY created_at DESC LIMIT 1) AS last_invoice`,
-    [since]
+       (SELECT invoice_number FROM pos.orders o WHERE ${activeWhere}
+        ORDER BY created_at ASC, id ASC LIMIT 1) AS first_invoice,
+       (SELECT invoice_number FROM pos.orders o WHERE ${activeWhere}
+        ORDER BY created_at DESC, id DESC LIMIT 1) AS last_invoice`,
+    params
   );
 
   const byEmployee = await exec<{ name: string; tickets: number; total: number }>(
@@ -130,7 +128,7 @@ async function computeSummary(
      WHERE ${activeWhere}
      GROUP BY e.name
      ORDER BY total DESC`,
-    [since]
+    params
   );
 
   const topProducts = await exec<{ name: string; qty: number; revenue: number }>(
@@ -142,7 +140,7 @@ async function computeSummary(
      GROUP BY p.name
      ORDER BY qty DESC
      LIMIT 20`,
-    [since]
+    params
   );
 
   const [refundStats] = await exec<{
@@ -161,8 +159,9 @@ async function computeSummary(
      JOIN pos.orders o ON o.id = r.order_id
      WHERE r.status = 'completed'
        AND r.completed_at >= $1::timestamptz
+       AND r.completed_at < $2::timestamptz
        AND COALESCE(o.business_unit, 'hicream') = 'hicream'`,
-    [since],
+    params,
   );
 
   const refundVatRows = await exec<{ vat_rate: number; base: number; vat: number; total: number }>(
@@ -175,9 +174,10 @@ async function computeSummary(
      JOIN pos.orders o ON o.id = r.order_id
      WHERE r.status = 'completed'
        AND r.completed_at >= $1::timestamptz
+       AND r.completed_at < $2::timestamptz
        AND COALESCE(o.business_unit, 'hicream') = 'hicream'
      GROUP BY ri.vat_rate`,
-    [since],
+    params,
   );
   for (const row of refundVatRows) {
     const key = String(row.vat_rate);
@@ -199,9 +199,10 @@ async function computeSummary(
     `SELECT id, supplier_name, amount::float AS amount, reason, created_at
      FROM pos.supplier_payments
      WHERE created_at >= $1::timestamptz
+       AND created_at < $2::timestamptz
        AND status = 'dispensed'
      ORDER BY created_at ASC`,
-    [since]
+    params
   );
   const supplierPaymentsTotal =
     Math.round(supplierPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0) * 100) / 100;
@@ -252,7 +253,7 @@ export async function GET() {
     const nextZNumber = (biz?.next_z_number as number) ?? 1;
     const next_z_label = formatZLabel(nextZNumber, new Date().getFullYear());
 
-    const summary = await computeSummary(null, since);
+    const summary = await computeSummary(null, since, new Date().toISOString());
 
     const ticketMedio = summary.ticket_count > 0
       ? Math.round((summary.total_sales / summary.ticket_count) * 100) / 100
@@ -284,6 +285,9 @@ export async function POST(request: NextRequest) {
       await ensureSupplierPaymentsSchema(client);
       await ensureOrderBusinessUnitSchema(client);
 
+      // Serialize manual and automatic closings before reading the previous cutoff.
+      await client.query(`SELECT id FROM pos.business LIMIT 1 FOR UPDATE`);
+
       // Find the cutoff: last closing or start-of-day fallback.
       const lastRes = await client.query(
         `SELECT closed_at FROM pos.cash_closings ORDER BY closed_at DESC LIMIT 1`
@@ -293,6 +297,8 @@ export async function POST(request: NextRequest) {
         new Date().toISOString().split("T")[0] + "T00:00:00Z";
 
       // Atomically allocate the next Z number.
+      const cutoff = await client.query(`SELECT clock_timestamp() AS closed_at`);
+      const closedAt = new Date(cutoff.rows[0].closed_at).toISOString();
       const zRes = await client.query(
         `UPDATE pos.business
            SET next_z_number = next_z_number + 1
@@ -301,8 +307,8 @@ export async function POST(request: NextRequest) {
       const zNumber: number = zRes.rows[0].z_number;
       const zLabel = formatZLabel(zNumber, new Date().getFullYear());
 
-      // Compute totals inside the same transaction so concurrent INSERTs are isolated.
-      const summary = await computeSummary(client, since);
+      // Use the same exclusive upper bound for totals and the stored interval.
+      const summary = await computeSummary(client, since, closedAt);
 
       // Capture immutable business snapshot.
       const bizRes = await client.query(
@@ -322,7 +328,7 @@ export async function POST(request: NextRequest) {
            expected_cash_after_supplier_payments, supplier_payments_snapshot,
            first_invoice, last_invoice,
            z_number, z_label, business_snapshot, notes)
-         VALUES ($1, $2::timestamptz, NOW(),
+         VALUES ($1, $2::timestamptz, $24::timestamptz,
                  $3, $4, $5,
                  $6, $7, $8::jsonb,
                  $9, $10, $11,
@@ -356,6 +362,7 @@ export async function POST(request: NextRequest) {
           zLabel,
           JSON.stringify(businessSnapshot),
           closingNotes,
+          closedAt,
         ]
       );
       return insertRes.rows[0];
