@@ -46,7 +46,11 @@ async function main() {
     assert.equal(paymentRequest.headers["x-apikey"], "contract-key");
     assert.equal(paymentRequest.body.amount, 123);
     assert.equal(paymentRequest.body.transactionId, sale.transactionId);
-    assert.equal(paymentRequest.body.transactionNumber, "S-2026/000042");
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(paymentRequest.body, "transactionNumber"),
+      false,
+      "Comercia assigns transactionNumber for sales; sending a POS invoice can return BAD_PARAMS (-8)",
+    );
     assert.equal(paymentRequest.body.otherData.printReceipt, 1);
     assert.equal(paymentRequest.body.otherData.posId, "pos2026");
     assert.equal(paymentRequest.body.deviceId, "DEVICE-1");
@@ -151,13 +155,13 @@ async function handleProviderRequest(request, response) {
       transactionId: `00000000-0000-0000-0000-${String(transactionCounter).padStart(12, "0")}`,
     });
   }
-  if (request.url === "/v1/payment" && body.transactionNumber === "S-CANCEL") {
+  if (request.url === "/v1/payment" && body.transactionId.endsWith("0043")) {
     return send(response, { transactionId: body.transactionId, amount: 123, result: 101, status: -1020 });
   }
-  if (request.url === "/v1/payment" && body.transactionNumber === "S-UNKNOWN") {
+  if (request.url === "/v1/payment" && body.transactionId.endsWith("0044")) {
     return send(response, { transactionId: body.transactionId, amount: 123, result: 0, status: -1021 });
   }
-  if (request.url === "/v1/payment" && body.transactionNumber === "S-SLOW") {
+  if (request.url === "/v1/payment" && body.transactionId === "tx-slow") {
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
   if (request.url === "/v1/payment") return send(response, transaction("9001", "AUTH-1", body.transactionId));

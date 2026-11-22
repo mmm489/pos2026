@@ -326,14 +326,13 @@ async function createTransaction() {
   return { success: true, transactionId: String(transactionId) };
 }
 
-function baseOperationBody({ transactionId, amountMinor, orderId, originalReference, transactionNumber }) {
+function baseOperationBody({ transactionId, amountMinor, orderId, originalReference }) {
   const config = getConfig();
   const body = {
     transactionId,
     paymentApp: config.paymentApp,
     amount: amountMinor,
     currencyCode: "EUR",
-    transactionNumber: String(originalReference || transactionNumber || orderId || transactionId),
     otherData: {
       printReceipt: config.printReceipt,
       posId: "pos2026",
@@ -342,6 +341,9 @@ function baseOperationBody({ transactionId, amountMinor, orderId, originalRefere
   };
 
   if (config.deviceId) body.deviceId = config.deviceId;
+  // Comercia assigns the transaction number for a sale. It is only sent back
+  // for refunds, where the original provider reference is required.
+  if (originalReference) body.transactionNumber = String(originalReference);
   return body;
 }
 
@@ -411,7 +413,7 @@ async function charge({ amount, orderId, transactionId, transactionNumber }) {
     : await createTransaction();
   if (!tx.success) return { success: false, error: tx.error, raw: tx.raw };
 
-  const body = baseOperationBody({ transactionId: tx.transactionId, amountMinor, orderId, transactionNumber });
+  const body = baseOperationBody({ transactionId: tx.transactionId, amountMinor, orderId });
   const response = await requestJson("/payment", { method: "POST", body });
   if (!response.ok) {
     return {
